@@ -26,7 +26,7 @@ const state = {
   reference: null, // { spectrum, label }
   history: historyStore.load(),
   checked: new Set(),
-  prefs: prefStore.load({ mFactor: 1, lightSource: 0, observer: 2, readings: 1, formula: 0, threshold: 3, patches: 6, mode: 'spot', cmykProfile: 'EpsonWideCMYK_Ver2', cmykIntent: 0 }),
+  prefs: prefStore.load({ mFactor: 1, lightSource: 0, observer: 2, readings: 1, formula: 0, threshold: 1, patches: 6, mode: 'spot', cmykProfile: 'EpsonWideCMYK_Ver2', cmykIntent: 0 }),
 };
 
 // ------------------------------------------------------------------ helpers
