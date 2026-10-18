@@ -17,7 +17,7 @@ The SD-10 protocol was reverse-engineered from the Android app; see [docs/PROTOC
 |---|---|
 | Chrome or Edge on Windows, macOS, Linux, ChromeOS, Android | Safari, Firefox, anything on iOS/iPadOS (no Web Bluetooth) |
 
-The page must be served over HTTPS or `localhost`. The demo (`?demo`) works in every modern browser.
+The demo ([sd-10.com/?demo](https://sd-10.com/?demo)) works in every modern browser.
 
 ## Using it
 
@@ -55,23 +55,15 @@ The page must be served over HTTPS or `localhost`. The demo (`?demo`) works in e
   (IndexedDB); if the browser blocks storage they work for the current session only.
 - **HEX/RGB** is sRGB (D50 → D65 Bradford). **LRV** is Y under D65/10°.
 
-## Running locally
-
-```sh
-python -m http.server 8765 --directory web-app
-```
-
-Open <http://localhost:8765> (real device) or <http://localhost:8765/?demo> (simulated device).
-
 ## Tests
 
-With the local server running, open these in Chrome:
+Open these pages in Chrome (on the live site, e.g. [sd-10.com/test/](https://sd-10.com/test/), or a local copy):
 
 | Page | Checks |
 |---|---|
-| `/test/index.html` | 59 checks: command frames vs. the app's own (emulated) code, Lab and CMYK vs. the native libraries, ΔE2000 reference data, ICC v4 parsing, a full session against the simulator |
-| `/test/ui-smoke.html` | 34 checks driving the real UI against the simulator (calibrate, measure, compare, line scan, history sync, palettes, settings, custom ICC) |
-| `/test/mobile-check.html` | Layout at 375 px wide (no sideways scrolling) plus the compare/reference flows |
+| [`test/index.html`](https://sd-10.com/test/index.html) | 59 checks: command frames vs. the app's own (emulated) code, Lab and CMYK vs. the native libraries, ΔE2000 reference data, ICC v4 parsing, a full session against the simulator |
+| [`test/ui-smoke.html`](https://sd-10.com/test/ui-smoke.html) | 34 checks driving the real UI against the simulator (calibrate, measure, compare, line scan, history sync, palettes, settings, custom ICC) |
+| [`test/mobile-check.html`](https://sd-10.com/test/mobile-check.html) | Layout at 375 px wide (no sideways scrolling) plus the compare/reference flows |
 
 ## Project layout
 
@@ -87,20 +79,9 @@ js/weights.js       CIE weighting tables from the app (12 illuminants × 2 obser
 js/icc.js           ICC engine (lut8/lut16/lutBtoA) for Lab → CMYK; custom profile storage
 js/storage.js       history and preferences (localStorage)
 icc/                CMYK profiles bundled with the app
-docs/               protocol and feature documentation
+docs/               protocol, feature and development notes
 test/               test pages and reference data
-bump-version.sh     release helper (see below)
-```
-
-## Deploying (GitHub Pages)
-
-GitHub Pages lets browsers cache files for 10 minutes, so a visitor could get a new `index.html` with an old
-`js/app.js`. Every script URL in `index.html` therefore carries a release version (`?v=…`, via an import map).
-Before each release:
-
-```sh
-./bump-version.sh
-git add -A && git commit -m "Release" && git push
+bump-version.sh     release helper
 ```
 
 ## Troubleshooting
