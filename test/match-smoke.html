@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SD-10 print match smoke test</title>
+  <style>
+    body { margin: 0; font: 12px ui-monospace, monospace; display: flex; gap: 12px; align-items: flex-start; }
+    iframe { border: 0; width: 760px; height: 2600px; flex: none; }
+    #out { white-space: pre-wrap; padding: 8px; max-width: 600px; }
+  </style>
+</head>
+<body>
+  <iframe id="app" src="../index.html?demo#match"></iframe>
+  <pre id="out">running…</pre>
+  <script type="module">
+    import { printSpectrum } from '../js/printer-sim.js';
+    import { spectrumToLab } from '../js/color.js';
+    const out = document.getElementById('out');
+    const lines = [];
+    const log = (ok, msg) => { lines.push(`${ok ? 'PASS' : 'FAIL'} ${msg}`); out.textContent = lines.join('\n'); };
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    async function until(fn, ms = 30000) { const t = Date.now(); while (Date.now() - t < ms) { if (fn()) return true; await sleep(50); } return false; }
+    const frame = document.getElementById('app');
+
+    frame.onload = async () => {
+      const w = frame.contentWindow, d = frame.contentDocument, $ = (id) => d.getElementById(id);
+      const errors = [];
+      w.addEventListener('error', (e) => errors.push(e.message));
+      w.addEventListener('unhandledrejection', (e) => errors.push(String(e.reason)));
+      try { w.localStorage.clear(); } catch {}
+      w.confirm = () => true;
+      let downloads = 0;
+      w.HTMLAnchorElement.prototype.click = function () { if (this.download?.endsWith('.pdf')) downloads++; };
+
+      log(!$('viewMatch').classList.contains('hidden') && $('viewConsole').classList.contains('hidden'), '#match opens the Print match view');
+      $('btnConnect').click();
+      await until(() => /simulated/.test($('connPill').textContent) && !$('btnMatchTarget').disabled);
+      $('demoShutter').click(); await sleep(200);
+      $('btnMatchTarget').click();   // shutter closed -> calibrates
+      await until(() => /Calibrated/.test($('statusChips').textContent) && !$('btnMatchTarget').disabled);
+      $('demoShutter').click(); await sleep(200);
+
+      // Reference: a colour the simulated printer can reach (typed in, like a user entering Lab values)
+      const target = spectrumToLab(printSpectrum([18, 62, 74, 6]), 0, 2);
+      [['mL', 0], ['mA', 1], ['mB', 2]].forEach(([id, i]) => { $(id).value = target[i].toFixed(2); });
+      $('mB').dispatchEvent(new Event('change'));
+      log(!$('btnMatchSheet').disabled && /#/.test($('mStatusTarget').textContent), `reference set (L*a*b* ${target.map((v) => v.toFixed(1)).join(', ')})`);
+
+      $('btnMatchSheet').click();
+      log(await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 16), 'round 1 sheet with 16 patches created (CMYK)');
+      $('btnMatchPdf').click();
+      log(downloads === 1, 'PDF download triggered');
+
+      async function scanAll(round) {
+        for (let i = 0; i < 16; i++) {
+          await until(() => !$('btnMatchMeasure').disabled);
+          $('btnMatchMeasure').click();
+          await until(() => $('mProgress').textContent.startsWith(`${i + 1} /`) || !$('mResultCard').classList.contains('hidden'));
+        }
+        return until(() => !$('mResultCard').classList.contains('hidden') && /predicted ΔE00/.test($('mResult').textContent));
+      }
+      log(await scanAll(1), 'round 1 scanned -> result shown');
+      const r1 = $('mResult').textContent.replace(/\s+/g, ' ');
+      const centre1 = parseFloat(r1.match(/Centre patch\s*ΔE00 ([\d.]+)/)?.[1]);
+      log(Number.isFinite(centre1), `round 1 centre patch (profile guess) ΔE00 ${centre1}`);
+
+      $('btnMatchRefine').click();
+      log(await until(() => /round 2/.test($('mRoundLabel').textContent) && $('mProgress').textContent.startsWith('0 /')), 'refinement sheet (round 2) created');
+      log(await scanAll(2), 'round 2 scanned -> result shown');
+      const r2 = $('mResult').textContent.replace(/\s+/g, ' ');
+      const centre2 = parseFloat(r2.match(/Centre patch\s*ΔE00 ([\d.]+)/)?.[1]);
+      log(centre2 < centre1, `round 2 centre patch (round-1 answer) ΔE00 ${centre2} – improved`);
+      log(/rough estimate/.test(r1) || /EXPECTED MATCH/.test(r1), 'round 1 flags an extrapolated answer as a rough estimate');
+      $('btnMatchRefine').click();
+      await until(() => /round 3/.test($('mRoundLabel').textContent) && $('mProgress').textContent.startsWith('0 /'));
+      log(await scanAll(3), 'round 3 scanned -> result shown');
+      const r3 = $('mResult').textContent.replace(/\s+/g, ' ');
+      const centre3 = parseFloat(r3.match(/Centre patch\s*ΔE00 ([\d.]+)/)?.[1]);
+      log(centre3 <= 1, `round 3 centre patch (round-2 answer) ΔE00 ${centre3} – within tolerance 1`);
+      log(/Done\./.test(r3), 'shows "Done" once the previous values print within tolerance');
+      log(d.querySelectorAll('#mHistory tbody tr').length === 3, 'round history lists 3 rounds');
+
+      // device button measures a patch in this view
+      $('btnMatchRefine').click();
+      await until(() => /round 4/.test($('mRoundLabel').textContent));
+      w.document.querySelector('[data-view=match]').click();
+      $('demoButton').click();
+      log(await until(() => $('mProgress').textContent.startsWith('1 /')), 'SD-10 button measures the next patch');
+
+      // switching views keeps the connection
+      d.querySelector('[data-view=console]').click();
+      log(!$('viewConsole').classList.contains('hidden') && /simulated/.test($('connPill').textContent), 'switch to Console keeps the device connected');
+      log(errors.length === 0, `no JS errors ${errors.join(' | ')}`);
+      const pass = lines.filter((l) => l.startsWith('PASS')).length;
+      out.textContent += `\n${pass}/${lines.length}`;
+      document.title = pass === lines.length ? 'ALL PASS' : 'FAILURES';
+    };
+  </script>
+</body>
+</html>

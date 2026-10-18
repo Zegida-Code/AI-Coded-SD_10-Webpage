@@ -47,6 +47,8 @@ export class MockTransport {
   setSample(name) { this.state.sample = name; }
   setShutter(closed) { this.state.shutter = closed ? 1 : 0; this._event(0xc4); }
   pressButton() { this._event(0xc2); }
+  /** Put a specific reflectance spectrum under the aperture (e.g. a simulated printed patch); null = the sample menu. */
+  setSpectrumOverride(spectrum) { this.override = spectrum; }
   dropLink() { this.linked = false; this.onDisconnect(); }
 
   async write(bytes) {
@@ -148,7 +150,9 @@ export class MockTransport {
           const n = scan ? (s.mode.tlv[10]?.[0] ?? 1) : 1;
           const names = Object.keys(SAMPLES);
           s.cache = Array.from({ length: n }, (_, k) => {
-            const sp = sampleSpectrum(scan ? names[(names.indexOf(s.sample) + k) % names.length] : s.sample);
+            const sp = this.override && !scan
+              ? this.override.map((v) => Math.min(Math.max(v + (Math.random() - 0.5) * 0.004, 0.001), 1))
+              : sampleSpectrum(scan ? names[(names.indexOf(s.sample) + k) % names.length] : s.sample);
             return this._record(sp, ok, { patchNo: k + 1 });
           });
           if (ok && s.mode.tlv[2]?.[0] === 2) s.history.push(...s.cache);

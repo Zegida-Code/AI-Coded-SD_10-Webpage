@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <link rel="stylesheet" href="css/app.css?v=2026-10-18.0fdd0f8-030019">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-18.93468bd-032247">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -43,6 +43,11 @@
         <button id="btnDisconnect" class="btn btn-ghost whitespace-nowrap flex-1 sm:flex-none" disabled>Disconnect</button>
       </div>
     </div>
+    <!-- View switcher: both views share the same device connection -->
+    <nav class="max-w-7xl mx-auto px-3 sm:px-4 pb-2 flex gap-1" aria-label="Views">
+      <button type="button" class="tab" data-view="console" aria-current="page">Console</button>
+      <button type="button" class="tab" data-view="match">Print match</button>
+    </nav>
     <div id="bleWarning" class="hidden bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-200 text-sm px-4 py-2 text-center">
       This browser does not support Web Bluetooth. Use Chrome or Edge on desktop/Android (HTTPS or localhost).
     </div>
@@ -52,7 +57,7 @@
 
   <!-- Phones: one column in reading order (device → measure/history → settings/palettes → log).
        Desktop: device + settings on the left, measure/history on the right. -->
-  <main class="max-w-7xl mx-auto px-3 sm:px-4 py-4 grid grid-cols-1 gap-4 lg:grid-cols-12 lg:grid-rows-[auto_1fr_auto]">
+  <main id="viewConsole" class="max-w-7xl mx-auto px-3 sm:px-4 py-4 grid grid-cols-1 gap-4 lg:grid-cols-12 lg:grid-rows-[auto_1fr_auto]">
     <!-- ============ left column (top) ============ -->
     <section class="min-w-0 space-y-4 order-1 lg:order-none lg:col-span-4 lg:col-start-1 lg:row-start-1">
       <div class="card">
@@ -251,23 +256,109 @@
     </section>
   </main>
 
+  <!-- ======================= Print match view ======================= -->
+  <main id="viewMatch" class="hidden max-w-3xl mx-auto px-3 sm:px-4 py-4 space-y-4">
+    <div class="card">
+      <h2 class="font-semibold">Print match</h2>
+      <p class="text-sm text-slate-500 mt-1">Find the values to use in your document so your printer reproduces a reference colour.
+        Scan the reference, print a test sheet, scan its patches – the app models how your printer responds and calculates the best values.
+        Repeat with a finer sheet until it is within tolerance.</p>
+    </div>
+
+    <!-- 1. target -->
+    <div class="card space-y-3">
+      <div class="flex items-center justify-between gap-2">
+        <h3 class="font-semibold"><span class="text-indigo-500">1.</span> Reference colour</h3>
+        <span id="mStatusTarget" class="text-xs text-slate-500"></span>
+      </div>
+      <div class="flex flex-wrap gap-3 items-stretch">
+        <div id="mTargetSwatch" class="h-24 w-full sm:w-40 rounded-xl ring-1 ring-black/10 dark:ring-white/10 bg-slate-200 dark:bg-slate-800"></div>
+        <div class="flex-1 min-w-[14rem] space-y-2">
+          <div class="grid grid-cols-3 gap-2">
+            <div><label class="label" for="mL">L*</label><input id="mL" class="input font-mono" type="number" step="0.01" min="0" max="100"></div>
+            <div><label class="label" for="mA">a*</label><input id="mA" class="input font-mono" type="number" step="0.01" min="-128" max="127"></div>
+            <div><label class="label" for="mB">b*</label><input id="mB" class="input font-mono" type="number" step="0.01" min="-128" max="127"></div>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button id="btnMatchTarget" class="btn btn-primary" disabled>Measure reference</button>
+            <button id="btnMatchUseLast" class="btn btn-ghost" disabled>Use last measurement</button>
+          </div>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div><label class="label" for="mMode">Sheet values</label>
+          <select id="mMode" class="input"><option value="cmyk">CMYK (recommended)</option><option value="lab">L*a*b*</option></select></div>
+        <div><label class="label" for="mPaper">Paper</label>
+          <select id="mPaper" class="input"><option value="a4">A4</option><option value="letter">Letter</option></select></div>
+        <div><label class="label" for="mMf">M-factor</label>
+          <select id="mMf" class="input"><option value="0">M0</option><option value="1">M1</option><option value="2">M2</option></select></div>
+        <div><label class="label" for="mTol">Tolerance (ΔE00)</label><input id="mTol" class="input" type="number" min="0.1" max="20" step="0.1"></div>
+      </div>
+      <p class="text-xs text-slate-500">Colours are measured at D50 / 2°. In CMYK mode the starting values come from the CMYK profile selected in the Console (<span id="mProfileName">EpsonWideCMYK_Ver2</span>) and K is kept fixed.</p>
+    </div>
+
+    <!-- 2. sheet -->
+    <div class="card space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h3 class="font-semibold"><span class="text-indigo-500">2.</span> Test sheet <span id="mRoundLabel" class="text-sm font-normal text-slate-500"></span></h3>
+        <button id="btnMatchSheet" class="btn btn-primary" disabled>Create sheet</button>
+      </div>
+      <div id="mSheetInfo" class="text-sm text-slate-500">Set a reference colour first.</div>
+      <div id="mSheetActions" class="hidden flex flex-wrap gap-2">
+        <button id="btnMatchPdf" class="btn btn-primary">Download PDF</button>
+        <button id="btnMatchRestart" class="btn btn-danger">Start over</button>
+      </div>
+      <div class="rounded-lg bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-200 text-xs p-3 space-y-1">
+        <p><b>Print it exactly like the final job:</b> same printer, paper, quality and colour settings, at 100% / actual size (not "fit to page").</p>
+        <p>Let the ink dry for a few minutes before scanning.</p>
+      </div>
+    </div>
+
+    <!-- 3. scan -->
+    <div class="card space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h3 class="font-semibold"><span class="text-indigo-500">3.</span> Scan the printed patches</h3>
+        <span id="mProgress" class="text-xs text-slate-500"></span>
+      </div>
+      <div id="mPatchGrid" class="grid grid-cols-4 gap-2"></div>
+      <div class="flex flex-wrap items-center gap-2">
+        <button id="btnMatchMeasure" class="btn btn-primary w-full sm:w-auto px-6 py-3 sm:py-2.5" disabled>Measure patch</button>
+        <button id="btnMatchAnalyse" class="btn btn-ghost" disabled>Calculate now</button>
+        <span class="text-xs text-slate-500">You can also press the button on the SD-10. Tap a patch to re-measure it.</span>
+      </div>
+    </div>
+
+    <!-- 4. result -->
+    <div id="mResultCard" class="card space-y-3 hidden">
+      <h3 class="font-semibold"><span class="text-indigo-500">4.</span> Result</h3>
+      <div id="mResult"></div>
+      <div class="flex flex-wrap gap-2">
+        <button id="btnMatchRefine" class="btn btn-primary">Make refinement sheet</button>
+        <button id="btnMatchCopy" class="btn btn-ghost">Copy values</button>
+      </div>
+      <div id="mHistory"></div>
+    </div>
+  </main>
+
   <!-- Cache busting for GitHub Pages (files are cached for 10 min): every module URL carries the release
        version, so a page always loads scripts from the same release. Bump with: ./bump-version.sh -->
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-18.0fdd0f8-030019",
-      "./js/transport.js": "./js/transport.js?v=2026-10-18.0fdd0f8-030019",
-      "./js/mock.js": "./js/mock.js?v=2026-10-18.0fdd0f8-030019",
-      "./js/session.js": "./js/session.js?v=2026-10-18.0fdd0f8-030019",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-18.0fdd0f8-030019",
-      "./js/color.js": "./js/color.js?v=2026-10-18.0fdd0f8-030019",
-      "./js/weights.js": "./js/weights.js?v=2026-10-18.0fdd0f8-030019",
-      "./js/storage.js": "./js/storage.js?v=2026-10-18.0fdd0f8-030019",
-      "./js/icc.js": "./js/icc.js?v=2026-10-18.0fdd0f8-030019"
+      "./js/app.js": "./js/app.js?v=2026-10-18.93468bd-032247",
+      "./js/transport.js": "./js/transport.js?v=2026-10-18.93468bd-032247",
+      "./js/mock.js": "./js/mock.js?v=2026-10-18.93468bd-032247",
+      "./js/session.js": "./js/session.js?v=2026-10-18.93468bd-032247",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-18.93468bd-032247",
+      "./js/color.js": "./js/color.js?v=2026-10-18.93468bd-032247",
+      "./js/weights.js": "./js/weights.js?v=2026-10-18.93468bd-032247",
+      "./js/storage.js": "./js/storage.js?v=2026-10-18.93468bd-032247",
+      "./js/icc.js": "./js/icc.js?v=2026-10-18.93468bd-032247",
+      "./js/match.js": "./js/match.js?v=2026-10-18.93468bd-032247",
+      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-18.93468bd-032247"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-18.0fdd0f8-030019"></script>
+  <script type="module" src="js/app.js?v=2026-10-18.93468bd-032247"></script>
 </body>
 </html>

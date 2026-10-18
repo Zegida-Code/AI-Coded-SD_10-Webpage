@@ -78,6 +78,12 @@
       $('btnMeasure').click(); await until(() => /PASS|FAIL/.test($('verdict').textContent) && !$('btnMeasure').disabled);
       await sleep(1500);
       audit('connected with results');
+      d.querySelector('[data-view=match]').click();
+      $('mL').value = '50'; $('mA').value = '20'; $('mB').value = '10'; $('mB').dispatchEvent(new Event('change'));
+      $('btnMatchSheet').click();
+      await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 16);
+      await sleep(300);
+      audit('print match view with a sheet');
       document.title = lines.some((l) => l.startsWith('FAIL')) ? 'FAILURES' : 'ALL PASS';
     };
   </script>

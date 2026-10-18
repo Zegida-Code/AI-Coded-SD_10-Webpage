@@ -119,6 +119,53 @@ async function iccV4Check() {
   check('non-ICC file rejected', rejected);
 }
 
+// ---- 3d. Print match: model fitting, convergence with a simulated printer, PDF sheet
+async function matchCheck() {
+  const { designPatches, fitModel, analyseRound, nextStep, buildSheetPdf, MODES } = await import('../js/match.js');
+  const { printSpectrum } = await import('../js/printer-sim.js');
+  const { loadProfile } = await import('../js/icc.js');
+  const prof = await loadProfile('EpsonWideCMYK_Ver2');
+
+  // exact linear printer -> the fitted model must recover it
+  const J = [[-0.5, -0.2, -0.1], [-0.3, 0.9, -0.4], [-0.2, -0.1, 0.8]], m0 = [60, 10, 20], x0 = [30, 40, 50];
+  const lin = (x) => m0.map((m, i) => m + J[i].reduce((s, j, k) => s + j * (x[k] - x0[k]), 0));
+  const pts = designPatches('cmyk', x0, [6, 6, 6]).map((p) => ({ ...p, lab: lin(p.x) }));
+  const fit = fitModel(pts, x0);
+  check('print match: model fit recovers a linear printer', fit.rms < 1e-6 && Math.abs(fit.J[1][1] - 0.9) < 1e-6, `rms ${fit.rms}`);
+
+  // closed loop against the simulated printer (deterministic), both modes
+  for (const mode of ['cmyk', 'lab']) {
+    const truth = [18, 62, 74, 6];                              // what the printer really needs
+    const target = spectrumToLab(printSpectrum(truth), 0, 2);   // the reference colour
+    const printed = (x, k) => spectrumToLab(printSpectrum(mode === 'cmyk' ? [...x, k] : prof.fromLab(x, 0)), 0, 2);
+    let centre, k = 0;
+    if (mode === 'cmyk') { const c = prof.fromLab(target, 0); centre = c.slice(0, 3); k = truth[3]; } else centre = [...target];
+    let step = [...MODES[mode].step0], round, firstDE = null, log = [];
+    for (round = 1; round <= 4; round++) {
+      const patches = designPatches(mode, centre, step).map((p) => ({ ...p, lab: printed(p.x, k) }));
+      const res = analyseRound({ mode, centre, step, patches }, target);
+      if (firstDE === null) firstDE = res.centreDE;
+      log.push(`r${round}: centre ΔE ${res.centreDE.toFixed(2)} -> predicted ${res.predictedDeltaE.toFixed(2)}`);
+      step = nextStep(mode, step, res.correction);
+      centre = res.x;
+      if (res.centreDE < 0.5) break;
+    }
+    const finalDE = deltaE2000(target, printed(centre, k));
+    check(`print match converges (${mode}): first guess ΔE00 ${firstDE.toFixed(2)} -> ${finalDE.toFixed(2)} after ${Math.min(round, 4)} round(s) [${log.join('; ')}]`, finalDE < 1 && firstDE > 2);
+  }
+
+  // PDF structure
+  const pdfBytes = buildSheetPdf({ mode: 'cmyk', patches: designPatches('cmyk', [20, 60, 70], [6, 6, 6]), target: [55, 40, 50], round: 1, kFixed: 5 });
+  const txt = new TextDecoder('latin1').decode(pdfBytes);
+  const xrefAt = +txt.match(/startxref\n(\d+)/)[1];
+  const offsets = [...txt.slice(xrefAt).matchAll(/(\d{10}) 00000 n/g)].map((m) => +m[1]);
+  const offsetsOk = offsets.length === 6 && offsets.every((o, i) => txt.startsWith(`${i + 1} 0 obj`, o));
+  const fills = (txt.match(/ k\n/g) || []).length;
+  check('print match sheet is a valid PDF (header, xref offsets, 16 CMYK patches)', txt.startsWith('%PDF-1.4') && txt.slice(xrefAt, xrefAt + 4) === 'xref' && offsetsOk && fills === 16, `offsetsOk=${offsetsOk} fills=${fills}`);
+  const labPdf = new TextDecoder('latin1').decode(buildSheetPdf({ mode: 'lab', patches: designPatches('lab', [55, 40, 50], [4, 6, 6]), target: [55, 40, 50], round: 2, paper: 'letter' }));
+  check('Lab sheet uses a D50 Lab colour space on Letter paper', /\/Lab << \/WhitePoint \[0\.9642 1 0\.8249\]/.test(labPdf) && (labPdf.match(/ sc\n/g) || []).length === 16 && /MediaBox \[0 0 612 792\]/.test(labPdf));
+}
+
 // ---- 4. end-to-end session against the simulator
 async function e2e() {
   const mock = new MockTransport();
@@ -182,4 +229,5 @@ function report() {
 
 cmykCheck().catch((e) => check('CMYK check (exception)', false, e.stack || e.message))
   .then(() => iccV4Check()).catch((e) => check('ICC v4 check (exception)', false, e.stack || e.message))
+  .then(() => matchCheck()).catch((e) => check('print match (exception)', false, e.stack || e.message))
   .then(() => e2e()).catch((e) => check('e2e (exception)', false, e.stack || e.message)).finally(report);

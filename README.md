@@ -33,6 +33,24 @@ The demo ([sd-10.com/?demo](https://sd-10.com/?demo)) works in every modern brow
 4. **Read the result** – sample/reference swatches, L\*a\*b\*, LCh, HEX/RGB, CMYK, LRV and the spectral curve.
    **Copy values** copies everything as text.
 
+### Print match (matching a colour on your printer)
+
+Open the **Print match** tab (or [sd-10.com/#match](https://sd-10.com/#match)). It finds the values to put in your
+document so your printer reproduces a reference colour:
+
+1. **Reference** – scan the colour to match (or use the last measurement, or type L\*a\*b\*).
+2. **Test sheet** – choose *CMYK* (recommended for CMYK printers; K is kept fixed) or *L\*a\*b\** values and
+   download the PDF: 16 patches around a first estimate (CMYK estimates come from the selected CMYK profile).
+3. **Print** it exactly like the final job – same printer, paper, quality and colour settings, at 100% – and scan
+   the patches in number order (the SD-10's button works too; tap a patch to re-measure it).
+4. **Result** – the app models how your printer responds around the colour and calculates the values that should
+   print closest to the reference, with the predicted ΔE00. **Make refinement sheet** prints a finer sheet centred on
+   that answer; its centre patch verifies it. It reports **Done** once the values print within your tolerance.
+
+With the simulated printer in the demo, a first estimate 22 ΔE00 away reaches about 0.2 ΔE00 in three rounds. How
+many rounds a real printer needs depends on how far the profile's first estimate is from what it actually prints.
+If the reference is outside what the printer and paper can reproduce, the app says so and gives the closest values.
+
 ### Other features
 
 | Feature | Where |
@@ -61,9 +79,10 @@ Open these pages in Chrome (on the live site, e.g. [sd-10.com/test/](https://sd-
 
 | Page | Checks |
 |---|---|
-| [`test/index.html`](https://sd-10.com/test/index.html) | 59 checks: command frames vs. the app's own (emulated) code, Lab and CMYK vs. the native libraries, ΔE2000 reference data, ICC v4 parsing, a full session against the simulator |
+| [`test/index.html`](https://sd-10.com/test/index.html) | 64 checks: command frames vs. the app's own (emulated) code, Lab and CMYK vs. the native libraries, ΔE2000 reference data, ICC v4 parsing, print-match model fitting/convergence and PDF structure, a full session against the simulator |
 | [`test/ui-smoke.html`](https://sd-10.com/test/ui-smoke.html) | 34 checks driving the real UI against the simulator (calibrate, measure, compare, line scan, history sync, palettes, settings, custom ICC) |
 | [`test/mobile-check.html`](https://sd-10.com/test/mobile-check.html) | Layout at 375 px wide (no sideways scrolling) plus the compare/reference flows |
+| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 17 checks for Print match against the simulated device and printer: sheet, PDF, scanning, three rounds to within tolerance |
 
 ## Project layout
 
@@ -77,6 +96,8 @@ js/transport.js     Web Bluetooth GATT transport
 js/mock.js          simulated SD-10 (demo mode and tests)
 js/color.js         spectrum → Lab, ΔE (76/94/2000), sRGB, LRV
 js/weights.js       CIE weighting tables from the app (12 illuminants × 2 observers)
+js/match.js         Print match: patch design, printer-response model, solver, PDF sheet
+js/printer-sim.js   simulated CMYK printer (demo and tests)
 js/icc.js           ICC engine (lut8/lut16/lutBtoA) for Lab → CMYK; custom profile storage
 js/storage.js       history and preferences (localStorage)
 icc/                CMYK profiles bundled with the app
