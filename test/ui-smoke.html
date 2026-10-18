@@ -11,12 +11,13 @@
 </head>
 <body>
   <pre id="out">running…</pre>
-  <iframe id="app" src="../index.html"></iframe>
+  <iframe id="app" src="../index.html?demo"></iframe>
   <script type="module">
     const out = document.getElementById('out');
     const lines = [];
     const log = (ok, msg) => { lines.push(`${ok ? 'PASS' : 'FAIL'} ${msg}`); out.textContent = lines.join('\n'); };
     const frame = document.getElementById('app');
+    const state = (d) => d.querySelector('[role=tab][aria-selected=true]')?.dataset.mode;
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     async function until(fn, ms = 15000) { const t = Date.now(); while (Date.now() - t < ms) { if (fn()) return true; await sleep(50); } return false; }
 
@@ -26,6 +27,9 @@
       w.addEventListener('error', (e) => errors.push(e.message));
       w.addEventListener('unhandledrejection', (e) => errors.push(String(e.reason)));
       try { w.localStorage.clear(); } catch {}
+      log($('logBody').classList.contains('hidden'), 'protocol log hidden by default');
+      log(!$('btnDemo').classList.contains('hidden'), 'demo button shown with ?demo');
+      log(!$('settingsPanel').open && d.getElementById('settingsPanel').contains($('settingsForm')), 'device settings are a collapsed sub-section of Device');
       await until(() => !$('btnDemo').disabled);
       $('btnDemo').click();
       log(await until(() => /simulated/.test($('connPill').textContent)), 'demo connects');
@@ -43,10 +47,12 @@
       $('btnMeasure').click();
       log(await until(() => !$('resultArea').classList.contains('hidden') && /L\*/.test($('resultValues').textContent) && !$('btnMeasure').disabled), 'spot measurement shows result');
       log(d.querySelectorAll('#histBody tr').length === 1, 'history has 1 row');
+      const cmykOk = await until(() => { const r = [...$('resultValues').children].find((x) => /CMYK/.test(x.textContent)); return r && /C\s*[\d.]+\s*M\s*[\d.]+\s*Y\s*[\d.]+\s*K\s*[\d.]+/.test(r.textContent.replace(/\s+/g, ' ')); }, 20000);
+      log(cmykOk, `CMYK row computed via ICC profile: ${[...$('resultValues').children].find((x) => /CMYK/.test(x.textContent))?.textContent.replace(/\s+/g, ' ').trim()}`);
       log($('chart').querySelectorAll('path').length >= 2, 'spectrum chart drawn');
 
       $('btnSetRef').click();
-      d.querySelector('[data-mode=compare]').click();
+      log(state(d) === 'compare' && /PASS/.test($('verdict').textContent) && /0\.00/.test($('verdict').textContent), `"Use as reference" switches to Compare: ${$('verdict').textContent.replace(/\s+/g, ' ').trim()}`);
       $('demoSample').value = 'Sunflower'; $('demoSample').dispatchEvent(new Event('change'));
       $('btnMeasure').click();
       log(await until(() => /FAIL|PASS/.test($('verdict').textContent) && !$('btnMeasure').disabled), `compare verdict: ${$('verdict').textContent}`);
@@ -90,6 +96,18 @@
       $('setBuzzer').value = '2';
       $('btnApply').click();
       log(await until(() => $('devName').textContent === 'Renamed'), 'settings applied');
+
+      // Custom ICC: upload a real CMYK profile and a bogus file.
+      const iccBuf = await (await fetch('../icc/USWebCoatedSWOP.icc')).arrayBuffer();
+      const put = (file) => { const dt = new DataTransfer(); dt.items.add(file); $('iccFile').files = dt.files; $('iccFile').dispatchEvent(new Event('change')); };
+      put(new File([iccBuf], 'my-swop.icc'));
+      log(await until(() => $('cmykProfile').value.startsWith('custom:') && !$('btnRemoveIcc').classList.contains('hidden')), `custom ICC added and selected: ${$('cmykProfile').value} [toast: ${$('toast').textContent}]`);
+      log(await until(() => /C\s*[\d.]+\s*M/.test([...$('resultValues').children].find((x) => /CMYK/.test(x.textContent))?.textContent.replace(/\s+/g, ' ') || '')), 'CMYK computed with custom profile');
+      put(new File(['hello'], 'notes.icc'));
+      log(await until(() => /Could not use notes\.icc/.test($('toast').textContent)), `bad file rejected: ${$('toast').textContent}`);
+      frame.contentWindow.confirm = () => true;
+      $('btnRemoveIcc').click();
+      log(await until(() => $('cmykProfile').value === 'EpsonWideCMYK_Ver2'), 'custom ICC removed');
 
       $('mIll').value = '1'; $('mIll').dispatchEvent(new Event('change'));
       log(/D65/.test($('resultValues').textContent), 'illuminant change re-renders result');

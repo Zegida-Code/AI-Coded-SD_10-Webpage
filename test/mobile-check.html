@@ -10,7 +10,7 @@
   </style>
 </head>
 <body>
-  <iframe id="app" src="../index.html"></iframe>
+  <iframe id="app" src="../index.html?demo"></iframe>
   <pre id="out">running…</pre>
   <script type="module">
     const out = document.getElementById('out');
@@ -48,7 +48,11 @@
       $('btnMeasure').click(); await until(() => !$('resultArea').classList.contains('hidden') && !$('btnMeasure').disabled);
       d.querySelector('[data-mode=line]').click();
       $('btnMeasure').click(); await until(() => !$('strip').classList.contains('hidden') && !$('btnMeasure').disabled);
-      await sleep(300);
+      $('btnSetRef').click();
+      d.querySelector('[data-mode=compare]').click();
+      $('demoSample').value = 'Sunflower'; $('demoSample').dispatchEvent(new Event('change'));
+      $('btnMeasure').click(); await until(() => /PASS|FAIL/.test($('verdict').textContent) && !$('btnMeasure').disabled);
+      await sleep(1500);
       audit('connected with results');
       document.title = lines.some((l) => l.startsWith('FAIL')) ? 'FAILURES' : 'ALL PASS';
     };

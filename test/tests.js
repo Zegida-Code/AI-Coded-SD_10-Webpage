@@ -75,6 +75,50 @@ check(`spectrumToLab matches native (${GOLDEN_LAB.length} cases, max |Δ| ${wors
 const sharma = [[[50, 2.6772, -79.7751], [50, 0, -82.7485], 2.0425], [[50, 3.1571, -77.2803], [50, 0, -82.7485], 2.8615], [[50, 0, 0], [50, -1, 2], 2.3669]];
 for (const [a, b, e] of sharma) check(`ΔE2000 ${a} vs ${b} = ${e}`, Math.abs(deltaE2000(a, b) - e) < 1e-4, deltaE2000(a, b).toFixed(5));
 
+// ---- 3b. CMYK vs. the app's own CMM (libepcmm.so, emulated) with EpsonWideCMYK_Ver2 / perceptual
+async function cmykCheck() {
+  const { GOLDEN_CMYK } = await import('./golden-cmyk.js');
+  const { loadProfile } = await import('../js/icc.js');
+  const prof = await loadProfile('EpsonWideCMYK_Ver2');
+  let worst = 0, detail = '';
+  for (const g of GOLDEN_CMYK) {
+    const got = prof.fromLab(g.lab, 0);
+    const err = Math.max(...got.map((v, i) => Math.abs(v - g.cmyk[i])));
+    if (err > worst) { worst = err; detail = `Lab ${g.lab} -> got ${got.map((v) => v.toFixed(2))} native ${g.cmyk.map((v) => v.toFixed(2))}`; }
+  }
+  check(`CMYK matches the app's CMM (${GOLDEN_CMYK.length} colours, max |Δ| ${worst.toFixed(3)}%)`, worst < 0.5, detail);
+}
+
+// ---- 3c. ICC v4 lutBtoA ('mBA ') support, using a synthetic profile built here
+function buildV4Profile() {
+  // CLUT 2x2x2 (16-bit): C = 1 - L, M = a, Y = b, K = 0  (inputs are v4-encoded Lab, 0..1)
+  const clut = [];
+  for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) for (let k = 0; k < 2; k++) clut.push(1 - i, j, k, 0);
+  const curvId = [0x63, 0x75, 0x72, 0x76, 0, 0, 0, 0, 0, 0, 0, 0]; // 'curv', count 0 = identity
+  const be32 = (v) => [(v >>> 24) & 255, (v >>> 16) & 255, (v >>> 8) & 255, v & 255];
+  const bCurves = [...curvId, ...curvId, ...curvId];
+  const clutBytes = [2, 2, 2, ...Array(13).fill(0), 2, 0, 0, 0, ...clut.flatMap((v) => { const u = Math.round(v * 65535); return [u >> 8, u & 255]; })];
+  const aCurves = [...curvId, ...curvId, ...curvId, ...curvId];
+  const offB = 32, offClut = offB + bCurves.length, offA = offClut + clutBytes.length;
+  const mba = [0x6d, 0x42, 0x41, 0x20, 0, 0, 0, 0, 3, 4, 0, 0, ...be32(offB), ...be32(0), ...be32(0), ...be32(offClut), ...be32(offA), ...bCurves, ...clutBytes, ...aCurves];
+  const tagOff = 128 + 4 + 12;
+  const total = tagOff + mba.length;
+  const head = new Uint8Array(128);
+  head.set(be32(total), 0); head[8] = 4; // version 4
+  head.set([0x70, 0x72, 0x74, 0x72], 12); head.set([0x43, 0x4d, 0x59, 0x4b], 16); head.set([0x4c, 0x61, 0x62, 0x20], 20); head.set([0x61, 0x63, 0x73, 0x70], 36);
+  return new Uint8Array([...head, ...be32(1), 0x42, 0x32, 0x41, 0x30, ...be32(tagOff), ...be32(mba.length), ...mba]).buffer;
+}
+async function iccV4Check() {
+  const { IccProfile } = await import('../js/icc.js');
+  const prof = new IccProfile(buildV4Profile());
+  let ok = true; try { prof.validateCmyk(); } catch (e) { ok = false; check('v4 profile validates', false, e.message); }
+  if (ok) check('v4 profile validates', true);
+  const [c, m, y, k] = prof.fromLab([25, 0, 0]);
+  check('v4 mBA pipeline (C = 1 - L/100, Lab v4 encoding)', Math.abs(c - 75.29) < 0.05 && Math.abs(m - 50.39) < 0.02 && Math.abs(y - 50.39) < 0.02 && k === 0, [c, m, y, k].map((v) => v.toFixed(2)).join(', '));
+  let rejected = false; try { new IccProfile(new TextEncoder().encode('not a profile at all'.repeat(10)).buffer); } catch { rejected = true; }
+  check('non-ICC file rejected', rejected);
+}
+
 // ---- 4. end-to-end session against the simulator
 async function e2e() {
   const mock = new MockTransport();
@@ -136,4 +180,6 @@ function report() {
   document.body.dataset.done = '1';
 }
 
-e2e().catch((e) => check('e2e (exception)', false, e.stack || e.message)).finally(report);
+cmykCheck().catch((e) => check('CMYK check (exception)', false, e.stack || e.message))
+  .then(() => iccV4Check()).catch((e) => check('ICC v4 check (exception)', false, e.stack || e.message))
+  .then(() => e2e()).catch((e) => check('e2e (exception)', false, e.stack || e.message)).finally(report);

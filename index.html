@@ -6,18 +6,21 @@
   <title>SD-10 Web Console</title>
   <script src="https://cdn.tailwindcss.com/3.4.16"></script>
   <style type="text/tailwindcss">
-    .card { @apply bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 sm:p-4; }
-    .label { @apply block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1; }
-    .input { @apply w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500; }
-    .btn { @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition disabled:opacity-40 disabled:cursor-not-allowed; }
-    .btn-primary { @apply bg-indigo-600 text-white hover:bg-indigo-500; }
-    .btn-ghost { @apply border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800; }
-    .btn-danger { @apply border border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950; }
-    .chip { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium; }
-    .tab { @apply px-3 py-1.5 text-sm rounded-md text-slate-600 dark:text-slate-300; }
-    .tab[aria-selected="true"] { @apply bg-indigo-600 text-white; }
-    .kv dt { @apply text-xs text-slate-500 dark:text-slate-400; }
-    .kv dd { @apply font-mono text-sm tabular-nums; }
+    /* component classes live in the components layer so utilities (e.g. "hidden") can override them */
+    @layer components {
+      .card { @apply bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 sm:p-4; }
+      .label { @apply block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1; }
+      .input { @apply w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500; }
+      .btn { @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition disabled:opacity-40 disabled:cursor-not-allowed; }
+      .btn-primary { @apply bg-indigo-600 text-white hover:bg-indigo-500; }
+      .btn-ghost { @apply border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800; }
+      .btn-danger { @apply border border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950; }
+      .chip { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium; }
+      .tab { @apply px-3 py-1.5 text-sm rounded-md text-slate-600 dark:text-slate-300; }
+      .tab[aria-selected="true"] { @apply bg-indigo-600 text-white; }
+      .kv dt { @apply text-xs text-slate-500 dark:text-slate-400; }
+      .kv dd { @apply font-mono text-sm tabular-nums; }
+    }
     #log .tx { color: #7dd3fc; }
     #log .rx { color: #86efac; }
     #log .ev { color: #fcd34d; }
@@ -39,17 +42,18 @@
         </div>
       </div>
       <span id="connPill" class="chip max-w-[45%] truncate bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300">● Disconnected</span>
-      <div class="w-full sm:w-auto grid grid-cols-3 sm:flex items-center gap-2">
-        <button id="btnConnect" class="btn btn-primary whitespace-nowrap">Connect<span class="hidden sm:inline">&nbsp;device</span></button>
-        <button id="btnDemo" class="btn btn-ghost whitespace-nowrap">Demo<span class="hidden sm:inline">&nbsp;(simulated)</span></button>
-        <button id="btnDisconnect" class="btn btn-ghost whitespace-nowrap" disabled>Disconnect</button>
-        <label class="col-span-3 sm:order-first flex items-center gap-1 text-xs text-slate-500" title="Show every BLE device in the chooser (if the SD-10 does not appear)">
+      <div class="w-full sm:w-auto flex flex-wrap items-center gap-2">
+        <button id="btnConnect" class="btn btn-primary whitespace-nowrap flex-1 sm:flex-none"><span class="sm:hidden">Connect</span><span class="hidden sm:inline">Connect device</span></button>
+        <!-- Demo (simulated device) is hidden unless the page is opened with ?demo -->
+        <button id="btnDemo" class="btn btn-ghost whitespace-nowrap flex-1 sm:flex-none hidden"><span class="sm:hidden">Demo</span><span class="hidden sm:inline">Demo (simulated)</span></button>
+        <button id="btnDisconnect" class="btn btn-ghost whitespace-nowrap flex-1 sm:flex-none" disabled>Disconnect</button>
+        <label class="w-full sm:w-auto sm:order-first flex items-center gap-1 text-xs text-slate-500" title="Show every BLE device in the chooser (if the SD-10 does not appear)">
           <input id="acceptAll" type="checkbox" class="rounded"> show all Bluetooth devices
         </label>
       </div>
     </div>
     <div id="bleWarning" class="hidden bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-200 text-sm px-4 py-2 text-center">
-      This browser does not support Web Bluetooth. Use Chrome or Edge on desktop/Android (HTTPS or localhost). The simulated demo still works.
+      This browser does not support Web Bluetooth. Use Chrome or Edge on desktop/Android (HTTPS or localhost).
     </div>
   </header>
 
@@ -80,6 +84,28 @@
         </div>
         <div class="flex flex-wrap gap-1.5" id="statusChips"></div>
         <ul id="errorList" class="mt-3 space-y-1 text-xs text-rose-700 dark:text-rose-300"></ul>
+
+        <!-- Device settings: collapsible sub-section of the Device card -->
+        <details id="settingsPanel" class="group mt-4 border-t border-slate-200 dark:border-slate-800 pt-3">
+          <summary class="flex cursor-pointer select-none list-none items-center justify-between rounded-md py-1 text-sm font-medium [&::-webkit-details-marker]:hidden">
+            <span class="flex items-center gap-2">
+              <svg class="h-4 w-4 text-slate-400 transition-transform group-open:rotate-90" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.2 14.8a.75.75 0 0 1 0-1.06L10.94 10 7.2 6.26a.75.75 0 1 1 1.06-1.06l4.27 4.27a.75.75 0 0 1 0 1.06l-4.27 4.27a.75.75 0 0 1-1.06 0Z" clip-rule="evenodd"/></svg>
+              Device settings
+            </span>
+            <span class="text-xs font-normal text-slate-500">name, buzzer, power-off, language</span>
+          </summary>
+          <form id="settingsForm" class="grid grid-cols-2 gap-3 pt-3">
+            <div class="col-span-2"><label class="label" for="setName">Device name (max 16 bytes)</label><input id="setName" class="input" maxlength="16"></div>
+            <div><label class="label" for="setBuzzer">Buzzer</label><select id="setBuzzer" class="input"></select></div>
+            <div><label class="label" for="setApo">Auto power-off</label><select id="setApo" class="input"></select></div>
+            <div><label class="label" for="setLang">Language</label><select id="setLang" class="input"></select></div>
+            <div><label class="label" for="setPanel">Panel direction</label><select id="setPanel" class="input"></select></div>
+            <div class="col-span-2 flex justify-end gap-2">
+              <button id="btnReloadSettings" class="btn btn-ghost" type="button" disabled>Reload</button>
+              <button id="btnApply" class="btn btn-primary" type="submit" disabled>Apply to device</button>
+            </div>
+          </form>
+        </details>
       </div>
 
       <div id="demoCard" class="card hidden border-dashed">
@@ -97,21 +123,6 @@
 
     <!-- ============ left column (bottom) ============ -->
     <section class="min-w-0 space-y-4 order-3 lg:order-none lg:col-span-4 lg:col-start-1 lg:row-start-2 lg:self-start">
-      <div class="card">
-        <div class="flex items-center justify-between mb-3">
-          <h2 class="font-semibold">Device settings</h2>
-          <button id="btnReloadSettings" class="btn btn-ghost" disabled>Reload</button>
-        </div>
-        <form id="settingsForm" class="grid grid-cols-2 gap-3">
-          <div class="col-span-2"><label class="label" for="setName">Device name (max 16 bytes)</label><input id="setName" class="input" maxlength="16"></div>
-          <div><label class="label" for="setBuzzer">Buzzer</label><select id="setBuzzer" class="input"></select></div>
-          <div><label class="label" for="setApo">Auto power-off</label><select id="setApo" class="input"></select></div>
-          <div><label class="label" for="setLang">Language</label><select id="setLang" class="input"></select></div>
-          <div><label class="label" for="setPanel">Panel direction</label><select id="setPanel" class="input"></select></div>
-          <div class="col-span-2 flex justify-end"><button id="btnApply" class="btn btn-primary" type="submit" disabled>Apply to device</button></div>
-        </form>
-      </div>
-
       <div class="card">
         <div class="flex items-center justify-between mb-3">
           <h2 class="font-semibold">Device palettes</h2>
@@ -152,30 +163,53 @@
           <span id="measureHint" class="text-sm text-slate-500"></span>
         </div>
 
-        <div id="resultArea" class="mt-4 hidden">
-          <div class="grid sm:grid-cols-[auto,1fr] gap-4 items-start">
-            <div class="flex gap-3">
-              <div>
-                <div id="swatch" class="h-28 w-28 rounded-lg border border-slate-200 dark:border-slate-700 shadow-inner"></div>
-                <p id="swatchLabel" class="text-xs text-center text-slate-500 mt-1">Sample</p>
+        <div id="resultArea" class="mt-5 hidden space-y-4">
+          <!-- swatches + verdict -->
+          <div class="flex flex-wrap items-center gap-4">
+            <div class="flex gap-2">
+              <figure class="m-0">
+                <div id="swatch" class="h-24 w-24 sm:h-28 sm:w-28 rounded-xl ring-1 ring-black/10 dark:ring-white/10 shadow-sm"></div>
+                <figcaption class="text-[11px] text-center text-slate-500 mt-1">Sample</figcaption>
+              </figure>
+              <figure id="refBox" class="m-0 hidden">
+                <div id="refSwatch" class="h-24 w-24 sm:h-28 sm:w-28 rounded-xl ring-1 ring-black/10 dark:ring-white/10 shadow-sm"></div>
+                <figcaption class="text-[11px] text-center text-slate-500 mt-1">Reference</figcaption>
+              </figure>
+            </div>
+            <div class="flex-1 min-w-[12rem] space-y-2">
+              <div id="verdict" class="hidden"></div>
+              <div id="conditions" class="flex flex-wrap gap-1.5"></div>
+              <div class="flex flex-wrap gap-2 pt-1">
+                <button id="btnSetRef" class="btn btn-ghost">Use as reference</button>
+                <button id="btnCopyValues" class="btn btn-ghost">Copy values</button>
               </div>
-              <div id="refBox" class="hidden">
-                <div id="refSwatch" class="h-28 w-28 rounded-lg border border-slate-200 dark:border-slate-700 shadow-inner"></div>
-                <p class="text-xs text-center text-slate-500 mt-1">Reference</p>
+            </div>
+          </div>
+
+          <!-- values table -->
+          <div id="resultValues" class="rounded-xl border border-slate-200 dark:border-slate-800 divide-y divide-slate-200 dark:divide-slate-800 overflow-hidden"></div>
+          <div class="grid grid-cols-[1fr,auto] gap-2 items-end">
+            <div class="min-w-0">
+              <div class="flex items-center justify-between">
+                <label class="label !mb-0.5" for="cmykProfile">CMYK profile</label>
+                <span class="flex gap-3 text-xs">
+                  <button id="btnRemoveIcc" type="button" class="hidden text-rose-600 hover:underline">remove</button>
+                  <button id="btnAddIcc" type="button" class="text-indigo-600 dark:text-indigo-400 hover:underline" title="Use your own CMYK ICC profile (.icc / .icm)">+ add .icc</button>
+                </span>
+                <input id="iccFile" type="file" accept=".icc,.icm,application/vnd.iccprofile" class="hidden">
               </div>
+              <select id="cmykProfile" class="input !py-1 text-xs"></select>
             </div>
             <div>
-              <div id="verdict" class="hidden mb-2"></div>
-              <dl class="kv grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2" id="resultValues"></dl>
-              <div class="flex flex-wrap gap-2 mt-3">
-                <button id="btnSetRef" class="btn btn-ghost">Use as reference</button>
-              </div>
+              <label class="label !mb-0.5" for="cmykIntent">Intent</label>
+              <select id="cmykIntent" class="input !py-1 text-xs">
+                <option value="0">Perceptual</option><option value="2">Relative</option><option value="1">Saturation</option>
+              </select>
             </div>
           </div>
-          <div id="strip" class="hidden mt-4 grid grid-cols-6 sm:grid-cols-9 gap-1.5"></div>
-          <div class="mt-4">
-            <svg id="chart" viewBox="0 0 640 220" class="w-full h-auto" role="img" aria-label="Spectral reflectance"></svg>
-          </div>
+
+          <div id="strip" class="hidden grid grid-cols-6 sm:grid-cols-9 gap-1.5"></div>
+          <svg id="chart" viewBox="0 0 640 220" class="w-full h-auto" role="img" aria-label="Spectral reflectance"></svg>
         </div>
       </div>
 
@@ -203,15 +237,23 @@
 
     <!-- ============ log ============ -->
     <section class="min-w-0 order-4 lg:order-none lg:col-span-12 lg:row-start-3">
+      <!-- Protocol log: hidden by default (state remembered in this browser) -->
       <div class="rounded-xl border border-slate-800 bg-slate-950 text-slate-200">
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 sm:px-4 py-2 border-b border-slate-800">
-          <h2 class="font-semibold text-sm mr-auto">Protocol log</h2>
-          <label class="text-xs flex items-center gap-1"><input type="checkbox" id="logRaw"> raw BLE chunks</label>
-          <label class="text-xs flex items-center gap-1"><input type="checkbox" id="logAutoscroll" checked> autoscroll</label>
-          <button id="btnCopyLog" class="btn text-xs border border-slate-700 hover:bg-slate-800">Copy</button>
-          <button id="btnClearLog" class="btn text-xs border border-slate-700 hover:bg-slate-800">Clear</button>
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 sm:px-4 py-2">
+          <button id="btnToggleLog" type="button" aria-expanded="false" aria-controls="logBody" class="mr-auto flex items-center gap-2 text-sm font-semibold">
+            <svg id="logChevron" class="h-4 w-4 text-slate-400 transition-transform" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M7.2 14.8a.75.75 0 0 1 0-1.06L10.94 10 7.2 6.26a.75.75 0 1 1 1.06-1.06l4.27 4.27a.75.75 0 0 1 0 1.06l-4.27 4.27a.75.75 0 0 1-1.06 0Z" clip-rule="evenodd"/></svg>
+            Protocol log <span id="logCount" class="text-xs font-normal text-slate-500"></span>
+          </button>
+          <div id="logTools" class="hidden flex-wrap items-center gap-x-3 gap-y-1">
+            <label class="text-xs flex items-center gap-1"><input type="checkbox" id="logRaw"> raw BLE chunks</label>
+            <label class="text-xs flex items-center gap-1"><input type="checkbox" id="logAutoscroll" checked> autoscroll</label>
+            <button id="btnCopyLog" class="btn text-xs border border-slate-700 hover:bg-slate-800">Copy</button>
+            <button id="btnClearLog" class="btn text-xs border border-slate-700 hover:bg-slate-800">Clear</button>
+          </div>
         </div>
-        <pre id="log" class="h-72 overflow-auto px-4 py-2 text-xs leading-5 font-mono whitespace-pre-wrap break-all"></pre>
+        <div id="logBody" class="hidden border-t border-slate-800">
+          <pre id="log" class="h-72 overflow-auto px-4 py-2 text-xs leading-5 font-mono whitespace-pre-wrap break-all"></pre>
+        </div>
       </div>
     </section>
   </main>

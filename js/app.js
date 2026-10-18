@@ -8,6 +8,7 @@ import {
 } from './protocol.js';
 import { deltaE, describeSpectrum, meanSpectrum, medianLab, spectrumToLab, wavelengthColor, labToLch, labD50ToSrgb, rgbHex } from './color.js';
 import { history as historyStore, prefs as prefStore } from './storage.js';
+import { CMYK_PROFILES, CUSTOM_PREFIX, customProfiles, loadProfile } from './icc.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -23,7 +24,7 @@ const state = {
   reference: null, // { spectrum, label }
   history: historyStore.load(),
   checked: new Set(),
-  prefs: prefStore.load({ mFactor: 1, lightSource: 0, observer: 2, readings: 1, formula: 0, threshold: 3, patches: 6, mode: 'spot' }),
+  prefs: prefStore.load({ mFactor: 1, lightSource: 0, observer: 2, readings: 1, formula: 0, threshold: 3, patches: 6, mode: 'spot', cmykProfile: 'EpsonWideCMYK_Ver2', cmykIntent: 0 }),
 };
 
 // ------------------------------------------------------------------ helpers
@@ -47,6 +48,9 @@ function settingsFromUI() {
     mFactor: +$('mMf').value, lightSource: +$('mIll').value, observer: +$('mObs').value, readings: +$('mReadings').value,
     formula: +$('mFormula').value, threshold: Math.min(Math.max(+$('mThr').value || 0, 0), 20),
     patches: Math.min(Math.max(Math.round(+$('mPatches').value || 1), 1), 18), mode: state.mode,
+    // the profile list is filled asynchronously (custom profiles live in IndexedDB): keep the saved choice until then
+    cmykProfile: ($('cmykProfile').options.length && $('cmykProfile').value) || state.prefs.cmykProfile || 'EpsonWideCMYK_Ver2',
+    cmykIntent: +$('cmykIntent').value || 0,
   };
 }
 
@@ -87,6 +91,7 @@ function logLine(cls, text) {
   line.textContent = `${ts}  ${text}`;
   logEl.appendChild(line);
   if (++logCount > 3000) { logEl.firstChild.remove(); logCount--; }
+  $('logCount').textContent = `(${logCount})`;
   if ($('logAutoscroll').checked) logEl.scrollTop = logEl.scrollHeight;
 }
 
@@ -314,16 +319,18 @@ function showResult({ spectrum, lab, strip }) {
   const p = settingsFromUI();
   const d = describeSpectrum(spectrum, p.lightSource, p.observer);
   if (lab) { d.lab = lab; d.lch = labToLch(lab); }
-  state.last = { spectrum, lab: d.lab };
+  state.last = { spectrum, lab: d.lab, d, strip };
   $('resultArea').classList.remove('hidden');
   $('swatch').style.background = d.hex;
+  $('swatch').title = d.hex;
+
   const ill = LIGHT_SOURCE_NAME[p.lightSource];
-  const values = [
-    ['L*', fmt(d.lab[0])], ['a*', fmt(d.lab[1])], ['b*', fmt(d.lab[2])],
-    ['C*', fmt(d.lch[1])], ['h°', fmt(d.lch[2], 1)], ['LRV', fmt(d.lrv, 1)],
-    ['HEX', d.hex + (d.inGamut ? '' : ' *')], ['sRGB', d.rgb.join(', ')], ['Conditions', `${ill} / ${p.observer}° · M${p.mFactor}`],
-  ];
-  $('resultValues').innerHTML = values.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+  const chip = (t) => `<span class="chip bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">${t}</span>`;
+  $('conditions').innerHTML = [chip(`${ill} · ${p.observer}°`), chip(`M${p.mFactor}`), p.readings > 1 && state.mode !== 'line' ? chip(`median of ${p.readings}`) : '']
+    .join('');
+
+  renderValues(d, null);
+  updateCmyk(spectrum);
 
   const verdict = $('verdict');
   const ref = state.mode === 'compare' ? state.reference : null;
@@ -333,15 +340,74 @@ function showResult({ spectrum, lab, strip }) {
     const dE = deltaE(refLab, d.lab, p.formula);
     const pass = dE <= p.threshold;
     $('refSwatch').style.background = describeSpectrum(ref.spectrum).hex;
-    verdict.className = `mb-2 inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold ${pass ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200' : 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200'}`;
-    verdict.textContent = `${pass ? 'PASS' : 'FAIL'} · ${DIFF_FORMULAS[p.formula]} = ${dE.toFixed(2)} (tolerance ${p.threshold})`;
+    verdict.className = `flex items-center gap-3 rounded-xl px-3 py-2 ${pass ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200' : 'bg-rose-50 text-rose-800 dark:bg-rose-950 dark:text-rose-200'}`;
+    verdict.innerHTML = `<span class="rounded-md px-2 py-0.5 text-xs font-bold tracking-wide text-white ${pass ? 'bg-emerald-600' : 'bg-rose-600'}">${pass ? 'PASS' : 'FAIL'}</span>
+      <span class="text-2xl font-semibold tabular-nums leading-none">${dE.toFixed(2)}</span>
+      <span class="text-xs leading-tight">${DIFF_FORMULAS[p.formula]}<br><span class="opacity-75">tolerance ${p.threshold}</span></span>`;
   } else verdict.className = 'hidden';
 
   const stripEl = $('strip');
   stripEl.classList.toggle('hidden', !strip);
-  if (strip) stripEl.innerHTML = strip.map((sp, i) => `<div class="text-center"><div class="h-10 rounded border border-slate-200 dark:border-slate-700" style="background:${describeSpectrum(sp).hex}"></div><span class="text-[10px] text-slate-500">${i + 1}</span></div>`).join('');
+  if (strip) stripEl.innerHTML = strip.map((sp, i) => `<div class="text-center"><div class="h-10 rounded-md ring-1 ring-black/10 dark:ring-white/10" style="background:${describeSpectrum(sp).hex}"></div><span class="text-[10px] text-slate-500">${i + 1}</span></div>`).join('');
 
   drawChart(spectrum, ref?.spectrum);
+}
+
+/** One row of the values table: label + labelled numbers. */
+function valueRow(label, items, extra = '') {
+  // Every row uses the same 4-column grid so numbers line up down the table (CMYK fills all 4).
+  const cells = items.map(([k, v, span]) => `<div class="min-w-0 ${span ? 'col-span-' + span : ''}"><div class="text-[10px] tracking-wide text-slate-500">${k}</div><div class="font-mono text-sm tabular-nums truncate">${v}</div></div>`).join('');
+  return `<div class="grid grid-cols-[3.75rem,1fr] sm:grid-cols-[5rem,1fr] items-center gap-2 px-3 py-2">
+    <div class="text-xs font-medium text-slate-500">${label}</div>
+    <div class="grid grid-cols-4 gap-x-3 items-end">${cells}${extra}</div></div>`;
+}
+
+function renderValues(d, cmyk) {
+  const cmykItems = cmyk?.values
+    ? [['C', fmt(cmyk.values[0], 1)], ['M', fmt(cmyk.values[1], 1)], ['Y', fmt(cmyk.values[2], 1)], ['K', fmt(cmyk.values[3], 1)]]
+    : [['', cmyk?.error ? `<span class="text-rose-600 text-xs">${escapeHtml(cmyk.error)}</span>` : '<span class="text-slate-400 text-xs">computing…</span>', 4]];
+  const copyBtn = `<button data-copy="${d.hex}" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline">copy</button>`;
+  $('resultValues').innerHTML = [
+    valueRow('CIE Lab', [['L*', fmt(d.lab[0])], ['a*', fmt(d.lab[1])], ['b*', fmt(d.lab[2])]]),
+    valueRow('LCh', [['L*', fmt(d.lch[0])], ['C*', fmt(d.lch[1])], ['h°', fmt(d.lch[2], 1)]]),
+    valueRow('HEX', [['sRGB', `<span class="inline-flex items-center gap-1.5"><span class="h-3 w-3 rounded-sm ring-1 ring-black/10" style="background:${d.hex}"></span>${d.hex}</span>`, 2]],
+      `<div class="col-span-2 flex items-center gap-3 pb-0.5">${copyBtn}${d.inGamut ? '' : '<span class="text-[11px] text-amber-600" title="Outside the sRGB gamut – clipped">out of gamut</span>'}</div>`),
+    valueRow('RGB', [['R', d.rgb[0]], ['G', d.rgb[1]], ['B', d.rgb[2]]]),
+    valueRow('CMYK', cmykItems),
+    valueRow('LRV', [['D65 · 10°', fmt(d.lrv, 1), 2]]),
+  ].join('');
+}
+
+/** CMYK through the selected ICC profile, from Lab D50/2° as the app does (P0.a.a()). */
+async function updateCmyk(spectrum) {
+  const p = settingsFromUI();
+  const token = (updateCmyk.token = (updateCmyk.token || 0) + 1);
+  let cmyk;
+  try {
+    const profile = await loadProfile(p.cmykProfile);
+    cmyk = { values: profile.fromLab(spectrumToLab(spectrum, 0, 2), p.cmykIntent) };
+  } catch (e) {
+    cmyk = { error: e.message };
+  }
+  if (token !== updateCmyk.token || !state.last || state.last.spectrum !== spectrum) return;
+  state.last.cmyk = cmyk;
+  renderValues(state.last.d, cmyk);
+}
+
+function copyValues() {
+  const l = state.last;
+  if (!l) return;
+  const p = settingsFromUI();
+  const c = l.cmyk?.values;
+  const text = [
+    `Conditions: ${LIGHT_SOURCE_NAME[p.lightSource]} / ${p.observer}° / M${p.mFactor}`,
+    `L*a*b*: ${l.d.lab.map((v) => v.toFixed(2)).join(', ')}`,
+    `LCh: ${l.d.lch[0].toFixed(2)}, ${l.d.lch[1].toFixed(2)}, ${l.d.lch[2].toFixed(1)}`,
+    `HEX: ${l.d.hex}`, `RGB: ${l.d.rgb.join(', ')}`,
+    c ? `CMYK (${p.cmykProfile.replace(CUSTOM_PREFIX, '')}): ${c.map((v) => v.toFixed(1)).join(', ')}` : '',
+    `LRV: ${l.d.lrv.toFixed(1)}`,
+  ].filter(Boolean).join('\n');
+  navigator.clipboard?.writeText(text).then(() => toast('Values copied', 'ok'), () => toast('Clipboard not available', 'error'));
 }
 
 function drawChart(spectrum, refSpectrum) {
@@ -410,18 +476,19 @@ function onHistoryClick(e) {
   switch (btn.dataset.act) {
     case 'check': btn.checked ? state.checked.add(id) : state.checked.delete(id); updateControls(); break;
     case 'show': showResult({ spectrum: item.spectrum, lab: labFor(item) }); break;
-    case 'ref': setReference(item.spectrum, item.mode); break;
+    case 'ref': setReference(item.spectrum); break;
     case 'del':
       state.history = state.history.filter((h) => h.id !== id); state.checked.delete(id);
       historyStore.save(state.history); renderHistory(); break;
   }
 }
 
+/** Make this colour the comparison reference and switch to the Compare tab. */
 function setReference(spectrum) {
   state.reference = { spectrum };
-  toast('Reference set – switch to Compare to measure against it.', 'ok');
-  if (state.mode === 'compare' && state.last) showResult({ spectrum: state.last.spectrum });
-  updateControls();
+  setMode('compare');
+  showResult({ spectrum });
+  toast('Reference set – measure a sample to compare against it.', 'ok');
 }
 
 function exportCsv() {
@@ -535,6 +602,51 @@ function setMode(mode) {
   updateControls();
 }
 
+// ------------------------------------------------------------------ CMYK profiles
+async function refreshProfileList(selected) {
+  const custom = await customProfiles.list();
+  const opt = (v, t) => `<option value="${escapeHtml(v)}">${escapeHtml(t)}</option>`;
+  $('cmykProfile').innerHTML =
+    `<optgroup label="App profiles">${Object.keys(CMYK_PROFILES).map((k) => opt(k, k + (k === 'EpsonWideCMYK_Ver2' ? ' (app default)' : ''))).join('')}</optgroup>` +
+    (custom.length ? `<optgroup label="Your profiles">${custom.map((n) => opt(CUSTOM_PREFIX + n, n)).join('')}</optgroup>` : '');
+  const ok = [...$('cmykProfile').options].some((o) => o.value === selected);
+  $('cmykProfile').value = ok ? selected : 'EpsonWideCMYK_Ver2';
+  $('btnRemoveIcc').classList.toggle('hidden', !$('cmykProfile').value.startsWith(CUSTOM_PREFIX));
+  if (state.last) updateCmyk(state.last.spectrum);
+}
+
+async function addIccProfile(file) {
+  if (file.size > 20 * 1024 * 1024) { toast('That file is too large to be a CMYK profile (over 20 MB).', 'error'); return; }
+  try {
+    const { name, saved } = await customProfiles.add(file);
+    await refreshProfileList(CUSTOM_PREFIX + name);
+    savePrefs();
+    toast(saved ? `Added CMYK profile “${name}”` : `Added “${name}” for this session only (browser storage is unavailable)`, 'ok');
+  } catch (e) {
+    toast(`Could not use ${file.name}: ${e.message}`, 'error');
+  }
+}
+
+async function removeIccProfile() {
+  const v = $('cmykProfile').value;
+  if (!v.startsWith(CUSTOM_PREFIX)) return;
+  const name = v.slice(CUSTOM_PREFIX.length);
+  if (!confirm(`Remove the CMYK profile “${name}” from this browser?`)) return;
+  await customProfiles.remove(name).catch(() => {});
+  await refreshProfileList('EpsonWideCMYK_Ver2');
+  savePrefs();
+}
+
+function setLogOpen(open) {
+  $('logBody').classList.toggle('hidden', !open);
+  $('logTools').classList.toggle('hidden', !open);
+  $('logTools').classList.toggle('flex', open);
+  $('logChevron').classList.toggle('rotate-90', open);
+  $('btnToggleLog').setAttribute('aria-expanded', String(open));
+  try { localStorage.setItem('sd10.logOpen', open ? '1' : '0'); } catch { /* ignore */ }
+  if (open && $('logAutoscroll').checked) logEl.scrollTop = logEl.scrollHeight;
+}
+
 function init() {
   fill($('mIll'), Object.fromEntries(Object.entries(LIGHT_SOURCES).map(([k, v]) => [v, k])));
   fill($('mFormula'), DIFF_FORMULAS);
@@ -544,6 +656,8 @@ function init() {
   const p = state.prefs;
   $('mMf').value = p.mFactor; $('mIll').value = p.lightSource; $('mObs').value = p.observer; $('mReadings').value = p.readings;
   $('mFormula').value = p.formula; $('mThr').value = p.threshold; $('mPatches').value = p.patches;
+  $('cmykIntent').value = p.cmykIntent ?? 0;
+  refreshProfileList(p.cmykProfile);
   setMode(p.mode || 'spot');
 
   if (!BleTransport.supported) { $('bleWarning').classList.remove('hidden'); $('btnConnect').disabled = true; }
@@ -560,6 +674,21 @@ function init() {
   $('btnWriteGroup').onclick = writeGroup;
   $('groupList').onclick = (e) => { const b = e.target.closest('[data-delslot]'); if (b) deleteGroup(+b.dataset.delslot); };
   $('btnSetRef').onclick = () => state.last && setReference(state.last.spectrum);
+  $('btnCopyValues').onclick = copyValues;
+  $('resultValues').onclick = (e) => {
+    const b = e.target.closest('[data-copy]');
+    if (b) navigator.clipboard?.writeText(b.dataset.copy).then(() => toast(`${b.dataset.copy} copied`, 'ok'));
+  };
+  for (const id of ['cmykProfile', 'cmykIntent']) {
+    $(id).addEventListener('change', () => {
+      $('btnRemoveIcc').classList.toggle('hidden', !$('cmykProfile').value.startsWith(CUSTOM_PREFIX));
+      savePrefs();
+      if (state.last) updateCmyk(state.last.spectrum);
+    });
+  }
+  $('btnAddIcc').onclick = () => $('iccFile').click();
+  $('iccFile').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) addIccProfile(f); };
+  $('btnRemoveIcc').onclick = removeIccProfile;
   $('histBody').onclick = onHistoryClick;
   $('btnExport').onclick = exportCsv;
   $('btnClearHistory').onclick = clearHistory;
@@ -569,7 +698,13 @@ function init() {
   for (const id of ['mMf', 'mIll', 'mObs', 'mReadings', 'mFormula', 'mThr', 'mPatches']) {
     $(id).addEventListener('change', () => { savePrefs(); renderHistory(); if (state.last) showResult({ spectrum: state.last.spectrum }); });
   }
-  $('btnClearLog').onclick = () => { logEl.innerHTML = ''; logCount = 0; };
+  $('btnClearLog').onclick = () => { logEl.innerHTML = ''; logCount = 0; $('logCount').textContent = ''; };
+  $('btnToggleLog').onclick = () => setLogOpen($('logBody').classList.contains('hidden'));
+  let logOpen = false;
+  try { logOpen = localStorage.getItem('sd10.logOpen') === '1'; } catch { /* ignore */ }
+  setLogOpen(logOpen);
+  // The simulated device is a developer/test aid: only offered when the page is opened with ?demo
+  if (new URLSearchParams(location.search).has('demo')) $('btnDemo').classList.remove('hidden');
   $('btnCopyLog').onclick = () => navigator.clipboard?.writeText(logEl.innerText).then(() => toast('Log copied'));
 
   $('demoSample').onchange = (e) => state.transport?.setSample?.(e.target.value);
