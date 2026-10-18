@@ -1,0 +1,25 @@
+/* Source for css/app.css – compile with ./build-css.sh (Tailwind CLI v3.4). Do not edit css/app.css by hand. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* component classes live in the components layer so utilities (e.g. "hidden") can override them */
+@layer components {
+  .card { @apply bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 sm:p-4; }
+  .label { @apply block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1; }
+  .input { @apply w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500; }
+  .btn { @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition disabled:opacity-40 disabled:cursor-not-allowed; }
+  .btn-primary { @apply bg-indigo-600 text-white hover:bg-indigo-500; }
+  .btn-ghost { @apply border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800; }
+  .btn-danger { @apply border border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950; }
+  .chip { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium; }
+  .tab { @apply px-3 py-1.5 text-sm rounded-md text-slate-600 dark:text-slate-300; }
+  .tab[aria-selected="true"] { @apply bg-indigo-600 text-white; }
+  .kv dt { @apply text-xs text-slate-500 dark:text-slate-400; }
+  .kv dd { @apply font-mono text-sm tabular-nums; }
+}
+#log .tx { color: #7dd3fc; }
+#log .rx { color: #86efac; }
+#log .ev { color: #fcd34d; }
+#log .raw { color: #94a3b8; }
+#log .err { color: #fca5a5; }

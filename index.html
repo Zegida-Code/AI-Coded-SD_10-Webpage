@@ -4,32 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
-  <style type="text/tailwindcss">
-    /* component classes live in the components layer so utilities (e.g. "hidden") can override them */
-    @layer components {
-      .card { @apply bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 sm:p-4; }
-      .label { @apply block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1; }
-      .input { @apply w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500; }
-      .btn { @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition disabled:opacity-40 disabled:cursor-not-allowed; }
-      .btn-primary { @apply bg-indigo-600 text-white hover:bg-indigo-500; }
-      .btn-ghost { @apply border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800; }
-      .btn-danger { @apply border border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950; }
-      .chip { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium; }
-      .tab { @apply px-3 py-1.5 text-sm rounded-md text-slate-600 dark:text-slate-300; }
-      .tab[aria-selected="true"] { @apply bg-indigo-600 text-white; }
-      .kv dt { @apply text-xs text-slate-500 dark:text-slate-400; }
-      .kv dd { @apply font-mono text-sm tabular-nums; }
-    }
-    #log .tx { color: #7dd3fc; }
-    #log .rx { color: #86efac; }
-    #log .ev { color: #fcd34d; }
-    #log .raw { color: #94a3b8; }
-    #log .err { color: #fca5a5; }
-  </style>
-  <script>
-    tailwind.config = { darkMode: 'media' };
-  </script>
+  <link rel="stylesheet" href="css/app.css?v=2026-10-18.f714d56-025126">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -281,18 +256,18 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-18.8f4e1a8-023935",
-      "./js/transport.js": "./js/transport.js?v=2026-10-18.8f4e1a8-023935",
-      "./js/mock.js": "./js/mock.js?v=2026-10-18.8f4e1a8-023935",
-      "./js/session.js": "./js/session.js?v=2026-10-18.8f4e1a8-023935",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-18.8f4e1a8-023935",
-      "./js/color.js": "./js/color.js?v=2026-10-18.8f4e1a8-023935",
-      "./js/weights.js": "./js/weights.js?v=2026-10-18.8f4e1a8-023935",
-      "./js/storage.js": "./js/storage.js?v=2026-10-18.8f4e1a8-023935",
-      "./js/icc.js": "./js/icc.js?v=2026-10-18.8f4e1a8-023935"
+      "./js/app.js": "./js/app.js?v=2026-10-18.f714d56-025126",
+      "./js/transport.js": "./js/transport.js?v=2026-10-18.f714d56-025126",
+      "./js/mock.js": "./js/mock.js?v=2026-10-18.f714d56-025126",
+      "./js/session.js": "./js/session.js?v=2026-10-18.f714d56-025126",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-18.f714d56-025126",
+      "./js/color.js": "./js/color.js?v=2026-10-18.f714d56-025126",
+      "./js/weights.js": "./js/weights.js?v=2026-10-18.f714d56-025126",
+      "./js/storage.js": "./js/storage.js?v=2026-10-18.f714d56-025126",
+      "./js/icc.js": "./js/icc.js?v=2026-10-18.f714d56-025126"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-18.8f4e1a8-023935"></script>
+  <script type="module" src="js/app.js?v=2026-10-18.f714d56-025126"></script>
 </body>
 </html>

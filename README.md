@@ -68,7 +68,8 @@ Open these pages in Chrome (on the live site, e.g. [sd-10.com/test/](https://sd-
 ## Project layout
 
 ```
-index.html          page and layout (Tailwind via CDN, no build step)
+index.html          page and layout
+css/app.css         compiled Tailwind stylesheet (source: css/tailwind.src.css)
 js/app.js           UI controller
 js/session.js       SD-10 session: byte routing, command queue + FF/FE acks, handshake, operations
 js/protocol.js      command builders and reply parsers
@@ -82,6 +83,7 @@ icc/                CMYK profiles bundled with the app
 docs/               protocol, feature and development notes
 test/               test pages and reference data
 bump-version.sh     release helper
+build-css.sh        rebuilds css/app.css
 ```
 
 ## Troubleshooting
