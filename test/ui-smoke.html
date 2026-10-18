@@ -35,10 +35,10 @@
       $('acceptAll').click();
       d.body.click();
       log(menuOpen && dotOn && $('connectMenu').classList.contains('hidden') && frame.contentWindow.localStorage.getItem('sd10.acceptAll') === '0', 'connect options menu: opens, switch remembered, closes on outside click');
-      log(!$('btnDemo').classList.contains('hidden'), 'demo button shown with ?demo');
+      log(/Connect demo device/.test($('btnConnect').textContent) && $('btnConnectMenu').classList.contains('hidden'), 'with ?demo the Connect button becomes "Connect demo device"');
       log(!$('settingsPanel').open && d.getElementById('settingsPanel').contains($('settingsForm')), 'device settings are a collapsed sub-section of Device');
-      await until(() => !$('btnDemo').disabled);
-      $('btnDemo').click();
+      await until(() => !$('btnConnect').disabled);
+      $('btnConnect').click();
       log(await until(() => /simulated/.test($('connPill').textContent)), 'demo connects');
       log(await until(() => $('devSerial').textContent === 'X3K0012345' && $('setName').value === 'SD-10 Demo'), 'device info + settings shown');
       log(/Needs calibration/.test($('statusChips').textContent), 'status chips show calibration needed');

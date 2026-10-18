@@ -40,8 +40,8 @@
       try { frame.contentWindow.localStorage.clear(); } catch {}
       await sleep(300);
       audit('disconnected');
-      $('btnDemo').click();
-      await until(() => /simulated/.test($('connPill').textContent) && !$('btnDemo').disabled && $('setName').value);
+      $('btnConnect').click();
+      await until(() => /simulated/.test($('connPill').textContent) && $('setName').value);
       $('demoShutter').click(); await until(() => $('btnMeasure').textContent === 'Calibrate');
       $('btnMeasure').click(); await until(() => /Calibrated/.test($('statusChips').textContent) && !$('btnMeasure').disabled);
       $('demoShutter').click(); await until(() => $('btnMeasure').textContent === 'Measure' && !$('btnMeasure').disabled);

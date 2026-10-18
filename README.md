@@ -14,7 +14,7 @@ python -m http.server 8765 --directory web-app
 ```
 
 Supported: Chrome / Edge on Windows, macOS, Linux, ChromeOS and Android. Not supported: Safari, Firefox, iOS.
-A simulated SD-10 is available for trying the app without hardware: open `http://localhost:8765/?demo` to show the **Demo** button.
+A simulated SD-10 is available for trying the app without hardware: open `http://localhost:8765/?demo` (or `https://sd-10.com/?demo`) and the Connect button becomes **Connect demo device**.
 
 ## Features
 

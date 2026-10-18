@@ -45,7 +45,8 @@
       <div class="w-full sm:w-auto flex flex-wrap items-center gap-2">
         <!-- Split button: Connect + options menu (device filter) -->
         <div class="relative flex flex-1 sm:flex-none">
-          <button id="btnConnect" class="btn btn-primary whitespace-nowrap flex-1 !rounded-r-none"><span class="sm:hidden">Connect</span><span class="hidden sm:inline">Connect device</span></button>
+          <!-- With ?demo this becomes "Connect demo device" and connects to the simulated SD-10 -->
+          <button id="btnConnect" class="btn btn-primary whitespace-nowrap flex-1 !rounded-r-none"><span class="sm:hidden" data-label-short>Connect</span><span class="hidden sm:inline" data-label-long>Connect device</span></button>
           <button id="btnConnectMenu" type="button" class="btn btn-primary !px-2 !rounded-l-none border-l border-indigo-400/40" aria-haspopup="true" aria-expanded="false" aria-controls="connectMenu" title="Connection options">
             <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clip-rule="evenodd"/></svg>
             <span id="acceptAllDot" class="hidden absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-white dark:ring-slate-900" title="Showing all Bluetooth devices"></span>
@@ -64,8 +65,6 @@
             </label>
           </div>
         </div>
-        <!-- Demo (simulated device) is hidden unless the page is opened with ?demo -->
-        <button id="btnDemo" class="btn btn-ghost whitespace-nowrap flex-1 sm:flex-none hidden"><span class="sm:hidden">Demo</span><span class="hidden sm:inline">Demo (simulated)</span></button>
         <button id="btnDisconnect" class="btn btn-ghost whitespace-nowrap flex-1 sm:flex-none" disabled>Disconnect</button>
       </div>
     </div>
@@ -282,18 +281,18 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-18.3e6eeb8-023111",
-      "./js/transport.js": "./js/transport.js?v=2026-10-18.3e6eeb8-023111",
-      "./js/mock.js": "./js/mock.js?v=2026-10-18.3e6eeb8-023111",
-      "./js/session.js": "./js/session.js?v=2026-10-18.3e6eeb8-023111",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-18.3e6eeb8-023111",
-      "./js/color.js": "./js/color.js?v=2026-10-18.3e6eeb8-023111",
-      "./js/weights.js": "./js/weights.js?v=2026-10-18.3e6eeb8-023111",
-      "./js/storage.js": "./js/storage.js?v=2026-10-18.3e6eeb8-023111",
-      "./js/icc.js": "./js/icc.js?v=2026-10-18.3e6eeb8-023111"
+      "./js/app.js": "./js/app.js?v=2026-10-18.8f4e1a8-023935",
+      "./js/transport.js": "./js/transport.js?v=2026-10-18.8f4e1a8-023935",
+      "./js/mock.js": "./js/mock.js?v=2026-10-18.8f4e1a8-023935",
+      "./js/session.js": "./js/session.js?v=2026-10-18.8f4e1a8-023935",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-18.8f4e1a8-023935",
+      "./js/color.js": "./js/color.js?v=2026-10-18.8f4e1a8-023935",
+      "./js/weights.js": "./js/weights.js?v=2026-10-18.8f4e1a8-023935",
+      "./js/storage.js": "./js/storage.js?v=2026-10-18.8f4e1a8-023935",
+      "./js/icc.js": "./js/icc.js?v=2026-10-18.8f4e1a8-023935"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-18.3e6eeb8-023111"></script>
+  <script type="module" src="js/app.js?v=2026-10-18.8f4e1a8-023935"></script>
 </body>
 </html>

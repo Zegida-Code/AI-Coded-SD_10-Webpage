@@ -11,6 +11,8 @@ import { history as historyStore, prefs as prefStore } from './storage.js';
 import { CMYK_PROFILES, CUSTOM_PREFIX, customProfiles, loadProfile } from './icc.js';
 
 const $ = (id) => document.getElementById(id);
+/** Demo page (?demo): the Connect button drives the simulated SD-10 instead of Web Bluetooth. */
+const DEMO = new URLSearchParams(location.search).has('demo');
 
 const state = {
   session: null,
@@ -176,7 +178,7 @@ function updateControls(busyLabel) {
   const idle = on && !state.busy;
   $('btnConnect').disabled = on || state.busy;
   $('btnConnectMenu').disabled = on || state.busy || !BleTransport.supported;
-  $('btnDemo').disabled = on || state.busy;
+  if (DEMO) $('btnConnect').disabled = on || state.busy; // the simulator works without Web Bluetooth
   $('btnDisconnect').disabled = !on;
   for (const id of ['btnRefresh', 'btnCalibrate', 'btnReloadSettings', 'btnApply', 'btnReadGroups', 'btnSyncHistory', 'btnResyncAll', 'btnMeasure']) $(id).disabled = !idle;
   $('btnWriteGroup').disabled = !idle || !state.checked.size;
@@ -685,7 +687,7 @@ function init() {
 
   if (!BleTransport.supported) { $('bleWarning').classList.remove('hidden'); $('btnConnect').disabled = true; $('btnConnectMenu').disabled = true; }
 
-  $('btnConnect').onclick = () => connect(false);
+  $('btnConnect').onclick = () => connect(DEMO);
   // Connection options menu (device filter switch), remembered in this browser
   const menu = $('connectMenu');
   const setMenu = (open) => { menu.classList.toggle('hidden', !open); $('btnConnectMenu').setAttribute('aria-expanded', String(open)); };
@@ -697,7 +699,6 @@ function init() {
   const syncDot = () => $('acceptAllDot').classList.toggle('hidden', !$('acceptAll').checked);
   syncDot();
   $('acceptAll').onchange = () => { syncDot(); try { localStorage.setItem('sd10.acceptAll', $('acceptAll').checked ? '1' : '0'); } catch { /* ignore */ } };
-  $('btnDemo').onclick = () => connect(true);
   $('btnDisconnect').onclick = disconnect;
   $('btnRefresh').onclick = () => task('Refreshing', async () => { await state.session.getStatus(); await loadSettings(); });
   $('btnCalibrate').onclick = () => task('Calibrating', doCalibrate);
@@ -738,7 +739,14 @@ function init() {
   try { logOpen = localStorage.getItem('sd10.logOpen') === '1'; } catch { /* ignore */ }
   setLogOpen(logOpen);
   // The simulated device is a developer/test aid: only offered when the page is opened with ?demo
-  if (new URLSearchParams(location.search).has('demo')) $('btnDemo').classList.remove('hidden');
+  if (DEMO) {
+    // Demo page: the main button connects to the simulated SD-10; Bluetooth options don't apply.
+    $('btnConnect').querySelector('[data-label-short]').textContent = 'Connect demo';
+    $('btnConnect').querySelector('[data-label-long]').textContent = 'Connect demo device';
+    $('btnConnect').classList.remove('!rounded-r-none');
+    $('btnConnectMenu').classList.add('hidden');
+    $('bleWarning').classList.add('hidden');
+  }
   $('btnCopyLog').onclick = () => navigator.clipboard?.writeText(logEl.innerText).then(() => toast('Log copied'));
 
   $('demoSample').onchange = (e) => state.transport?.setSample?.(e.target.value);
