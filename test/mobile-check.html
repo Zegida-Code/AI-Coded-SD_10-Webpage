@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SD-10 mobile layout check</title>
+  <style>
+    body { margin: 0; font: 12px ui-monospace, monospace; display: flex; gap: 16px; align-items: flex-start; }
+    iframe { border: 1px solid #888; width: 375px; height: 2600px; flex: none; }
+    #out { white-space: pre-wrap; max-width: 560px; padding: 8px; }
+  </style>
+</head>
+<body>
+  <iframe id="app" src="../index.html"></iframe>
+  <pre id="out">running…</pre>
+  <script type="module">
+    const out = document.getElementById('out');
+    const frame = document.getElementById('app');
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    async function until(fn, ms = 15000) { const t = Date.now(); while (Date.now() - t < ms) { if (fn()) return true; await sleep(50); } return false; }
+    const lines = [];
+
+    function audit(label) {
+      const d = frame.contentDocument, w = frame.contentWindow;
+      const vw = d.documentElement.clientWidth;
+      const sw = d.documentElement.scrollWidth;
+      lines.push(`${sw > vw ? 'FAIL' : 'PASS'} ${label}: viewport ${vw}px, document ${sw}px`);
+      if (sw > vw) {
+        const offenders = [...d.body.querySelectorAll('*')]
+          .filter((el) => el.getBoundingClientRect().right > vw + 1 && el.getBoundingClientRect().width > 0)
+          .filter((el) => ![...el.children].some((c) => c.getBoundingClientRect().right > vw + 1)) // innermost only
+          .slice(0, 12)
+          .map((el) => `   ${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}.${[...el.classList].slice(0, 4).join('.')} right=${Math.round(el.getBoundingClientRect().right)}`);
+        lines.push(...offenders);
+      }
+      out.textContent = lines.join('\n');
+    }
+
+    frame.onload = async () => {
+      const d = frame.contentDocument, $ = (id) => d.getElementById(id);
+      try { frame.contentWindow.localStorage.clear(); } catch {}
+      await sleep(300);
+      audit('disconnected');
+      $('btnDemo').click();
+      await until(() => /simulated/.test($('connPill').textContent) && !$('btnDemo').disabled && $('setName').value);
+      $('demoShutter').click(); await until(() => $('btnMeasure').textContent === 'Calibrate');
+      $('btnMeasure').click(); await until(() => /Calibrated/.test($('statusChips').textContent) && !$('btnMeasure').disabled);
+      $('demoShutter').click(); await until(() => $('btnMeasure').textContent === 'Measure' && !$('btnMeasure').disabled);
+      $('btnMeasure').click(); await until(() => !$('resultArea').classList.contains('hidden') && !$('btnMeasure').disabled);
+      d.querySelector('[data-mode=line]').click();
+      $('btnMeasure').click(); await until(() => !$('strip').classList.contains('hidden') && !$('btnMeasure').disabled);
+      await sleep(300);
+      audit('connected with results');
+      document.title = lines.some((l) => l.startsWith('FAIL')) ? 'FAILURES' : 'ALL PASS';
+    };
+  </script>
+</body>
+</html>

@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SD-10 Web Console</title>
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <style type="text/tailwindcss">
+    .card { @apply bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 sm:p-4; }
+    .label { @apply block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1; }
+    .input { @apply w-full rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500; }
+    .btn { @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition disabled:opacity-40 disabled:cursor-not-allowed; }
+    .btn-primary { @apply bg-indigo-600 text-white hover:bg-indigo-500; }
+    .btn-ghost { @apply border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800; }
+    .btn-danger { @apply border border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-800 dark:text-rose-300 dark:hover:bg-rose-950; }
+    .chip { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium; }
+    .tab { @apply px-3 py-1.5 text-sm rounded-md text-slate-600 dark:text-slate-300; }
+    .tab[aria-selected="true"] { @apply bg-indigo-600 text-white; }
+    .kv dt { @apply text-xs text-slate-500 dark:text-slate-400; }
+    .kv dd { @apply font-mono text-sm tabular-nums; }
+    #log .tx { color: #7dd3fc; }
+    #log .rx { color: #86efac; }
+    #log .ev { color: #fcd34d; }
+    #log .raw { color: #94a3b8; }
+    #log .err { color: #fca5a5; }
+  </style>
+  <script>
+    tailwind.config = { darkMode: 'media' };
+  </script>
+</head>
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
+  <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
+    <div class="max-w-7xl mx-auto px-4 py-2.5 sm:py-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+      <div class="flex items-center gap-2 min-w-0 flex-1">
+        <div class="h-8 w-8 flex-none rounded-lg bg-gradient-to-br from-violet-500 via-emerald-400 to-rose-500"></div>
+        <div class="min-w-0">
+          <h1 class="font-semibold leading-tight truncate">SD-10 Web Console</h1>
+          <p class="hidden sm:block text-xs text-slate-500 dark:text-slate-400">Epson spectrometer over Web Bluetooth</p>
+        </div>
+      </div>
+      <span id="connPill" class="chip max-w-[45%] truncate bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300">● Disconnected</span>
+      <div class="w-full sm:w-auto grid grid-cols-3 sm:flex items-center gap-2">
+        <button id="btnConnect" class="btn btn-primary whitespace-nowrap">Connect<span class="hidden sm:inline">&nbsp;device</span></button>
+        <button id="btnDemo" class="btn btn-ghost whitespace-nowrap">Demo<span class="hidden sm:inline">&nbsp;(simulated)</span></button>
+        <button id="btnDisconnect" class="btn btn-ghost whitespace-nowrap" disabled>Disconnect</button>
+        <label class="col-span-3 sm:order-first flex items-center gap-1 text-xs text-slate-500" title="Show every BLE device in the chooser (if the SD-10 does not appear)">
+          <input id="acceptAll" type="checkbox" class="rounded"> show all Bluetooth devices
+        </label>
+      </div>
+    </div>
+    <div id="bleWarning" class="hidden bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-200 text-sm px-4 py-2 text-center">
+      This browser does not support Web Bluetooth. Use Chrome or Edge on desktop/Android (HTTPS or localhost). The simulated demo still works.
+    </div>
+  </header>
+
+  <div id="toast" class="hidden"></div>
+
+  <!-- Phones: one column in reading order (device → measure/history → settings/palettes → log).
+       Desktop: device + settings on the left, measure/history on the right. -->
+  <main class="max-w-7xl mx-auto px-3 sm:px-4 py-4 grid grid-cols-1 gap-4 lg:grid-cols-12 lg:grid-rows-[auto_1fr_auto]">
+    <!-- ============ left column (top) ============ -->
+    <section class="min-w-0 space-y-4 order-1 lg:order-none lg:col-span-4 lg:col-start-1 lg:row-start-1">
+      <div class="card">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-semibold">Device</h2>
+          <div class="flex gap-2">
+            <button id="btnRefresh" class="btn btn-ghost" disabled>Refresh</button>
+            <button id="btnCalibrate" class="btn btn-ghost" disabled>Calibrate</button>
+          </div>
+        </div>
+        <dl class="kv grid grid-cols-2 gap-x-4 gap-y-2 mb-3">
+          <div><dt>Name</dt><dd id="devName">—</dd></div>
+          <div><dt>Model</dt><dd id="devModel">—</dd></div>
+          <div><dt>Serial</dt><dd id="devSerial">—</dd></div>
+          <div><dt>Firmware</dt><dd id="devFw">—</dd></div>
+        </dl>
+        <div class="mb-3">
+          <div class="flex justify-between text-xs text-slate-500 mb-1"><span>Battery</span><span id="battText">—</span></div>
+          <div class="h-2 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden"><div id="battBar" class="h-full w-0 bg-emerald-500 transition-all"></div></div>
+        </div>
+        <div class="flex flex-wrap gap-1.5" id="statusChips"></div>
+        <ul id="errorList" class="mt-3 space-y-1 text-xs text-rose-700 dark:text-rose-300"></ul>
+      </div>
+
+      <div id="demoCard" class="card hidden border-dashed">
+        <h2 class="font-semibold mb-1">Simulator</h2>
+        <p class="text-xs text-slate-500 mb-3">Controls for the simulated SD-10.</p>
+        <label class="label" for="demoSample">Sample under the aperture</label>
+        <select id="demoSample" class="input mb-3"></select>
+        <div class="flex flex-wrap gap-2">
+          <button id="demoShutter" class="btn btn-ghost">Close shutter</button>
+          <button id="demoButton" class="btn btn-ghost">Press device button</button>
+          <button id="demoDrop" class="btn btn-danger">Drop link</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ left column (bottom) ============ -->
+    <section class="min-w-0 space-y-4 order-3 lg:order-none lg:col-span-4 lg:col-start-1 lg:row-start-2 lg:self-start">
+      <div class="card">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-semibold">Device settings</h2>
+          <button id="btnReloadSettings" class="btn btn-ghost" disabled>Reload</button>
+        </div>
+        <form id="settingsForm" class="grid grid-cols-2 gap-3">
+          <div class="col-span-2"><label class="label" for="setName">Device name (max 16 bytes)</label><input id="setName" class="input" maxlength="16"></div>
+          <div><label class="label" for="setBuzzer">Buzzer</label><select id="setBuzzer" class="input"></select></div>
+          <div><label class="label" for="setApo">Auto power-off</label><select id="setApo" class="input"></select></div>
+          <div><label class="label" for="setLang">Language</label><select id="setLang" class="input"></select></div>
+          <div><label class="label" for="setPanel">Panel direction</label><select id="setPanel" class="input"></select></div>
+          <div class="col-span-2 flex justify-end"><button id="btnApply" class="btn btn-primary" type="submit" disabled>Apply to device</button></div>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-semibold">Device palettes</h2>
+          <button id="btnReadGroups" class="btn btn-ghost" disabled>Read</button>
+        </div>
+        <ul id="groupList" class="space-y-2 text-sm"></ul>
+        <p class="text-xs text-slate-500 mt-3">To write a palette: tick colours in History, choose a slot and name, then write. Uses the current measurement settings.</p>
+        <div class="grid grid-cols-3 gap-2 mt-2">
+          <select id="groupSlot" class="input"><option value="1">Slot 1</option><option value="2">Slot 2</option><option value="3">Slot 3</option><option value="4">Slot 4</option></select>
+          <input id="groupName" class="input col-span-2" placeholder="Palette name" maxlength="42">
+        </div>
+        <button id="btnWriteGroup" class="btn btn-ghost w-full mt-2" disabled>Write ticked colours to slot</button>
+      </div>
+    </section>
+
+    <!-- ============ right column ============ -->
+    <section class="min-w-0 space-y-4 order-2 lg:order-none lg:col-span-8 lg:col-start-5 lg:row-start-1 lg:row-span-2">
+      <div class="card">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <h2 class="font-semibold">Measure</h2>
+          <div class="flex gap-1 rounded-lg bg-slate-100 dark:bg-slate-800 p-1" role="tablist">
+            <button class="tab" role="tab" data-mode="spot" aria-selected="true">Spot</button>
+            <button class="tab" role="tab" data-mode="compare" aria-selected="false">Compare</button>
+            <button class="tab" role="tab" data-mode="line" aria-selected="false">Line scan</button>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+          <div><label class="label" for="mMf">M-factor</label><select id="mMf" class="input"><option value="0">M0</option><option value="1">M1</option><option value="2">M2</option></select></div>
+          <div><label class="label" for="mIll">Illuminant</label><select id="mIll" class="input"></select></div>
+          <div><label class="label" for="mObs">Observer</label><select id="mObs" class="input"><option value="2">2°</option><option value="10">10°</option></select></div>
+          <div data-show="spot compare"><label class="label" for="mReadings">Readings (median)</label><select id="mReadings" class="input"><option>1</option><option>2</option><option>3</option><option>5</option></select></div>
+          <div data-show="compare"><label class="label" for="mFormula">ΔE formula</label><select id="mFormula" class="input"></select></div>
+          <div data-show="compare"><label class="label" for="mThr">Tolerance (ΔE)</label><input id="mThr" class="input" type="number" min="0" max="20" step="0.1"></div>
+          <div data-show="line"><label class="label" for="mPatches">Patches in strip</label><input id="mPatches" class="input" type="number" min="1" max="18" step="1"></div>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+          <button id="btnMeasure" class="btn btn-primary w-full sm:w-auto px-6 py-3 sm:py-2.5 text-base" disabled>Measure</button>
+          <span id="measureHint" class="text-sm text-slate-500"></span>
+        </div>
+
+        <div id="resultArea" class="mt-4 hidden">
+          <div class="grid sm:grid-cols-[auto,1fr] gap-4 items-start">
+            <div class="flex gap-3">
+              <div>
+                <div id="swatch" class="h-28 w-28 rounded-lg border border-slate-200 dark:border-slate-700 shadow-inner"></div>
+                <p id="swatchLabel" class="text-xs text-center text-slate-500 mt-1">Sample</p>
+              </div>
+              <div id="refBox" class="hidden">
+                <div id="refSwatch" class="h-28 w-28 rounded-lg border border-slate-200 dark:border-slate-700 shadow-inner"></div>
+                <p class="text-xs text-center text-slate-500 mt-1">Reference</p>
+              </div>
+            </div>
+            <div>
+              <div id="verdict" class="hidden mb-2"></div>
+              <dl class="kv grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2" id="resultValues"></dl>
+              <div class="flex flex-wrap gap-2 mt-3">
+                <button id="btnSetRef" class="btn btn-ghost">Use as reference</button>
+              </div>
+            </div>
+          </div>
+          <div id="strip" class="hidden mt-4 grid grid-cols-6 sm:grid-cols-9 gap-1.5"></div>
+          <div class="mt-4">
+            <svg id="chart" viewBox="0 0 640 220" class="w-full h-auto" role="img" aria-label="Spectral reflectance"></svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <h2 class="font-semibold">History <span id="histCount" class="text-sm font-normal text-slate-500"></span></h2>
+          <div class="flex flex-wrap gap-2">
+            <button id="btnSyncHistory" class="btn btn-ghost" disabled title="Import new measurements stored on the device">Sync device history</button>
+            <button id="btnResyncAll" class="btn btn-ghost" disabled title="Import every measurement stored on the device again (skips ones already in history)">Re-import all</button>
+            <button id="btnExport" class="btn btn-ghost">Export CSV</button>
+            <button id="btnClearHistory" class="btn btn-danger">Clear</button>
+          </div>
+        </div>
+        <div class="overflow-x-auto max-h-96 overflow-y-auto">
+          <table class="w-full text-sm">
+            <thead class="text-xs text-slate-500 sticky top-0 bg-white dark:bg-slate-900">
+              <tr><th class="w-6"></th><th class="text-left py-1">Colour</th><th class="text-left">L*</th><th class="text-left">a*</th><th class="text-left">b*</th><th class="text-left hidden sm:table-cell">HEX</th><th class="text-left hidden md:table-cell">When</th><th></th></tr>
+            </thead>
+            <tbody id="histBody"></tbody>
+          </table>
+          <p id="histEmpty" class="text-sm text-slate-500 py-6 text-center">No measurements yet.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ log ============ -->
+    <section class="min-w-0 order-4 lg:order-none lg:col-span-12 lg:row-start-3">
+      <div class="rounded-xl border border-slate-800 bg-slate-950 text-slate-200">
+        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 sm:px-4 py-2 border-b border-slate-800">
+          <h2 class="font-semibold text-sm mr-auto">Protocol log</h2>
+          <label class="text-xs flex items-center gap-1"><input type="checkbox" id="logRaw"> raw BLE chunks</label>
+          <label class="text-xs flex items-center gap-1"><input type="checkbox" id="logAutoscroll" checked> autoscroll</label>
+          <button id="btnCopyLog" class="btn text-xs border border-slate-700 hover:bg-slate-800">Copy</button>
+          <button id="btnClearLog" class="btn text-xs border border-slate-700 hover:bg-slate-800">Clear</button>
+        </div>
+        <pre id="log" class="h-72 overflow-auto px-4 py-2 text-xs leading-5 font-mono whitespace-pre-wrap break-all"></pre>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

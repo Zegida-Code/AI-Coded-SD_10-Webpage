@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>SD-10 UI smoke test</title>
+  <style>
+    body { margin: 0; font: 12px ui-monospace, monospace; }
+    #out { position: fixed; top: 0; right: 0; z-index: 9; background: #111; color: #0f0; padding: 6px 10px; max-width: 420px; white-space: pre-wrap; opacity: .9; }
+    iframe { border: 0; width: 1400px; height: 2100px; }
+  </style>
+</head>
+<body>
+  <pre id="out">running…</pre>
+  <iframe id="app" src="../index.html"></iframe>
+  <script type="module">
+    const out = document.getElementById('out');
+    const lines = [];
+    const log = (ok, msg) => { lines.push(`${ok ? 'PASS' : 'FAIL'} ${msg}`); out.textContent = lines.join('\n'); };
+    const frame = document.getElementById('app');
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    async function until(fn, ms = 15000) { const t = Date.now(); while (Date.now() - t < ms) { if (fn()) return true; await sleep(50); } return false; }
+
+    frame.onload = async () => {
+      const w = frame.contentWindow, d = frame.contentDocument, $ = (id) => d.getElementById(id);
+      const errors = [];
+      w.addEventListener('error', (e) => errors.push(e.message));
+      w.addEventListener('unhandledrejection', (e) => errors.push(String(e.reason)));
+      try { w.localStorage.clear(); } catch {}
+      await until(() => !$('btnDemo').disabled);
+      $('btnDemo').click();
+      log(await until(() => /simulated/.test($('connPill').textContent)), 'demo connects');
+      log(await until(() => $('devSerial').textContent === 'X3K0012345' && $('setName').value === 'SD-10 Demo'), 'device info + settings shown');
+      log(/Needs calibration/.test($('statusChips').textContent), 'status chips show calibration needed');
+
+      $('demoShutter').click();
+      const okCal = await until(() => $('btnMeasure').textContent === 'Calibrate' && !$('btnMeasure').disabled);
+      log(okCal, 'shutter closed -> button becomes Calibrate' + (okCal ? '' : ` [label=${$('btnMeasure').textContent} disabled=${$('btnMeasure').disabled} chips=${$('statusChips').textContent} log=${[...d.getElementById('log').children].slice(-4).map((x) => x.textContent).join(' || ')}]`));
+      $('btnMeasure').click();
+      log(await until(() => /Calibrated/.test($('statusChips').textContent) && !$('btnMeasure').disabled), 'calibration via measure button');
+
+      $('demoShutter').click();
+      await until(() => $('btnMeasure').textContent === 'Measure' && !$('btnMeasure').disabled);
+      $('btnMeasure').click();
+      log(await until(() => !$('resultArea').classList.contains('hidden') && /L\*/.test($('resultValues').textContent) && !$('btnMeasure').disabled), 'spot measurement shows result');
+      log(d.querySelectorAll('#histBody tr').length === 1, 'history has 1 row');
+      log($('chart').querySelectorAll('path').length >= 2, 'spectrum chart drawn');
+
+      $('btnSetRef').click();
+      d.querySelector('[data-mode=compare]').click();
+      $('demoSample').value = 'Sunflower'; $('demoSample').dispatchEvent(new Event('change'));
+      $('btnMeasure').click();
+      log(await until(() => /FAIL|PASS/.test($('verdict').textContent) && !$('btnMeasure').disabled), `compare verdict: ${$('verdict').textContent}`);
+
+      d.querySelector('[data-mode=line]').click();
+      $('mPatches').value = 6; $('mPatches').dispatchEvent(new Event('change'));
+      $('btnMeasure').click();
+      log(await until(() => !$('strip').classList.contains('hidden') && $('strip').children.length === 6 && !$('btnMeasure').disabled), 'line scan strip of 6');
+      log(d.querySelectorAll('#histBody tr').length === 8, `history rows = ${d.querySelectorAll('#histBody tr').length}`);
+
+      // History sync: first sync starts from identifier 0; the 2 saved spot/compare records are already local -> dedupe.
+      $('btnSyncHistory').click();
+      log(await until(() => /already in history/.test($('toast').textContent) && !$('btnSyncHistory').disabled), `history sync dedupes: ${$('toast').textContent}`);
+      log(/HISTORY_CHECK get[\s\S]*\n?.*/.test($('log').textContent) && /00 43 13 11 05 00 00 00 01 00 00 00 00/.test($('log').textContent), 'first sync asks from identifier 0');
+      log(d.querySelectorAll('#histBody tr').length === 8, 'no duplicate rows after sync');
+      $('btnSyncHistory').click();
+      log(await until(() => /No new measurements/.test($('toast').textContent) && !$('btnSyncHistory').disabled), 'second sync: nothing new');
+
+      // Clear history, then sync: everything still stored on the device must come back.
+      frame.contentWindow.confirm = () => true;
+      $('btnClearHistory').click();
+      log(d.querySelectorAll('#histBody tr').length === 0, 'history cleared');
+      $('btnSyncHistory').click();
+      log(await until(() => /imported 2 new/.test($('toast').textContent) && !$('btnSyncHistory').disabled), `sync after clear re-imports: ${$('toast').textContent}`);
+      // Delete one entry, then Re-import all brings it back.
+      d.querySelector('#histBody [data-act=del]').click();
+      $('btnResyncAll').click();
+      log(await until(() => /imported 1 new \(1 already/.test($('toast').textContent) && !$('btnResyncAll').disabled), `re-import all restores a deleted entry: ${$('toast').textContent}`);
+      log(d.querySelectorAll('#histBody tr').length === 2, 'history back to 2 device rows');
+      // Re-measure the line strip so the remaining steps have 8 rows to work with.
+      $('btnMeasure').click();
+      await until(() => !$('strip').classList.contains('hidden') && !$('btnMeasure').disabled && d.querySelectorAll('#histBody tr').length === 8);
+
+      for (const cb of [...d.querySelectorAll('#histBody input[type=checkbox]')].slice(0, 4)) cb.click();
+      $('groupName').value = 'Smoke palette';
+      $('groupSlot').value = '2';
+      $('btnWriteGroup').click();
+      log(await until(() => /Smoke palette/.test($('groupList').textContent)), 'palette written to slot 2');
+
+      $('setName').value = 'Renamed';
+      $('setBuzzer').value = '2';
+      $('btnApply').click();
+      log(await until(() => $('devName').textContent === 'Renamed'), 'settings applied');
+
+      $('mIll').value = '1'; $('mIll').dispatchEvent(new Event('change'));
+      log(/D65/.test($('resultValues').textContent), 'illuminant change re-renders result');
+
+      log(d.getElementById('log').children.length > 40, `protocol log lines: ${d.getElementById('log').children.length}`);
+      log(errors.length === 0, `no JS errors ${errors.join(' | ')}`);
+      d.querySelector('[data-mode=compare]').click();
+      d.getElementById('logAutoscroll').checked = false; d.getElementById('log').scrollTop = 0;
+      const pass = lines.filter((l) => l.startsWith('PASS')).length;
+      document.title = `${pass === lines.length ? 'ALL PASS' : 'FAILURES'} ${pass}/${lines.length}`;
+      out.textContent += `\n${pass}/${lines.length}`;
+    };
+  </script>
+</body>
+</html>
