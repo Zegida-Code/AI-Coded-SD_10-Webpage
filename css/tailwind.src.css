@@ -15,7 +15,9 @@
   .chip { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium; }
   .tab { @apply px-3 py-1.5 text-sm rounded-md text-slate-600 dark:text-slate-300; }
   .tab[aria-selected="true"] { @apply bg-indigo-600 text-white; }
-  .tab[aria-current="page"] { @apply bg-indigo-600 text-white; }
+  .seg-group { @apply items-center gap-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5; }
+  .seg { @apply inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors; }
+  .seg[aria-current="page"] { @apply bg-white text-indigo-700 shadow-sm dark:bg-slate-700 dark:text-white; }
   .kv dt { @apply text-xs text-slate-500 dark:text-slate-400; }
   .kv dd { @apply font-mono text-sm tabular-nums; }
 }

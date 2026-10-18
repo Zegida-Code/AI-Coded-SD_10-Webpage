@@ -78,12 +78,22 @@
       $('btnMeasure').click(); await until(() => /PASS|FAIL/.test($('verdict').textContent) && !$('btnMeasure').disabled);
       await sleep(1500);
       audit('connected with results');
+      // Print match is not offered on phones: no view switcher, and #match opens the Console
+      const nav = d.querySelector('[data-view=match]').closest('nav');
       d.querySelector('[data-view=match]').click();
-      $('mL').value = '50'; $('mA').value = '20'; $('mB').value = '10'; $('mB').dispatchEvent(new Event('change'));
-      $('btnMatchSheet').click();
-      await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 16);
-      await sleep(300);
-      audit('print match view with a sheet');
+      const noMatch = getComputedStyle(nav).display === 'none' && $('viewMatch').classList.contains('hidden') && !$('viewConsole').classList.contains('hidden');
+      lines.push(`${noMatch ? 'PASS' : 'FAIL'} phone: no Print match switcher, Console stays open`);
+      const f2 = document.createElement('iframe');
+      f2.style.cssText = frame.style.cssText; f2.width = frame.width; f2.height = 300;
+      f2.src = '../index.html?demo#match';
+      document.body.append(f2);
+      await new Promise((r) => { f2.onload = r; });
+      await sleep(500);
+      const d2 = f2.contentDocument;
+      const hashOk = d2.getElementById('viewMatch').classList.contains('hidden') && !d2.getElementById('viewConsole').classList.contains('hidden') && f2.contentWindow.location.hash === '';
+      lines.push(`${hashOk ? 'PASS' : 'FAIL'} phone: a #match link opens the Console`);
+      f2.remove();
+      document.getElementById('out').textContent = lines.join('\n');
       document.title = lines.some((l) => l.startsWith('FAIL')) ? 'FAILURES' : 'ALL PASS';
     };
   </script>

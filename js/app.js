@@ -647,8 +647,11 @@ const saveMatch = () => { try { localStorage.setItem(MATCH_KEY, JSON.stringify(m
 const currentRound = () => match.rounds[match.rounds.length - 1] ?? null;
 const fmt1 = (v) => (Math.round(v * 10) / 10).toFixed(1);
 
+// Print match is a desktop / tablet workflow (PDFs, spot libraries, RIP software): phones only get the Console.
+const WIDE = window.matchMedia('(min-width: 768px)');
+
 function setView(view) {
-  state.view = view === 'match' ? 'match' : 'console';
+  state.view = view === 'match' && WIDE.matches ? 'match' : 'console';
   $('viewConsole').classList.toggle('hidden', state.view !== 'console');
   $('viewMatch').classList.toggle('hidden', state.view !== 'match');
   for (const b of document.querySelectorAll('[data-view]')) {
@@ -997,6 +1000,7 @@ function initMatch() {
     match.next = +b.dataset.patch; saveMatch(); renderMatch();
   };
   setView(location.hash === '#match' ? 'match' : 'console');
+  WIDE.addEventListener('change', () => { if (!WIDE.matches && state.view === 'match') setView('console'); });
 }
 
 // ------------------------------------------------------------------ CMYK profiles

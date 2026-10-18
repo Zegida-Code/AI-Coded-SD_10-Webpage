@@ -35,8 +35,9 @@ The demo ([sd-10.com/?demo](https://sd-10.com/?demo)) works in every modern brow
 
 ### Print match (matching a colour on your printer)
 
-Open the **Print match** tab (or [sd-10.com/#match](https://sd-10.com/#match)). It finds the values to put in your
-document so your printer reproduces a reference colour:
+Open **Print match** in the header (or [sd-10.com/#match](https://sd-10.com/#match)). It finds the values to put in your
+document so your printer reproduces a reference colour. It needs a computer or tablet (768 px or wider) – it works
+with downloaded sheets and your RIP software, so phones only show the Console.
 
 1. **Reference** – scan the colour to match (or use the last measurement, or type L\*a\*b\*).
 2. **Test sheet** – pick the sheet type that matches how the colour reaches your printer and download it:
