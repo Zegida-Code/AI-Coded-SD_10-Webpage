@@ -1,6 +1,6 @@
 // Self-checks for the SD-10 web app. Open test/index.html (served over http) or run headless.
 import { build, hex, parseStatus, parseRecords, parseGroups, payloadOf, CMD, METHOD } from '../js/protocol.js';
-import { spectrumToLab, deltaE2000 } from '../js/color.js';
+import { spectrumToLab, deltaE2000, labD50ToSrgb, srgbToLabD50 } from '../js/color.js';
 import { SD10Session } from '../js/session.js';
 import { MockTransport } from '../js/mock.js';
 import { GOLDEN_LAB } from './golden-lab.js';
@@ -121,7 +121,8 @@ async function iccV4Check() {
 
 // ---- 3d. Print match: model fitting, convergence with a simulated printer, PDF sheet
 async function matchCheck() {
-  const { designPatches, fitModel, analyseRound, nextStep, buildSheetPdf, MODES } = await import('../js/match.js');
+  const { designPatches, fitModel, analyseRound, nextStep, buildSheetPdf, buildSheetPng, averageReadings, patchSpotName, MODES } = await import('../js/match.js');
+  const { RIP_EXPORTS } = await import('../js/rip-export.js');
   const { printSpectrum } = await import('../js/printer-sim.js');
   const { loadProfile } = await import('../js/icc.js');
   const prof = await loadProfile('EpsonWideCMYK_Ver2');
@@ -133,13 +134,17 @@ async function matchCheck() {
   const fit = fitModel(pts, x0);
   check('print match: model fit recovers a linear printer', fit.rms < 1e-6 && Math.abs(fit.J[1][1] - 0.9) < 1e-6, `rms ${fit.rms}`);
 
-  // closed loop against the simulated printer (deterministic), both modes
-  for (const mode of ['cmyk', 'lab']) {
+  // closed loop against the simulated printer (deterministic), every sheet type
+  for (const mode of ['cmyk', 'lab', 'spot', 'rgb']) {
     const truth = [18, 62, 74, 6];                              // what the printer really needs
     const target = spectrumToLab(printSpectrum(truth), 0, 2);   // the reference colour
-    const printed = (x, k) => spectrumToLab(printSpectrum(mode === 'cmyk' ? [...x, k] : prof.fromLab(x, 0)), 0, 2);
+    // rgb: the raster software converts sRGB -> printer through the same (deliberately wrong) profile
+    const toCmyk = (x, k) => (mode === 'cmyk' ? [...x, k] : prof.fromLab(mode === 'rgb' ? srgbToLabD50(x) : x, 0));
+    const printed = (x, k) => spectrumToLab(printSpectrum(toCmyk(x, k)), 0, 2);
     let centre, k = 0;
-    if (mode === 'cmyk') { const c = prof.fromLab(target, 0); centre = c.slice(0, 3); k = truth[3]; } else centre = [...target];
+    if (mode === 'cmyk') { const c = prof.fromLab(target, 0); centre = c.slice(0, 3); k = truth[3]; }
+    else if (mode === 'rgb') centre = labD50ToSrgb(target).rgb;
+    else centre = [...target];
     let step = [...MODES[mode].step0], round, firstDE = null, log = [];
     for (round = 1; round <= 4; round++) {
       const patches = designPatches(mode, centre, step).map((p) => ({ ...p, lab: printed(p.x, k) }));
@@ -163,6 +168,48 @@ async function matchCheck() {
   const fills = (txt.match(/ k\n/g) || []).length;
   check('print match sheet is a valid PDF (header, xref offsets, 16 CMYK patches)', txt.startsWith('%PDF-1.4') && txt.slice(xrefAt, xrefAt + 4) === 'xref' && offsetsOk && fills === 16, `offsetsOk=${offsetsOk} fills=${fills}`);
   const labPdf = new TextDecoder('latin1').decode(buildSheetPdf({ mode: 'lab', patches: designPatches('lab', [55, 40, 50], [4, 6, 6]), target: [55, 40, 50], round: 2, paper: 'letter' }));
+  // spot sheet: one Separation per patch, uniquely named, Lab alternate = the patch value at tint 1
+  const spotPatches = designPatches('spot', [55, 40, 50], [4, 6, 6]).map((p) => ({ ...p, name: patchSpotName('AB12', 3, p.n) }));
+  const spotPdf = new TextDecoder('latin1').decode(buildSheetPdf({ mode: 'spot', patches: spotPatches, target: [55, 40, 50], round: 3 }));
+  const seps = [...spotPdf.matchAll(/\/SP(\d+) \[\/Separation \/(\S+) \[\/Lab << \/WhitePoint \[0\.9642 1 0\.8249\][^\]]*\] >>\] << \/FunctionType 2 \/Domain \[0 1\] \/C0 \[100 0 0\] \/C1 \[([-\d. ]+)\] \/N 1 >>\]/g)];
+  const sepOk = seps.length === 16 && seps.every((m, i) => m[2] === `SD10-AB12-R3-${String(i + 1).padStart(2, '0')}` && m[3] === spotPatches[i].x.map((v) => v.toFixed(2)).join(' '));
+  check('spot sheet: 16 named Separation colours (SD10-<job>-R<round>-<n>) with Lab D50 alternates', sepOk && (spotPdf.match(/ cs 1 scn\n/g) || []).length === 16 && spotPdf.includes('(SD10-AB12-R3-07) Tj'), `${seps.length} separations`);
+  check('rgb values are whole numbers 0..255', designPatches('rgb', [250, 3, 128], [14, 14, 14]).every((p) => p.x.every((v) => Number.isInteger(v) && v >= 0 && v <= 255)));
+
+  // VersaWorks library – must reproduce a library exported by VersaWorks 6 byte for byte
+  const VIN_SPOT = '<?xml version="1.0" encoding="UTF-8"?>\n<SpotColorLibraryList strVersion="4.3.0.0"><LabSpotColorLibrary name="Test"><m_eMakerType>0</m_eMakerType><m_bUseLibrary>false</m_bUseLibrary><Lab16SpotColor name="RVW-PR22J" flags="0" redirectLibraryName="" redirectColorName=""><L VALUE="75.00"/><a VALUE="50.00"/><b VALUE="100.00"/></Lab16SpotColor><Lab16SpotColor name="SpotColor0" flags="0" redirectLibraryName="" redirectColorName=""><L VALUE="0.00"/><a VALUE="0.00"/><b VALUE="0.00"/></Lab16SpotColor></LabSpotColorLibrary></SpotColorLibraryList>\n';
+  const vw = RIP_EXPORTS.versaworks.build({ library: 'Test', colours: [{ name: 'RVW-PR22J', lab: [75, 50, 100] }, { name: 'SpotColor0', lab: [0, 0, 0] }] });
+  check('VersaWorks .spot export is identical to a VersaWorks-exported library', vw === VIN_SPOT, vw);
+  const vwEsc = RIP_EXPORTS.versaworks.build({ library: 'A&B', colours: [{ name: 'Red "1" <x>', lab: [50.123, -3.456, 7.891] }] });
+  check('VersaWorks export escapes names and rounds to 2 decimals', vwEsc.includes('name="A&amp;B"') && vwEsc.includes('name="Red &quot;1&quot; &lt;x&gt;"') && vwEsc.includes('<a VALUE="-3.46"/>') && new DOMParser().parseFromString(vwEsc, 'application/xml').querySelector('parsererror') === null);
+
+  // readings: mean + spread
+  const avg = averageReadings([[50, 10, 10], [52, 10, 10], [51, 13, 7]]);
+  check('averageReadings: mean Lab and spread', Math.abs(avg.lab[0] - 51) < 1e-9 && Math.abs(avg.lab[1] - 11) < 1e-9 && avg.spread > 1 && averageReadings([[1, 2, 3]]).spread === 0);
+  // sRGB <-> Lab D50 round trip
+  let rt = 0;
+  for (const rgb of [[0, 0, 0], [255, 255, 255], [200, 30, 60], [12, 140, 220], [128, 128, 128]]) rt = Math.max(rt, ...labD50ToSrgb(srgbToLabD50(rgb)).rgb.map((v, i) => Math.abs(v - rgb[i])));
+  check('srgbToLabD50 inverts labD50ToSrgb', rt === 0 && Math.abs(srgbToLabD50([255, 255, 255])[0] - 100) < 0.01, `max ${rt}`);
+
+  // PNG sheet: valid chunks, sRGB + 300 dpi, exact patch colours
+  const rgbPatches = designPatches('rgb', [200, 60, 40], [14, 14, 14]);
+  const png = await buildSheetPng({ mode: 'rgb', patches: rgbPatches, target: [55, 40, 50], round: 1 });
+  const chunks = [];
+  const pdv = new DataView(png.buffer, png.byteOffset, png.byteLength);
+  for (let i = 8; i < png.length;) { const len = pdv.getUint32(i); chunks.push({ type: String.fromCharCode(...png.subarray(i + 4, i + 8)), data: png.subarray(i + 8, i + 8 + len) }); i += 12 + len; }
+  const phys = chunks.find((c) => c.type === 'pHYs');
+  const physOk = phys && new DataView(phys.data.buffer, phys.data.byteOffset).getUint32(0) === 11811 && phys.data[8] === 1;
+  // (an <img> rather than createImageBitmap, which never resolves in headless Chrome with a virtual time budget)
+  const bmp = new Image();
+  bmp.src = URL.createObjectURL(new Blob([png], { type: 'image/png' }));
+  await new Promise((res, rej) => { bmp.onload = res; bmp.onerror = () => rej(new Error('PNG did not decode')); });
+  const cv = document.createElement('canvas'); cv.width = bmp.naturalWidth; cv.height = bmp.naturalHeight;
+  const g2 = cv.getContext('2d'); g2.drawImage(bmp, 0, 0);
+  // patch #1 centre: same geometry as the sheet (15 mm margin, 4 columns, 30 mm patches)
+  const k300 = 300 / 72, mm = 72 / 25.4, cell = (595.28 - 30 * mm) / 4, size = Math.min(30 * mm, cell - 6 * mm);
+  const px = g2.getImageData(Math.round((15 * mm + (cell - size) / 2 + size / 2) * k300), Math.round((15 * mm + 32 + 13 + 11 + 11 + 18 + size / 2) * k300), 1, 1).data;
+  check('PNG sheet: A4 at 300 dpi, sRGB-tagged, chunks valid', png[1] === 0x50 && chunks[0].type === 'IHDR' && chunks[1].type === 'sRGB' && physOk && bmp.naturalWidth === 2480 && bmp.naturalHeight === 3508 && !chunks.some((c) => c.type === 'iCCP'), chunks.map((c) => c.type).join(','));
+  check('PNG sheet: patch pixels carry the exact RGB values', px[0] === rgbPatches[0].x[0] && px[1] === rgbPatches[0].x[1] && px[2] === rgbPatches[0].x[2], `${[...px]} vs ${rgbPatches[0].x}`);
   check('Lab sheet uses a D50 Lab colour space on Letter paper', /\/Lab << \/WhitePoint \[0\.9642 1 0\.8249\]/.test(labPdf) && (labPdf.match(/ sc\n/g) || []).length === 16 && /MediaBox \[0 0 612 792\]/.test(labPdf));
 }
 

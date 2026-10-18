@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <link rel="stylesheet" href="css/app.css?v=2026-10-18.93468bd-032247">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-18.cb43f3f-040116">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -285,16 +285,25 @@
           </div>
         </div>
       </div>
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div><label class="label" for="mMode">Sheet values</label>
-          <select id="mMode" class="input"><option value="cmyk">CMYK (recommended)</option><option value="lab">L*a*b*</option></select></div>
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div class="col-span-2 sm:col-span-1"><label class="label" for="mMode">Sheet type</label>
+          <select id="mMode" class="input">
+            <option value="spot">Spot colours (RIP, L*a*b*)</option>
+            <option value="lab">L*a*b* objects</option>
+            <option value="cmyk">CMYK numbers</option>
+            <option value="rgb">RGB image (DTG / raster)</option>
+          </select></div>
         <div><label class="label" for="mPaper">Paper</label>
           <select id="mPaper" class="input"><option value="a4">A4</option><option value="letter">Letter</option></select></div>
-        <div><label class="label" for="mMf">M-factor</label>
-          <select id="mMf" class="input"><option value="0">M0</option><option value="1">M1</option><option value="2">M2</option></select></div>
+        <div><label class="label" for="matchMf">M-factor</label>
+          <select id="matchMf" class="input"><option value="0">M0</option><option value="1">M1</option><option value="2">M2</option></select></div>
         <div><label class="label" for="mTol">Tolerance (ΔE00)</label><input id="mTol" class="input" type="number" min="0.1" max="20" step="0.1"></div>
+        <div><label class="label" for="mReads">Readings per patch</label>
+          <select id="mReads" class="input"><option value="1">1</option><option value="2">2</option><option value="3">3 (fabric)</option><option value="5">5</option></select></div>
+        <div id="mSpotNameWrap" class="col-span-2 sm:col-span-1"><label class="label" for="mSpotName">Spot colour name</label>
+          <input id="mSpotName" class="input" type="text" maxlength="60" placeholder="e.g. RVW-PR22J" autocomplete="off"></div>
       </div>
-      <p class="text-xs text-slate-500">Colours are measured at D50 / 2°. In CMYK mode the starting values come from the CMYK profile selected in the Console (<span id="mProfileName">EpsonWideCMYK_Ver2</span>) and K is kept fixed.</p>
+      <p id="mModeHelp" class="text-xs text-slate-500"></p>
     </div>
 
     <!-- 2. sheet -->
@@ -306,12 +315,10 @@
       <div id="mSheetInfo" class="text-sm text-slate-500">Set a reference colour first.</div>
       <div id="mSheetActions" class="hidden flex flex-wrap gap-2">
         <button id="btnMatchPdf" class="btn btn-primary">Download PDF</button>
+        <button id="btnMatchRipSheet" class="btn btn-ghost hidden" title="Spot colour library with this sheet's patch colours – import it into VersaWorks before printing">VersaWorks library (.spot)</button>
         <button id="btnMatchRestart" class="btn btn-danger">Start over</button>
       </div>
-      <div class="rounded-lg bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-200 text-xs p-3 space-y-1">
-        <p><b>Print it exactly like the final job:</b> same printer, paper, quality and colour settings, at 100% / actual size (not "fit to page").</p>
-        <p>Let the ink dry for a few minutes before scanning.</p>
-      </div>
+      <div id="mPrintTips" class="rounded-lg bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-200 text-xs p-3 space-y-1"></div>
     </div>
 
     <!-- 3. scan -->
@@ -335,6 +342,7 @@
       <div class="flex flex-wrap gap-2">
         <button id="btnMatchRefine" class="btn btn-primary">Make refinement sheet</button>
         <button id="btnMatchCopy" class="btn btn-ghost">Copy values</button>
+        <button id="btnMatchRipResult" class="btn btn-ghost hidden" title="Spot colour library with the matched colour, named as entered above">VersaWorks spot (.spot)</button>
       </div>
       <div id="mHistory"></div>
     </div>
@@ -345,20 +353,21 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-18.93468bd-032247",
-      "./js/transport.js": "./js/transport.js?v=2026-10-18.93468bd-032247",
-      "./js/mock.js": "./js/mock.js?v=2026-10-18.93468bd-032247",
-      "./js/session.js": "./js/session.js?v=2026-10-18.93468bd-032247",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-18.93468bd-032247",
-      "./js/color.js": "./js/color.js?v=2026-10-18.93468bd-032247",
-      "./js/weights.js": "./js/weights.js?v=2026-10-18.93468bd-032247",
-      "./js/storage.js": "./js/storage.js?v=2026-10-18.93468bd-032247",
-      "./js/icc.js": "./js/icc.js?v=2026-10-18.93468bd-032247",
-      "./js/match.js": "./js/match.js?v=2026-10-18.93468bd-032247",
-      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-18.93468bd-032247"
+      "./js/app.js": "./js/app.js?v=2026-10-18.cb43f3f-040116",
+      "./js/transport.js": "./js/transport.js?v=2026-10-18.cb43f3f-040116",
+      "./js/mock.js": "./js/mock.js?v=2026-10-18.cb43f3f-040116",
+      "./js/session.js": "./js/session.js?v=2026-10-18.cb43f3f-040116",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-18.cb43f3f-040116",
+      "./js/color.js": "./js/color.js?v=2026-10-18.cb43f3f-040116",
+      "./js/weights.js": "./js/weights.js?v=2026-10-18.cb43f3f-040116",
+      "./js/storage.js": "./js/storage.js?v=2026-10-18.cb43f3f-040116",
+      "./js/icc.js": "./js/icc.js?v=2026-10-18.cb43f3f-040116",
+      "./js/match.js": "./js/match.js?v=2026-10-18.cb43f3f-040116",
+      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-18.cb43f3f-040116",
+      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-18.cb43f3f-040116"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-18.93468bd-032247"></script>
+  <script type="module" src="js/app.js?v=2026-10-18.cb43f3f-040116"></script>
 </body>
 </html>

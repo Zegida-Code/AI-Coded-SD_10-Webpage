@@ -29,10 +29,19 @@
       w.addEventListener('unhandledrejection', (e) => errors.push(String(e.reason)));
       try { w.localStorage.clear(); } catch {}
       w.confirm = () => true;
-      let downloads = 0;
-      w.HTMLAnchorElement.prototype.click = function () { if (this.download?.endsWith('.pdf')) downloads++; };
+      const files = [];
+      w.HTMLAnchorElement.prototype.click = function () { files.push({ name: this.download, href: this.href }); };
+      const downloads = () => files.filter((f) => f.name?.endsWith('.pdf')).length;
+      const readFile = async (f) => (await fetch(f.href)).text();
+      const state_busy = () => /…$/.test($('btnMatchMeasure').textContent);
+      const setSel = (id, v) => { $(id).value = v; $(id).dispatchEvent(new Event('change')); };
 
       log(!$('viewMatch').classList.contains('hidden') && $('viewConsole').classList.contains('hidden'), '#match opens the Print match view');
+      log($('mMode').value === 'spot' && !$('mSpotNameWrap').classList.contains('hidden'), 'spot colour sheets are the default, with a spot name field');
+      const ids = [...d.querySelectorAll('[id]')].map((e) => e.id);
+      log(ids.length === new Set(ids).size && $('matchMf').value === '1', 'element ids are unique; match M-factor shows the job default (M1)');
+      setSel('mMode', 'cmyk');
+      log($('mSpotNameWrap').classList.contains('hidden') && /CMYK profile/.test($('mModeHelp').textContent), 'CMYK mode hides the spot name and explains the profile');
       $('btnConnect').click();
       await until(() => /simulated/.test($('connPill').textContent) && !$('btnMatchTarget').disabled);
       $('demoShutter').click(); await sleep(200);
@@ -49,7 +58,7 @@
       $('btnMatchSheet').click();
       log(await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 16), 'round 1 sheet with 16 patches created (CMYK)');
       $('btnMatchPdf').click();
-      log(downloads === 1, 'PDF download triggered');
+      log(downloads() === 1, 'PDF download triggered');
 
       async function scanAll(round) {
         for (let i = 0; i < 16; i++) {
@@ -86,6 +95,46 @@
       w.document.querySelector('[data-view=match]').click();
       $('demoButton').click();
       log(await until(() => $('mProgress').textContent.startsWith('1 /')), 'SD-10 button measures the next patch');
+
+      // ---- spot colour sheet, 3 readings per patch, VersaWorks libraries
+      await until(() => !state_busy());
+      setSel('mMode', 'spot');
+      setSel('mReads', '3');
+      $('mSpotName').value = 'RVW-PR22J'; $('mSpotName').dispatchEvent(new Event('change'));
+      await until(() => !$('btnMatchSheet').disabled);
+      $('btnMatchSheet').click();
+      await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 16 && /round 1/.test($('mRoundLabel').textContent));
+      log(/SD10-[A-Z2-9]{4}-R1-01/.test($('mSheetInfo').textContent) && !$('btnMatchRipSheet').classList.contains('hidden'), 'spot sheet: patches get unique spot names, VersaWorks library offered');
+      $('btnMatchPdf').click();
+      $('btnMatchRipSheet').click();
+      const lib = files.find((f) => f.name.endsWith('.spot'));
+      const libText = lib ? await readFile(lib) : '';
+      const libNames = [...libText.matchAll(/<Lab16SpotColor name="(SD10-[^"]+)"/g)].map((m) => m[1]);
+      log(downloads() === 2 && libNames.length === 16 && libText.startsWith('<?xml version="1.0" encoding="UTF-8"?>\n<SpotColorLibraryList strVersion="4.3.0.0">'), `sheet .spot library has the 16 patch colours (${lib?.name})`);
+      for (let i = 0; i < 2; i++) { await until(() => !$('btnMatchMeasure').disabled); $('btnMatchMeasure').click(); await until(() => d.querySelector('[data-patch="0"]').textContent.includes(`${i + 1}/3`)); }
+      log($('mProgress').textContent.startsWith('0 /') && /reading 3\/3/.test($('btnMatchMeasure').textContent), 'patch stays open until its 3rd reading');
+      for (let n = 0; n < 5 * 3 - 2; n++) { await until(() => !$('btnMatchMeasure').disabled); $('btnMatchMeasure').click(); await until(() => $('btnMatchMeasure').disabled === false && !w.document.querySelector('#btnMatchMeasure').textContent.endsWith('…'), 5000); await sleep(30); }
+      await until(() => $('mProgress').textContent.startsWith('5 /'));
+      log($('mProgress').textContent.startsWith('5 /'), `15 readings -> 5 patches averaged (${$('mProgress').textContent})`);
+      $('btnMatchAnalyse').click();
+      await until(() => !$('mResultCard').classList.contains('hidden'));
+      log(/named colour RVW-PR22J/.test($('mResult').textContent) && !$('btnMatchRipResult').classList.contains('hidden'), 'spot result names the colour and offers a VersaWorks spot file');
+      $('btnMatchRipResult').click();
+      const res = files.find((f) => f.name === 'RVW-PR22J.spot');
+      const resText = res ? await readFile(res) : '';
+      log(/<Lab16SpotColor name="RVW-PR22J" flags="0" redirectLibraryName="" redirectColorName=""><L VALUE="[\d.]+"\/><a VALUE="-?[\d.]+"\/><b VALUE="-?[\d.]+"\/><\/Lab16SpotColor>/.test(resText), 'result .spot file holds the matched colour under its name');
+
+      // ---- RGB / raster sheet
+      setSel('mMode', 'rgb');
+      await until(() => !$('btnMatchSheet').disabled);
+      $('btnMatchSheet').click();
+      await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 16 && /round 1/.test($('mRoundLabel').textContent));
+      log($('btnMatchPdf').textContent === 'Download PNG' && /R \d+\s+G \d+\s+B \d+/.test($('mSheetInfo').textContent), 'RGB sheet offers a PNG and shows integer RGB values');
+      $('btnMatchPdf').click();
+      const pngFile = await until(() => files.some((f) => f.name.endsWith('.png'))) && files.find((f) => f.name.endsWith('.png'));
+      const pngBytes = pngFile ? new Uint8Array(await (await fetch(pngFile.href)).arrayBuffer()) : new Uint8Array();
+      log(pngBytes[1] === 0x50 && pngBytes.length > 100000, `PNG sheet downloaded (${pngFile?.name}, ${pngBytes.length} bytes)`);
+      setSel('mReads', '1');
 
       // switching views keeps the connection
       d.querySelector('[data-view=console]').click();

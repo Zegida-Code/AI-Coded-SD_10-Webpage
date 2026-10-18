@@ -39,10 +39,21 @@ Open the **Print match** tab (or [sd-10.com/#match](https://sd-10.com/#match)). 
 document so your printer reproduces a reference colour:
 
 1. **Reference** – scan the colour to match (or use the last measurement, or type L\*a\*b\*).
-2. **Test sheet** – choose *CMYK* (recommended for CMYK printers; K is kept fixed) or *L\*a\*b\** values and
-   download the PDF: 16 patches around a first estimate (CMYK estimates come from the selected CMYK profile).
-3. **Print** it exactly like the final job – same printer, paper, quality and colour settings, at 100% – and scan
-   the patches in number order (the SD-10's button works too; tap a patch to re-measure it).
+2. **Test sheet** – pick the sheet type that matches how the colour reaches your printer and download it:
+   16 patches around a first estimate.
+
+   | Sheet type | For | You get |
+   |---|---|---|
+   | **Spot colours (RIP, L\*a\*b\*)** | RIPs that colour named spot colours from an L\*a\*b\* library (VersaWorks, Digital Factory, Edge Print …) | PDF where every patch is a uniquely named spot colour with its L\*a\*b\* as the alternate; the result is the L\*a\*b\* to enter for your named colour |
+   | **L\*a\*b\* objects** | workflows that print Lab colours directly | PDF with CIE Lab (D50) patches |
+   | **CMYK numbers** | documents that send CMYK to the printer (K is kept fixed; first estimate from the selected CMYK profile) | PDF with CMYK patches |
+   | **RGB image (DTG / raster)** | raster-only software such as DTG | 300 dpi sRGB PNG; the result is an RGB / hex value for your artwork |
+
+3. **Print** it exactly like the final job – same printer, media, quality and colour settings, at 100% – and scan
+   the patches in number order (the SD-10's button works too; tap a patch to re-measure it). For DTF, sublimation and
+   DTG, press / cure the sheet like production and scan the finished product. On fabric set **Readings per patch** to
+   3 or more: each patch is then the average of several readings taken at different spots (a **!** marks patches
+   whose readings disagree by more than 1.5 ΔE00).
 4. **Result** – the app models how your printer responds around the colour and calculates the values that should
    print closest to the reference, with the predicted ΔE00. **Make refinement sheet** prints a finer sheet centred on
    that answer; its centre patch verifies it. It reports **Done** once the values print within your tolerance.
@@ -50,6 +61,11 @@ document so your printer reproduces a reference colour:
 With the simulated printer in the demo, a first estimate 22 ΔE00 away reaches about 0.2 ΔE00 in three rounds. How
 many rounds a real printer needs depends on how far the profile's first estimate is from what it actually prints.
 If the reference is outside what the printer and paper can reproduce, the app says so and gives the closest values.
+
+**VersaWorks 6:** in spot colour mode the app also exports `.spot` libraries – **VersaWorks library (.spot)** holds the
+test sheet's patch colours (import and enable it before printing the sheet, so the patches go through the named-colour
+path), and **VersaWorks spot (.spot)** in the result holds the matched colour under the **Spot colour name** you
+entered, ready to import. Library exports for other RIPs can be added from a sample file exported by that RIP.
 
 ### Other features
 
@@ -79,10 +95,10 @@ Open these pages in Chrome (on the live site, e.g. [sd-10.com/test/](https://sd-
 
 | Page | Checks |
 |---|---|
-| [`test/index.html`](https://sd-10.com/test/index.html) | 64 checks: command frames vs. the app's own (emulated) code, Lab and CMYK vs. the native libraries, ΔE2000 reference data, ICC v4 parsing, print-match model fitting/convergence and PDF structure, a full session against the simulator |
+| [`test/index.html`](https://sd-10.com/test/index.html) | 74 checks: command frames vs. the app's own (emulated) code, Lab and CMYK vs. the native libraries, ΔE2000 reference data, ICC v4 parsing, print-match model fitting/convergence for all four sheet types, PDF/PNG sheet structure, VersaWorks .spot output vs. a real VersaWorks export, a full session against the simulator |
 | [`test/ui-smoke.html`](https://sd-10.com/test/ui-smoke.html) | 34 checks driving the real UI against the simulator (calibrate, measure, compare, line scan, history sync, palettes, settings, custom ICC) |
 | [`test/mobile-check.html`](https://sd-10.com/test/mobile-check.html) | Layout at 375 px wide (no sideways scrolling) plus the compare/reference flows |
-| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 17 checks for Print match against the simulated device and printer: sheet, PDF, scanning, three rounds to within tolerance |
+| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 28 checks for Print match against the simulated device and printer: three rounds to within tolerance, spot colour sheets with averaged readings and VersaWorks files, RGB/PNG sheets |
 
 ## Project layout
 
@@ -96,7 +112,8 @@ js/transport.js     Web Bluetooth GATT transport
 js/mock.js          simulated SD-10 (demo mode and tests)
 js/color.js         spectrum → Lab, ΔE (76/94/2000), sRGB, LRV
 js/weights.js       CIE weighting tables from the app (12 illuminants × 2 observers)
-js/match.js         Print match: patch design, printer-response model, solver, PDF sheet
+js/match.js         Print match: patch design, printer-response model, solver, PDF / PNG sheets
+js/rip-export.js    spot colour library files for RIPs (VersaWorks .spot)
 js/printer-sim.js   simulated CMYK printer (demo and tests)
 js/icc.js           ICC engine (lut8/lut16/lutBtoA) for Lab → CMYK; custom profile storage
 js/storage.js       history and preferences (localStorage)

@@ -6,10 +6,11 @@ import {
   AUTO_POWER_OFF, BUZZER, DIFF_FORMULAS, EVENT, LANGUAGES, LIGHT_SOURCES, LIGHT_SOURCE_NAME, METHOD, PANEL_DIRECTION,
   WAVELENGTHS, hex,
 } from './protocol.js';
-import { deltaE, deltaE2000, describeSpectrum, meanSpectrum, medianLab, spectrumToLab, wavelengthColor, labToLch, labD50ToSrgb, rgbHex } from './color.js';
+import { deltaE, deltaE2000, describeSpectrum, meanSpectrum, medianLab, spectrumToLab, wavelengthColor, labToLch, labD50ToSrgb, rgbHex, srgbToLabD50 } from './color.js';
 import { history as historyStore, prefs as prefStore } from './storage.js';
 import { CMYK_PROFILES, CUSTOM_PREFIX, customProfiles, loadProfile } from './icc.js';
-import { MODES, analyseRound, buildSheetPdf, designPatches, nextStep } from './match.js';
+import { MODES, analyseRound, averageReadings, buildSheetPdf, buildSheetPng, designPatches, nextStep, patchSpotName } from './match.js';
+import { RIP_EXPORTS } from './rip-export.js';
 import { printSpectrum } from './printer-sim.js';
 
 const $ = (id) => document.getElementById(id);
@@ -634,12 +635,13 @@ function setMode(mode) {
 }
 
 // ================================================================== Print match view
-// Persisted job: { target, mode, paper, mf, tol, rounds: [{ round, mode, centre, step, kFixed, patches, result }], next }
+// Persisted job: { target, mode, paper, mf, tol, reads, spotName, jobId, refReads,
+//                  rounds: [{ round, mode, centre, step, kFixed, patches: [{ n, offset, x, name?, reads, lab, spread }], result }], next }
 const MATCH_KEY = 'sd10.match';
 const match = (() => {
   let m = {};
   try { m = JSON.parse(localStorage.getItem(MATCH_KEY)) || {}; } catch { /* ignore */ }
-  return { target: null, mode: 'cmyk', paper: 'a4', mf: 1, tol: 1, rounds: [], next: 0, ...m };
+  return { target: null, mode: 'spot', paper: 'a4', mf: 1, tol: 1, reads: 1, spotName: '', jobId: null, refReads: [], rounds: [], next: 0, ...m };
 })();
 const saveMatch = () => { try { localStorage.setItem(MATCH_KEY, JSON.stringify(match)); } catch { /* ignore */ } };
 const currentRound = () => match.rounds[match.rounds.length - 1] ?? null;
@@ -663,9 +665,33 @@ function cmykPreviewHex([c, m, y], k) {
   return rgbHex([ch(c), ch(m), ch(y)]);
 }
 function formatValues(mode, x, k) {
-  return mode === 'cmyk'
-    ? [['C', fmt1(x[0])], ['M', fmt1(x[1])], ['Y', fmt1(x[2])], ['K', fmt1(k)]]
-    : [['L*', fmt1(x[0])], ['a*', fmt1(x[1])], ['b*', fmt1(x[2])]];
+  if (mode === 'cmyk') return [['C', fmt1(x[0])], ['M', fmt1(x[1])], ['Y', fmt1(x[2])], ['K', fmt1(k)]];
+  if (mode === 'rgb') return [['R', String(x[0])], ['G', String(x[1])], ['B', String(x[2])], ['HEX', rgbHex(x)]];
+  return [['L*', fmt1(x[0])], ['a*', fmt1(x[1])], ['b*', fmt1(x[2])]];
+}
+function patchPreviewHex(mode, x, k) {
+  return mode === 'cmyk' ? cmykPreviewHex(x, k) : mode === 'rgb' ? rgbHex(x) : displayHex(x);
+}
+const isLabMode = (mode) => mode === 'spot' || mode === 'lab';
+const MODE_NAME = { spot: 'named spot colour', lab: 'L*a*b*', cmyk: 'CMYK', rgb: 'RGB' };
+const newJobId = () => [...crypto.getRandomValues(new Uint8Array(4))].map((b) => 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b % 32]).join('');
+
+function modeHelp(mode) {
+  const profile = escapeHtml(settingsFromUI().cmykProfile.replace(CUSTOM_PREFIX, ''));
+  return {
+    spot: 'For RIPs that colour named spot colours from an L*a*b* library (e.g. VersaWorks, Digital Factory, Edge Print). Every patch is a uniquely named spot colour with its L*a*b* value as the alternate, so the RIP handles the sheet like the spot colours in your artwork. Enter the result as the L*a*b* value of your named colour in the RIP.',
+    lab: 'Patches are plain CIE L*a*b* objects. This only matches a spot colour workflow if the RIP converts Lab objects with the same profile and rendering intent as named colours – otherwise use spot colours.',
+    cmyk: `For documents that send CMYK numbers to the printer. The starting values come from the CMYK profile selected in the Console (${profile}); K is kept fixed.`,
+    rgb: 'For raster-only software (e.g. DTG). The sheet is a 300 dpi sRGB PNG and the result is an sRGB value / hex for your artwork – keep the artwork in sRGB like the sheet.',
+  }[mode] + ' Colours are measured at D50 / 2°.';
+}
+
+function printTips(mode) {
+  const tips = ['<b>Print it exactly like the final job:</b> same printer, media, quality and colour settings, at 100% / actual size (not "fit to page"). Let the ink dry before scanning.',
+    '<b>DTF, sublimation, DTG:</b> press / cure the sheet exactly like production and scan the finished product, not the print. On fabric use 3 or more readings per patch.'];
+  if (mode === 'spot') tips.push('<b>VersaWorks:</b> import this sheet’s .spot library and enable it before printing, so the patches take the named-colour path. <b>Other RIPs:</b> unknown spot colours normally print from their L*a*b* alternate – check that the RIP does not substitute or reject them.');
+  if (mode === 'rgb') tips.push('<b>DTG:</b> print on the garment colour (and with the white underbase / pre-treatment) you will use for the job.');
+  return tips.map((t) => `<p>${t}</p>`).join('');
 }
 
 function matchControls(busyLabel) {
@@ -678,8 +704,11 @@ function matchControls(busyLabel) {
   $('btnMatchSheet').disabled = !match.target || state.busy;
   $('btnMatchMeasure').disabled = !idle || !r;
   $('btnMatchAnalyse').disabled = !r || measured < 5 || state.busy;
+  const p = r?.patches[match.next];
+  const reading = (n) => (match.reads > 1 ? ` (reading ${n + 1}/${match.reads})` : '');
   $('btnMatchMeasure').textContent = busyLabel ? `${busyLabel}…`
-    : !r ? 'Measure patch' : `Measure patch #${r.patches[match.next]?.n ?? 1}`;
+    : !p ? 'Measure patch' : `Measure patch #${p.n}${reading(p.lab ? 0 : p.reads?.length ?? 0)}`;
+  $('btnMatchTarget').textContent = `Measure reference${match.refReads.length ? reading(match.refReads.length) : ''}`;
 }
 
 function renderMatch() {
@@ -687,19 +716,27 @@ function renderMatch() {
   for (const [id, i] of [['mL', 0], ['mA', 1], ['mB', 2]]) if (document.activeElement !== $(id)) $(id).value = t ? t[i].toFixed(2) : '';
   $('mTargetSwatch').style.background = t ? displayHex(t) : '';
   $('mStatusTarget').textContent = t ? displayHex(t) : 'not set';
-  $('mMode').value = match.mode; $('mPaper').value = match.paper; $('mMf').value = match.mf; $('mTol').value = match.tol;
-  $('mProfileName').textContent = settingsFromUI().cmykProfile.replace(CUSTOM_PREFIX, '');
+  $('mMode').value = match.mode; $('mPaper').value = match.paper; $('matchMf').value = match.mf; $('mTol').value = match.tol;
+  $('mReads').value = match.reads;
+  if (document.activeElement !== $('mSpotName')) $('mSpotName').value = match.spotName;
+  $('mSpotNameWrap').classList.toggle('hidden', !isLabMode(match.mode));
+  $('mModeHelp').innerHTML = modeHelp(match.mode);
+  $('mPrintTips').innerHTML = printTips(match.mode);
+  if (match.refReads.length) $('mStatusTarget').textContent = `reading ${match.refReads.length}/${match.reads} – measure another spot`;
 
   const r = currentRound();
   $('mRoundLabel').textContent = r ? `· round ${r.round}` : '';
   $('btnMatchSheet').textContent = r ? 'New first sheet' : 'Create sheet';
   $('mSheetActions').classList.toggle('hidden', !r);
+  $('btnMatchPdf').textContent = r?.mode === 'rgb' ? 'Download PNG' : 'Download PDF';
+  $('btnMatchRipSheet').classList.toggle('hidden', r?.mode !== 'spot');
   if (!t) $('mSheetInfo').textContent = 'Set a reference colour first.';
-  else if (!r) $('mSheetInfo').textContent = `Creates a sheet of 16 ${match.mode === 'cmyk' ? 'CMYK' : 'L*a*b*'} patches around a first estimate of the reference.`;
+  else if (!r) $('mSheetInfo').textContent = `Creates a sheet of 16 ${MODE_NAME[match.mode]} patches around a first estimate of the reference.`;
   else {
     const vals = formatValues(r.mode, r.centre, r.kFixed).map(([k, v]) => `${k} ${v}`).join('  ');
     const steps = r.step.map((v, k) => `${MODES[r.mode].axes[k]} ±${fmt1(v)}`).join(', ');
-    $('mSheetInfo').innerHTML = `Centre <span class="font-mono">${vals}</span> · steps ${steps}. Download, print and scan the patches below.`;
+    $('mSheetInfo').innerHTML = `Centre <span class="font-mono">${vals}</span> · steps ${steps}. Download, print and scan the patches below.` +
+      (r.mode === 'spot' ? ` Spot names <span class="font-mono">${escapeHtml(r.patches[0].name)}</span> … <span class="font-mono">-16</span>.` : '');
   }
 
   // patch grid
@@ -708,12 +745,15 @@ function renderMatch() {
   else {
     grid.innerHTML = r.patches.map((p, i) => {
       const done = !!p.lab;
-      const bg = done ? displayHex(p.lab) : r.mode === 'cmyk' ? cmykPreviewHex(p.x, r.kFixed) : displayHex(p.x);
+      const bg = done ? displayHex(p.lab) : patchPreviewHex(r.mode, p.x, r.kFixed);
       const dE = done && t ? deltaE2000(t, p.lab) : null;
       const isNext = i === match.next;
-      return `<button type="button" data-patch="${i}" class="text-left rounded-lg p-1.5 ring-1 ${isNext ? 'ring-2 ring-indigo-500' : 'ring-slate-200 dark:ring-slate-800'}" title="Patch #${p.n}${done ? ' – tap to re-measure' : ''}">
+      const partial = !done && p.reads?.length ? `${p.reads.length}/${match.reads}` : '';
+      const uneven = done && p.spread > 1.5; // readings disagree – textured / uneven print
+      const title = `Patch #${p.n}${p.name ? ' · ' + p.name : ''}${done && p.spread != null && p.reads?.length > 1 ? ` · ${p.reads.length} readings, spread ΔE00 ${p.spread.toFixed(2)}` : ''}${done ? ' – tap to re-measure' : ''}`;
+      return `<button type="button" data-patch="${i}" class="text-left rounded-lg p-1.5 ring-1 ${isNext ? 'ring-2 ring-indigo-500' : 'ring-slate-200 dark:ring-slate-800'}" title="${escapeHtml(title)}">
         <div class="h-10 rounded-md ${done ? '' : 'opacity-40'}" style="background:${bg}"></div>
-        <div class="flex justify-between text-[11px] mt-1"><b>#${p.n}</b><span class="font-mono ${dE != null && dE <= match.tol ? 'text-emerald-600' : 'text-slate-500'}">${dE != null ? 'ΔE ' + dE.toFixed(1) : ''}</span></div>
+        <div class="flex justify-between text-[11px] mt-1"><b>#${p.n}${uneven ? ' <span class="text-amber-600" title="Readings differ by more than 1.5 ΔE00">!</span>' : ''}</b><span class="font-mono ${dE != null && dE <= match.tol ? 'text-emerald-600' : 'text-slate-500'}">${dE != null ? 'ΔE ' + dE.toFixed(1) : partial}</span></div>
       </button>`;
     }).join('');
   }
@@ -730,13 +770,19 @@ function renderMatchResult() {
   if (!res) return;
   const within = res.predictedDeltaE <= match.tol && !res.extrapolated;
   const verified = r.round > 1 && res.centreDE != null && res.centreDE <= match.tol;
+  $('btnMatchRipResult').classList.toggle('hidden', !isLabMode(r.mode));
   const cells = formatValues(r.mode, res.x, r.kFixed)
     .map(([k, v]) => `<div class="rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-center"><div class="text-[10px] text-slate-500">${k}</div><div class="font-mono text-xl tabular-nums">${v}</div></div>`).join('');
   const prevVals = formatValues(r.mode, r.centre, r.kFixed).map(([k, v]) => `${k} ${v}`).join(' ');
   $('mResult').innerHTML = `
     ${verified ? `<div class="rounded-lg bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200 p-3 text-sm"><b>Done.</b> The previous round's values (<span class="font-mono">${prevVals}</span>) printed within tolerance – centre patch ΔE00 ${res.centreDE.toFixed(2)}. Use those, or the refined values below.</div>` : ''}
-    <p class="text-sm text-slate-500">Use these ${r.mode === 'cmyk' ? 'CMYK values' : 'L*a*b* values'} for the colour in your document:</p>
-    <div class="grid ${r.mode === 'cmyk' ? 'grid-cols-4' : 'grid-cols-3'} gap-2">${cells}</div>
+    <p class="text-sm text-slate-500">${{
+    spot: `Enter these L*a*b* values for the named colour${match.spotName ? ` <b>${escapeHtml(match.spotName)}</b>` : ''} in the RIP’s spot colour library:`,
+    lab: 'Use these L*a*b* values for the colour in your document:',
+    cmyk: 'Use these CMYK values for the colour in your document:',
+    rgb: 'Use this sRGB colour in your artwork:',
+  }[r.mode]}</p>
+    <div class="grid ${isLabMode(r.mode) ? 'grid-cols-3' : 'grid-cols-4'} gap-2">${cells}</div>
     <div class="flex flex-wrap items-center gap-2 text-sm">
       <span class="rounded-md px-2 py-0.5 text-xs font-bold text-white ${within ? 'bg-emerald-600' : 'bg-amber-500'}">${within ? 'EXPECTED MATCH' : 'NEEDS ANOTHER ROUND'}</span>
       <span>predicted ΔE00 <b class="tabular-nums">${res.predictedDeltaE.toFixed(2)}</b>${res.extrapolated ? ' (rough estimate)' : ''} (tolerance ${match.tol})</span>
@@ -768,7 +814,7 @@ function setMatchTarget(lab) {
   const hasWork = match.rounds.some((r) => r.patches.some((p) => p.lab));
   if (hasWork && !confirm('Changing the reference colour starts the matching over. Continue?')) { renderMatch(); return false; }
   match.target = lab.map((v) => Math.round(v * 100) / 100);
-  match.rounds = []; match.next = 0;
+  match.rounds = []; match.next = 0; match.refReads = [];
   saveMatch(); renderMatch();
   return true;
 }
@@ -776,13 +822,26 @@ function setMatchTarget(lab) {
 function measureMatchTarget() {
   return task('Measuring reference', async () => {
     const m = await measureLabD50();
-    if (m && setMatchTarget(m.lab)) toast('Reference colour measured', 'ok');
+    if (!m) return;
+    match.refReads = [...match.refReads, m.lab];
+    if (match.refReads.length < match.reads) {
+      saveMatch(); renderMatch();
+      toast(`Reading ${match.refReads.length}/${match.reads} – move the SD-10 to another spot on the reference and measure again.`);
+      return;
+    }
+    const { lab, spread } = averageReadings(match.refReads);
+    match.refReads = [];
+    if (setMatchTarget(lab)) toast(`Reference colour measured${match.reads > 1 ? ` – mean of ${match.reads} readings, spread ΔE00 ${spread.toFixed(2)}` : ''}`, 'ok');
+    else saveMatch();
   });
 }
 
 function createSheet(centre, step, kFixed) {
   const round = (currentRound()?.round ?? 0) + 1;
-  match.rounds.push({ round, mode: match.mode, centre, step, kFixed, patches: designPatches(match.mode, centre, step), result: null });
+  match.jobId ??= newJobId();
+  const patches = designPatches(match.mode, centre, step)
+    .map((p) => (match.mode === 'spot' ? { ...p, name: patchSpotName(match.jobId, round, p.n) } : p));
+  match.rounds.push({ round, mode: match.mode, centre, step, kFixed, patches, result: null });
   match.next = 0;
   saveMatch(); renderMatch();
 }
@@ -791,13 +850,16 @@ async function startFirstSheet() {
   if (!match.target) return;
   if (currentRound() && !confirm('Start again with a new first sheet? Measurements of the current sheets are discarded.')) return;
   match.rounds = [];
+  match.jobId = newJobId(); // fresh spot names, so libraries imported for an earlier job cannot clash
   try {
     if (match.mode === 'cmyk') {
       const profile = await loadProfile(settingsFromUI().cmykProfile);
       const cmyk = profile.fromLab(match.target, 0).map((v) => Math.round(Math.min(v, 100) * 10) / 10);
       createSheet(cmyk.slice(0, 3), [...MODES.cmyk.step0], cmyk[3]);
+    } else if (match.mode === 'rgb') {
+      createSheet(labD50ToSrgb(match.target).rgb, [...MODES.rgb.step0], 0);
     } else {
-      createSheet([...match.target], [...MODES.lab.step0], 0);
+      createSheet([...match.target], [...MODES[match.mode].step0], 0);
     }
     toast('Sheet created – download and print it.', 'ok');
   } catch (e) {
@@ -805,15 +867,37 @@ async function startFirstSheet() {
   }
 }
 
-function downloadSheet() {
-  const r = currentRound();
-  if (!r) return;
-  const bytes = buildSheetPdf({ mode: r.mode, patches: r.patches, target: match.target, round: r.round, paper: match.paper, kFixed: r.kFixed });
+function downloadFile(data, type, name) {
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
-  a.download = `sd10-print-match-round${r.round}.pdf`;
+  a.href = URL.createObjectURL(new Blob([data], { type }));
+  a.download = name;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+async function downloadSheet() {
+  const r = currentRound();
+  if (!r) return;
+  const opts = { mode: r.mode, patches: r.patches, target: match.target, round: r.round, paper: match.paper, kFixed: r.kFixed };
+  if (r.mode === 'rgb') {
+    try { downloadFile(await buildSheetPng(opts), 'image/png', `sd10-print-match-round${r.round}.png`); } catch (e) { toast(e.message, 'error'); }
+  } else downloadFile(buildSheetPdf(opts), 'application/pdf', `sd10-print-match-round${r.round}.pdf`);
+}
+
+const safeFileName = (s) => s.replace(/[\\/:*?"<>|]+/g, '_').trim() || 'spot';
+
+/** Spot colour library for the RIP: the current sheet's patch colours ('sheet') or the matched colour ('result'). */
+function downloadRipLibrary(what, rip = 'versaworks') {
+  const r = currentRound();
+  const ex = RIP_EXPORTS[rip];
+  if (!r || !ex) return;
+  if (what === 'sheet') {
+    const text = ex.build({ library: `SD10 ${match.jobId} round ${r.round}`, colours: r.patches.map((p) => ({ name: p.name, lab: p.x })) });
+    downloadFile(text, ex.mime, `sd10-${match.jobId}-round${r.round}.${ex.ext}`);
+  } else if (r.result) {
+    const name = match.spotName.trim() || 'SD10 match';
+    downloadFile(ex.build({ library: 'SD-10 Print match', colours: [{ name, lab: r.result.x }] }), ex.mime, `${safeFileName(name)}.${ex.ext}`);
+  }
 }
 
 function measurePatch() {
@@ -824,14 +908,23 @@ function measurePatch() {
     // Demo: the simulated SD-10 "sees" what a simulated printer would print for this patch.
     if (DEMO && state.transport?.setSpectrumOverride) {
       const p = r.patches[idx];
-      const cmyk = r.mode === 'cmyk' ? [...p.x, r.kFixed] : (await loadProfile(settingsFromUI().cmykProfile)).fromLab(p.x, 0);
+      const lab = r.mode === 'rgb' ? srgbToLabD50(p.x) : p.x;
+      const cmyk = r.mode === 'cmyk' ? [...p.x, r.kFixed] : (await loadProfile(settingsFromUI().cmykProfile)).fromLab(lab, 0);
       state.transport.setSpectrumOverride(printSpectrum(cmyk));
     }
     let m;
     try { m = await measureLabD50(); } finally { state.transport?.setSpectrumOverride?.(null); }
     if (!m) return;
-    r.patches[idx].lab = m.lab;
+    const p = r.patches[idx];
+    if (p.lab) { p.lab = null; p.reads = []; p.spread = null; } // measuring a finished patch again starts it over
+    p.reads = [...(p.reads ?? []), m.lab];
     r.result = null;
+    if (p.reads.length < match.reads) {
+      saveMatch(); renderMatch();
+      toast(`Reading ${p.reads.length}/${match.reads} – move the SD-10 to another spot on patch #${p.n}.`);
+      return;
+    }
+    Object.assign(p, averageReadings(p.reads));
     const after = r.patches.findIndex((p, i) => i > idx && !p.lab);
     const any = r.patches.findIndex((p) => !p.lab);
     match.next = after >= 0 ? after : any >= 0 ? any : idx;
@@ -865,7 +958,7 @@ function refineMatch() {
 function copyMatchValues() {
   const r = currentRound();
   if (!r?.result) return;
-  const text = `${r.mode === 'cmyk' ? 'CMYK' : 'L*a*b*'}: ` + formatValues(r.mode, r.result.x, r.kFixed).map(([k, v]) => `${k} ${v}`).join(', ') +
+  const text = (r.mode === 'spot' && match.spotName ? `${match.spotName} – ` : '') + `${{ spot: 'L*a*b*', lab: 'L*a*b*', cmyk: 'CMYK', rgb: 'sRGB' }[r.mode]}: ` + formatValues(r.mode, r.result.x, r.kFixed).map(([k, v]) => `${k} ${v}`).join(', ') +
     ` (predicted ΔE00 ${r.result.predictedDeltaE.toFixed(2)} to reference L*a*b* ${match.target.map((v) => v.toFixed(2)).join(' / ')})`;
   navigator.clipboard?.writeText(text).then(() => toast('Values copied', 'ok'), () => toast('Clipboard not available', 'error'));
 }
@@ -881,11 +974,15 @@ function initMatch() {
     });
   }
   $('mMode').onchange = () => {
-    if (currentRound() && !confirm('Switching between CMYK and L*a*b* starts the matching over. Continue?')) { $('mMode').value = match.mode; return; }
+    if (currentRound() && !confirm('Changing the sheet type starts the matching over. Continue?')) { $('mMode').value = match.mode; return; }
     match.mode = $('mMode').value; match.rounds = []; match.next = 0; saveMatch(); renderMatch();
   };
   $('mPaper').onchange = () => { match.paper = $('mPaper').value; saveMatch(); };
-  $('mMf').onchange = () => { match.mf = +$('mMf').value; saveMatch(); };
+  $('matchMf').onchange = () => { match.mf = +$('matchMf').value; saveMatch(); };
+  $('mReads').onchange = () => { match.reads = Math.min(Math.max(+$('mReads').value || 1, 1), 9); match.refReads = []; saveMatch(); renderMatch(); };
+  $('mSpotName').onchange = () => { match.spotName = $('mSpotName').value.trim(); saveMatch(); renderMatch(); };
+  $('btnMatchRipSheet').onclick = () => downloadRipLibrary('sheet');
+  $('btnMatchRipResult').onclick = () => downloadRipLibrary('result');
   $('mTol').onchange = () => { match.tol = Math.min(Math.max(+$('mTol').value || 1, 0.1), 20); saveMatch(); renderMatch(); };
   $('btnMatchSheet').onclick = startFirstSheet;
   $('btnMatchPdf').onclick = downloadSheet;

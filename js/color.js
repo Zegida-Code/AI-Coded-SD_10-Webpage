@@ -116,7 +116,21 @@ export function labD50ToSrgb(lab) {
   return { rgb, inGamut };
 }
 
-export const rgbHex = (rgb) => '#' + rgb.map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase();
+// linear sRGB -> XYZ(D50), the inverse of M_D50_SRGB (Bradford-adapted, Lindbloom).
+const M_SRGB_D50 = [
+  [0.4360747, 0.3850649, 0.1430804],
+  [0.2225045, 0.7168786, 0.0606169],
+  [0.0139322, 0.0971045, 0.7141733],
+];
+
+/** Lab relative to D50 / 2° from sRGB (0..255). */
+export function srgbToLabD50(rgb) {
+  const lin = rgb.map((v) => { const c = v / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
+  const [x, y, z] = M_SRGB_D50.map((row, i) => (row[0] * lin[0] + row[1] * lin[1] + row[2] * lin[2]) / D50_WHITE[i]);
+  return [116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z))];
+}
+
+export const rgbHex =(rgb) => '#' + rgb.map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase();
 
 /** Everything the UI shows for a spectrum. */
 export function describeSpectrum(spectrum, lightSource = 0, observer = 2) {
