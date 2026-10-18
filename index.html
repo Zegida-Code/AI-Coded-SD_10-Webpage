@@ -258,6 +258,23 @@
     </section>
   </main>
 
-  <script type="module" src="js/app.js"></script>
+  <!-- Cache busting for GitHub Pages (files are cached for 10 min): every module URL carries the release
+       version, so a page always loads scripts from the same release. Bump with: ./bump-version.sh -->
+  <script type="importmap">
+  {
+    "imports": {
+      "./js/app.js": "./js/app.js?v=2026-10-18.971de52-014453",
+      "./js/transport.js": "./js/transport.js?v=2026-10-18.971de52-014453",
+      "./js/mock.js": "./js/mock.js?v=2026-10-18.971de52-014453",
+      "./js/session.js": "./js/session.js?v=2026-10-18.971de52-014453",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-18.971de52-014453",
+      "./js/color.js": "./js/color.js?v=2026-10-18.971de52-014453",
+      "./js/weights.js": "./js/weights.js?v=2026-10-18.971de52-014453",
+      "./js/storage.js": "./js/storage.js?v=2026-10-18.971de52-014453",
+      "./js/icc.js": "./js/icc.js?v=2026-10-18.971de52-014453"
+    }
+  }
+  </script>
+  <script type="module" src="js/app.js?v=2026-10-18.971de52-014453"></script>
 </body>
 </html>

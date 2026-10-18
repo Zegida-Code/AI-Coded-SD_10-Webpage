@@ -63,3 +63,14 @@ test/ui-smoke.html  drives the real UI in an iframe against the simulator
 - Writes are sent in 20-byte chunks (safe default). Change `chunkSize` in `BleTransport` to speed up large palette writes.
 - The **Protocol log** is the first place to look: every frame is decoded. Use *Copy* to share a session.
 - Firmware update is intentionally not implemented.
+
+## Deploying (GitHub Pages)
+
+GitHub Pages caches files for 10 minutes, so a browser can end up with a new `index.html` and an old `js/app.js`.
+To prevent that, every script URL in `index.html` carries a release version (`?v=…`, via the import map).
+Before each release run:
+
+```sh
+./bump-version.sh    # updates ?v= in index.html
+git commit -am "Release" && git push
+```

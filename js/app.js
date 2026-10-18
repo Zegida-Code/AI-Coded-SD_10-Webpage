@@ -196,7 +196,7 @@ function hintText() {
     case 'calibrate': return 'Shutter is closed – the button runs a white calibration.';
     case 'need-calibration': return 'Calibration needed: close the shutter, then press Calibrate.';
     default:
-      if (state.mode === 'compare' && !state.reference) return 'Measure a reference first, then click “Use as reference”.';
+      if (state.mode === 'compare' && !state.reference) return 'No reference yet – this measurement will become the reference.';
       if (state.mode === 'line') return 'Press, then drag the device across the strip.';
       return 'Ready. You can also press the button on the device.';
   }
@@ -268,8 +268,9 @@ function baseSettings() {
 
 async function doSpot() {
   const p = settingsFromUI();
-  const compare = state.mode === 'compare';
-  if (compare && !state.reference) { toast('Set a reference colour first.', 'error'); return; }
+  // In Compare mode without a reference, this measurement becomes the reference (measured as a plain spot).
+  const capturingReference = state.mode === 'compare' && !state.reference;
+  const compare = state.mode === 'compare' && !capturingReference;
   const settings = compare
     ? { method: METHOD.SPOT_COMPARISON, saveResult: true, ...baseSettings(), colorDiffFormula: p.formula, threshold: p.threshold }
     : { method: METHOD.SPOT, saveResult: true, ...baseSettings() };
@@ -282,7 +283,13 @@ async function doSpot() {
   }
   const spectrum = meanSpectrum(spectra);
   const lab = spectra.length > 1 ? medianLab(spectra.map((sp) => spectrumToLab(sp, p.lightSource, p.observer))) : null;
-  const item = addHistory({ spectrum, labOverride: lab, mode: compare ? 'compare' : 'spot', record: lastRec, readings: spectra.length });
+  const item = addHistory({ spectrum, labOverride: lab, mode: capturingReference ? 'reference' : compare ? 'compare' : 'spot', record: lastRec, readings: spectra.length });
+  if (capturingReference) {
+    state.reference = { spectrum };
+    showResult({ spectrum, lab, item });
+    toast('Reference captured – now measure the sample to compare against it.', 'ok');
+    return;
+  }
   showResult({ spectrum, lab, item });
 }
 
