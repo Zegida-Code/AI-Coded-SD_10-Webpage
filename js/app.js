@@ -10,7 +10,7 @@ import { deltaE, deltaE2000, describeSpectrum, meanSpectrum, medianLab, spectrum
 import { history as historyStore, prefs as prefStore } from './storage.js';
 import { CMYK_PROFILES, CUSTOM_PREFIX, customProfiles, loadProfile } from './icc.js';
 import { MODES, analyseRound, averageReadings, buildSheetPdf, buildSheetPng, designPatches, nextStep, patchSpotName } from './match.js';
-import { RIP_EXPORTS } from './rip-export.js';
+import { RIP_EXPORTS, readLibrary } from './rip-export.js';
 import { printSpectrum } from './printer-sim.js';
 
 const $ = (id) => document.getElementById(id);
@@ -338,6 +338,7 @@ function showResult({ spectrum, lab, strip, item }) {
   const d = describeSpectrum(spectrum, p.lightSource, p.observer);
   if (lab) { d.lab = lab; d.lch = labToLch(lab); }
   state.last = { spectrum, lab: d.lab, d, strip, itemId: item?.id ?? null };
+  state.lastLabD50 = spectrumToLab(spectrum, 0, 2); // newest colour on screen, for "Use last measurement" in Print match
   $('resultArea').classList.remove('hidden');
   $('swatch').style.background = d.hex;
   $('swatch').title = d.hex;
@@ -643,6 +644,14 @@ const match = (() => {
   try { m = JSON.parse(localStorage.getItem(MATCH_KEY)) || {}; } catch { /* ignore */ }
   return { target: null, mode: 'spot', paper: 'a4', mf: 1, tol: 1, reads: 1, spotName: '', ripFormat: 'cxf', jobId: null, refReads: [], rounds: [], next: 0, ...m };
 })();
+// Spot library: { name, colours: [{ name, lab, target, predictedDeltaE, mf, time }] } – independent of the current job.
+const LIB_KEY = 'sd10.spotLibrary';
+const spotLib = (() => {
+  let l = {};
+  try { l = JSON.parse(localStorage.getItem(LIB_KEY)) || {}; } catch { /* ignore */ }
+  return { name: 'SD-10 spot colours', colours: [], ...l };
+})();
+const saveLib = () => { try { localStorage.setItem(LIB_KEY, JSON.stringify(spotLib)); } catch { /* ignore */ } };
 const saveMatch = () => { try { localStorage.setItem(MATCH_KEY, JSON.stringify(match)); } catch { /* ignore */ } };
 const currentRound = () => match.rounds[match.rounds.length - 1] ?? null;
 const fmt1 = (v) => (Math.round(v * 10) / 10).toFixed(1);
@@ -692,7 +701,7 @@ function modeHelp(mode) {
 function printTips(mode) {
   const tips = ['<b>Print it exactly like the final job:</b> same printer, media, quality and colour settings, at 100% / actual size (not "fit to page"). Let the ink dry before scanning.',
     '<b>Transferred, cured or finished prints:</b> process the sheet exactly like production (pressing, curing, laminating …) and scan the finished product, not the raw print. On textured or uneven surfaces use 3 or more readings per patch.'];
-  if (mode === 'spot') tips.push('<b>Spot library:</b> if your RIP imports spot colour libraries (CxF3 is the common standard; VersaWorks uses .spot), import the sheet library and enable it before printing, so the patches take the named-colour path. Otherwise unknown spot colours normally print from their L*a*b* alternate – check that the RIP does not substitute or reject them.');
+  if (mode === 'spot') tips.push('<b>Spot library:</b> if your RIP imports spot colour libraries (CxF3 is the common standard; Adobe Color Book .acb and VersaWorks .spot are also offered), import the sheet library and enable it before printing, so the patches take the named-colour path. Otherwise unknown spot colours normally print from their L*a*b* alternate – check that the RIP does not substitute or reject them.');
   if (mode === 'rgb') tips.push('<b>Substrate:</b> print on the same substrate colour, with the same underlayers or pre-treatment, as the final job.');
   return tips.map((t) => `<p>${t}</p>`).join('');
 }
@@ -728,7 +737,7 @@ function renderMatch() {
   $('mRipFormat').value = match.ripFormat;
   const fmtLabel = ` (${RIP_EXPORTS[match.ripFormat].label})`;
   $('btnMatchRipSheet').textContent = `Sheet library${fmtLabel}`;
-  $('btnMatchRipResult').textContent = `Spot library${fmtLabel}`;
+  $('btnLibDownload').textContent = `Download library${fmtLabel}`;
   $('mModeHelp').innerHTML = modeHelp(match.mode);
   $('mPrintTips').innerHTML = printTips(match.mode);
   if (match.refReads.length) $('mStatusTarget').textContent = `reading ${match.refReads.length}/${match.reads} – measure another spot`;
@@ -769,6 +778,7 @@ function renderMatch() {
   const measured = r ? r.patches.filter((p) => p.lab).length : 0;
   $('mProgress').textContent = r ? `${measured} / ${r.patches.length} measured` : '';
   renderMatchResult();
+  renderLibrary();
   updateControls();
 }
 
@@ -779,7 +789,7 @@ function renderMatchResult() {
   if (!res) return;
   const within = res.predictedDeltaE <= match.tol && !res.extrapolated;
   const verified = r.round > 1 && res.centreDE != null && res.centreDE <= match.tol;
-  $('btnMatchRipResult').classList.toggle('hidden', !isLabMode(r.mode));
+  $('btnMatchAddLib').classList.toggle('hidden', !isLabMode(r.mode));
   const cells = formatValues(r.mode, res.x, r.kFixed)
     .map(([k, v]) => `<div class="rounded-lg bg-slate-100 dark:bg-slate-800 px-3 py-2 text-center"><div class="text-[10px] text-slate-500">${k}</div><div class="font-mono text-xl tabular-nums">${v}</div></div>`).join('');
   const prevVals = formatValues(r.mode, r.centre, r.kFixed).map(([k, v]) => `${k} ${v}`).join(' ');
@@ -811,12 +821,113 @@ function renderMatchResult() {
     </tbody></table>`;
 }
 
+function renderLibrary() {
+  const ex = RIP_EXPORTS[match.ripFormat] ?? RIP_EXPORTS.cxf;
+  const n = spotLib.colours.length;
+  $('mLibCount').textContent = n ? `(${n})` : '';
+  if (document.activeElement !== $('mLibName')) $('mLibName').value = spotLib.name;
+  $('btnLibDownload').disabled = !n;
+  $('btnLibClear').disabled = !n;
+  $('mLibList').innerHTML = !n
+    ? '<p class="text-sm text-slate-500">No colours yet – finish a match in an L*a*b* sheet type and press <b>Add to spot library</b>, add one below, or import a library.</p>'
+    : `<table class="w-full text-sm"><thead class="text-xs text-slate-500"><tr><th class="text-left font-normal">Name</th><th class="text-right font-normal">L*</th><th class="text-right font-normal">a*</th><th class="text-right font-normal">b*</th><th class="text-right font-normal">Pred. ΔE00</th><th></th></tr></thead><tbody>
+      ${spotLib.colours.map((c, i) => `<tr class="border-t border-slate-200 dark:border-slate-800" data-lib="${i}">
+        <td class="py-1.5"><button data-lib-act="rename" class="flex items-center gap-2 text-left hover:underline" title="Rename"><span class="h-5 w-5 flex-none rounded ring-1 ring-black/10" style="background:${displayHex(c.lab)}"></span><span class="font-medium">${escapeHtml(c.name)}</span></button></td>
+        <td class="text-right font-mono tabular-nums">${c.lab[0].toFixed(2)}</td><td class="text-right font-mono tabular-nums">${c.lab[1].toFixed(2)}</td><td class="text-right font-mono tabular-nums">${c.lab[2].toFixed(2)}</td>
+        <td class="text-right font-mono tabular-nums">${c.predictedDeltaE != null ? c.predictedDeltaE.toFixed(2) : '–'}</td>
+        <td class="text-right"><button data-lib-act="del" class="text-xs text-rose-600 hover:underline px-1" title="Remove from the library">remove</button></td></tr>`).join('')}
+      </tbody></table>`;
+  // Formats with 8-bit Lab (Adobe Color Book) round the values: say what that costs for this library.
+  let note = '';
+  if (n && ex.quantize) {
+    const worst = Math.max(...spotLib.colours.map((c) => deltaE2000(c.lab, ex.quantize(c.lab))));
+    note = `${ex.label} stores L* in steps of 0.4 and a*/b* as whole numbers – the largest rounding in this library is ΔE00 ${worst.toFixed(2)}. For full precision use CxF3 or type the values into the RIP.`;
+  }
+  $('mLibNote').textContent = note;
+  $('mLibNote').className = `text-xs ${note && /ΔE00 ([\d.]+)/.exec(note)[1] > match.tol / 2 ? 'text-amber-600' : 'text-slate-500'}`;
+}
+
+/** Add the current result to the spot library under the spot colour name (replacing a colour with the same name). */
+function addResultToLibrary() {
+  const r = currentRound();
+  if (!r?.result || !isLabMode(r.mode)) return;
+  let name = match.spotName.trim();
+  if (!name) {
+    name = (prompt('Spot colour name – exactly as it is named in your artwork and the RIP:') ?? '').trim();
+    if (!name) return;
+    match.spotName = name; saveMatch();
+  }
+  if (putInLibrary({ name, lab: r.result.x, target: match.target, predictedDeltaE: r.result.predictedDeltaE, mf: match.mf })) {
+    $('mLibraryCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+/** Add or (after asking) replace a colour by name. Returns true if the library changed. */
+function putInLibrary(c) {
+  const entry = { predictedDeltaE: null, ...c, lab: c.lab.map((v) => Math.round(v * 100) / 100), time: new Date().toISOString() };
+  const i = spotLib.colours.findIndex((o) => o.name === c.name);
+  if (i >= 0) {
+    if (!confirm(`“${c.name}” is already in the spot library. Replace it with the new values?`)) return false;
+    spotLib.colours[i] = entry;
+  } else spotLib.colours.push(entry);
+  saveLib(); renderMatch();
+  toast(`“${c.name}” ${i >= 0 ? 'updated in' : 'added to'} the spot library`, 'ok');
+  return true;
+}
+
+function addLibraryColourByHand(e) {
+  e.preventDefault();
+  const name = $('libNewName').value.trim();
+  const lab = ['libNewL', 'libNewA', 'libNewB'].map((id) => parseFloat($(id).value));
+  if (!name) { toast('Enter the spot colour name – exactly as it is named in your artwork and the RIP.', 'error'); $('libNewName').focus(); return; }
+  if (!lab.every(Number.isFinite) || lab[0] < 0 || lab[0] > 100 || Math.abs(lab[1]) > 128 || Math.abs(lab[2]) > 128) { toast('Enter L* (0–100), a* and b* (−128–127).', 'error'); return; }
+  if (putInLibrary({ name, lab })) for (const id of ['libNewName', 'libNewL', 'libNewA', 'libNewB']) $(id).value = '';
+}
+
+async function importLibraryFile(file) {
+  if (file.size > 20 * 1024 * 1024) { toast('That file is too large for a spot colour library.', 'error'); return; }
+  let lib;
+  try { lib = readLibrary(new Uint8Array(await file.arrayBuffer()), file.name); } catch (e) { toast(e.message, 'error'); return; }
+  if (!lib.colours.length) { toast(`No usable L*a*b* (D50 / 2°) colours in ${file.name}.`, 'error'); return; }
+  const names = new Set(spotLib.colours.map((c) => c.name));
+  const clashes = lib.colours.filter((c) => names.has(c.name));
+  const replace = clashes.length ? confirm(`${clashes.length} of the ${lib.colours.length} colours in ${file.name} are already in the spot library (${clashes.slice(0, 3).map((c) => `“${c.name}”`).join(', ')}${clashes.length > 3 ? ' …' : ''}).\n\nOK = replace them with the imported values, Cancel = keep the library's values.`) : false;
+  if (!spotLib.colours.length && lib.library) spotLib.name = lib.library.slice(0, 60);
+  let added = 0, replaced = 0;
+  for (const c of lib.colours) {
+    const entry = { name: c.name, lab: c.lab.map((v) => Math.round(v * 100) / 100), predictedDeltaE: null, imported: file.name, time: new Date().toISOString() };
+    const i = spotLib.colours.findIndex((o) => o.name === c.name);
+    if (i < 0) { spotLib.colours.push(entry); added++; } else if (replace) { spotLib.colours[i] = entry; replaced++; }
+  }
+  saveLib(); renderMatch();
+  toast(`Imported ${file.name}: ${added} added${replaced ? `, ${replaced} replaced` : ''}${clashes.length && !replace ? `, ${clashes.length} kept` : ''}${lib.skipped.length ? ` – ${lib.skipped.length} skipped (no D50 / 2° L*a*b*)` : ''}`, 'ok');
+}
+
+function onLibraryClick(e) {
+  const b = e.target.closest('[data-lib-act]');
+  if (!b) return;
+  const i = +b.closest('[data-lib]').dataset.lib;
+  const c = spotLib.colours[i];
+  if (b.dataset.libAct === 'del') {
+    if (!confirm(`Remove “${c.name}” from the spot library?`)) return;
+    spotLib.colours.splice(i, 1);
+  } else {
+    const name = (prompt('Spot colour name – exactly as it is named in your artwork and the RIP:', c.name) ?? '').trim();
+    if (!name || name === c.name) return;
+    if (spotLib.colours.some((o) => o.name === name)) { toast(`“${name}” is already in the library.`, 'error'); return; }
+    c.name = name;
+  }
+  saveLib(); renderMatch();
+}
+
 async function measureLabD50() {
   const s = await state.session.getStatus();
   if (s.shutterStatus === 1) { await doCalibrate(); return null; }
   if (s.calibrationStatus !== 2) { toast('Calibration needed: close the shutter, then calibrate.', 'error'); return null; }
   const [rec] = await state.session.measure({ method: METHOD.SPOT, saveResult: false, mFactor: match.mf, lightSource: 0, viewingAngle: 2 });
-  return { lab: spectrumToLab(rec.spectrum, 0, 2), spectrum: rec.spectrum };
+  const lab = spectrumToLab(rec.spectrum, 0, 2);
+  state.lastLabD50 = lab;
+  return { lab, spectrum: rec.spectrum };
 }
 
 function setMatchTarget(lab) {
@@ -895,19 +1006,19 @@ async function downloadSheet() {
 
 const safeFileName = (s) => s.replace(/[\\/:*?"<>|]+/g, '_').trim() || 'spot';
 
-/** Spot colour library for the RIP: the current sheet's patch colours ('sheet') or the matched colour ('result'). */
+/** Spot colour library for the RIP: the current sheet's patch colours ('sheet') or the collected spot library ('library'). */
 function downloadRipLibrary(what, rip = match.ripFormat) {
   const r = currentRound();
   const ex = RIP_EXPORTS[rip];
-  if (!r || !ex) return;
-  if (what === 'sheet') {
+  if (!ex) return;
+  if (what === 'sheet' && r) {
     const text = ex.build({ library: `SD10 ${match.jobId} round ${r.round}`, description: 'Print match test sheet patches, CIE L*a*b* D50/2°',
       colours: r.patches.map((p) => ({ name: p.name, lab: p.x })) });
     downloadFile(text, ex.mime, `sd10-${match.jobId}-round${r.round}.${ex.ext}`);
-  } else if (r.result) {
-    const name = match.spotName.trim() || 'SD10 match';
-    const description = `Matched to reference L*a*b* ${match.target.map((v) => v.toFixed(2)).join(' / ')} (D50/2°, M${match.mf}), predicted ΔE00 ${r.result.predictedDeltaE.toFixed(2)}`;
-    downloadFile(ex.build({ library: 'SD-10 Print match', description, colours: [{ name, lab: r.result.x }] }), ex.mime, `${safeFileName(name)}.${ex.ext}`);
+  } else if (what === 'library' && spotLib.colours.length) {
+    const library = spotLib.name.trim() || 'SD-10 spot colours';
+    const description = `${spotLib.colours.length} colour(s) matched with SD-10 Print match, CIE L*a*b* D50/2°`;
+    downloadFile(ex.build({ library, description, colours: spotLib.colours.map((c) => ({ name: c.name, lab: c.lab })) }), ex.mime, `${safeFileName(library)}.${ex.ext}`);
   }
 }
 
@@ -994,7 +1105,19 @@ function initMatch() {
   $('mSpotName').onchange = () => { match.spotName = $('mSpotName').value.trim(); saveMatch(); renderMatch(); };
   $('mRipFormat').onchange = () => { match.ripFormat = $('mRipFormat').value; saveMatch(); renderMatch(); };
   $('btnMatchRipSheet').onclick = () => downloadRipLibrary('sheet');
-  $('btnMatchRipResult').onclick = () => downloadRipLibrary('result');
+  $('btnMatchAddLib').onclick = addResultToLibrary;
+  $('btnLibDownload').onclick = () => downloadRipLibrary('library');
+  $('btnLibClear').onclick = () => { if (confirm('Remove all colours from the spot library?')) { spotLib.colours = []; saveLib(); renderMatch(); } };
+  $('mLibName').onchange = () => { spotLib.name = $('mLibName').value.trim() || 'SD-10 spot colours'; saveLib(); renderMatch(); };
+  $('mLibList').onclick = onLibraryClick;
+  $('btnLibImport').onclick = () => $('libFile').click();
+  $('libFile').onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) importLibraryFile(f); };
+  $('libAddForm').onsubmit = addLibraryColourByHand;
+  $('btnLibFromLast').onclick = () => {
+    if (!state.lastLabD50) { toast('Measure a colour first (in the Console or here in Print match).', 'error'); return; }
+    state.lastLabD50.forEach((v, i) => { $(['libNewL', 'libNewA', 'libNewB'][i]).value = v.toFixed(2); });
+    $('libNewName').focus();
+  };
   $('mTol').onchange = () => { match.tol = Math.min(Math.max(+$('mTol').value || 1, 0.1), 20); saveMatch(); renderMatch(); };
   $('btnMatchSheet').onclick = startFirstSheet;
   $('btnMatchPdf').onclick = downloadSheet;

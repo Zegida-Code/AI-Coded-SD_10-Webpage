@@ -120,16 +120,53 @@
       log($('mProgress').textContent.startsWith('5 /'), `15 readings -> 5 patches averaged (${$('mProgress').textContent})`);
       $('btnMatchAnalyse').click();
       await until(() => !$('mResultCard').classList.contains('hidden'));
-      log(/named colour Brand Red/.test($('mResult').textContent) && !$('btnMatchRipResult').classList.contains('hidden'), 'spot result names the colour and offers a VersaWorks spot file');
-      $('btnMatchRipResult').click();
-      const res = files.find((f) => f.name === 'Brand Red.spot');
-      const resText = res ? await readFile(res) : '';
+      log(/named colour Brand Red/.test($('mResult').textContent) && !$('btnMatchAddLib').classList.contains('hidden'), 'spot result names the colour and offers Add to spot library');
+      const libRows = () => [...d.querySelectorAll('#mLibList tr[data-lib]')].map((tr) => tr.querySelector('.font-medium').textContent);
+      $('btnMatchAddLib').click();
+      $('mSpotName').value = 'Brand Blue'; $('mSpotName').dispatchEvent(new Event('change'));
+      $('btnMatchAddLib').click();
+      $('mSpotName').value = 'Brand Red'; $('mSpotName').dispatchEvent(new Event('change'));
+      let asked = 0; w.confirm = () => { asked++; return true; };
+      $('btnMatchAddLib').click();
+      log(libRows().join() === 'Brand Red,Brand Blue' && asked === 1 && $('mLibCount').textContent === '(2)', `spot library collects colours; same name asks and replaces (${libRows().join(', ')})`);
+      $('btnLibDownload').click();
+      const libFile = files.find((f) => f.name === 'SD-10 spot colours.spot');
+      const libSpot = libFile ? await readFile(libFile) : '';
+      log((libSpot.match(/<Lab16SpotColor name="Brand (Red|Blue)" flags="0" redirectLibraryName="" redirectColorName=""><L VALUE="[\d.]+"\/><a VALUE="-?[\d.]+"\/><b VALUE="-?[\d.]+"\/><\/Lab16SpotColor>/g) || []).length === 2 && /LabSpotColorLibrary name="SD-10 spot colours"/.test(libSpot), 'one VersaWorks .spot file holds the whole library');
+      $('mLibName').value = 'House colours'; $('mLibName').dispatchEvent(new Event('change'));
       setSel('mRipFormat', 'cxf');
-      $('btnMatchRipResult').click();
-      const cxfFile = files.find((f) => f.name === 'Brand Red.cxf');
+      $('btnLibDownload').click();
+      const cxfFile = files.find((f) => f.name === 'House colours.cxf');
       const cxfText = cxfFile ? await readFile(cxfFile) : '';
-      log(/<Object ObjectType="Standard" Name="Brand Red" Id="c1">/.test(cxfText) && /<ColorCIELab ColorSpecification="CSD50-2"><L>[\d.]+<\/L>/.test(cxfText), 'result .cxf file holds the matched colour under its name');
-      log(/<Lab16SpotColor name="Brand Red" flags="0" redirectLibraryName="" redirectColorName=""><L VALUE="[\d.]+"\/><a VALUE="-?[\d.]+"\/><b VALUE="-?[\d.]+"\/><\/Lab16SpotColor>/.test(resText), 'result .spot file holds the matched colour under its name');
+      log(/<Object ObjectType="Standard" Name="Brand Red" Id="c1">/.test(cxfText) && /<Object ObjectType="Standard" Name="Brand Blue" Id="c2">/.test(cxfText) && /<Description>House colours/.test(cxfText), 'CxF3 library file named after the library, both colours inside');
+      setSel('mRipFormat', 'acb');
+      log(/stores L\* in steps of 0\.4/.test($('mLibNote').textContent) && /Adobe Color Book/.test($('btnLibDownload').textContent), 'Adobe Color Book: library shows the 8-bit rounding');
+      $('btnLibDownload').click();
+      const acbFile = files.find((f) => f.name === 'House colours.acb');
+      const acbBytes = acbFile ? new Uint8Array(await (await fetch(acbFile.href)).arrayBuffer()) : new Uint8Array();
+      log(String.fromCharCode(...acbBytes.slice(0, 4)) === '8BCB' && String.fromCharCode(...acbBytes.slice(-8)) === 'spflspot', `.acb library downloaded (${acbBytes.length} bytes)`);
+      setSel('mRipFormat', 'cxf');
+      w.prompt = () => 'Brand Navy';
+      d.querySelector('#mLibList tr[data-lib="1"] [data-lib-act=rename]').click();
+      d.querySelector('#mLibList tr[data-lib="0"] [data-lib-act=del]').click();
+      log(libRows().join() === 'Brand Navy' && JSON.parse(w.localStorage.getItem('sd10.spotLibrary')).colours.length === 1, 'library entries can be renamed and removed (kept in browser storage)');
+
+      // import a library file (one clash -> replaced) and add a colour by hand
+      const imp = '<?xml version="1.0" encoding="UTF-8"?>\n<SpotColorLibraryList strVersion="4.3.0.0"><LabSpotColorLibrary name="RIP"><m_eMakerType>0</m_eMakerType><m_bUseLibrary>false</m_bUseLibrary>' +
+        '<Lab16SpotColor name="Brand Navy" flags="0" redirectLibraryName="" redirectColorName=""><L VALUE="20.00"/><a VALUE="5.00"/><b VALUE="-40.00"/></Lab16SpotColor>' +
+        '<Lab16SpotColor name="Lime" flags="0" redirectLibraryName="" redirectColorName=""><L VALUE="85.00"/><a VALUE="-45.00"/><b VALUE="70.00"/></Lab16SpotColor></LabSpotColorLibrary></SpotColorLibraryList>\n';
+      const dt = new w.DataTransfer();
+      dt.items.add(new w.File([imp], 'rip-export.spot', { type: 'application/xml' }));
+      $('libFile').files = dt.files;
+      $('libFile').dispatchEvent(new w.Event('change'));
+      await until(() => libRows().length === 2);
+      const navy = JSON.parse(w.localStorage.getItem('sd10.spotLibrary')).colours.find((c) => c.name === 'Brand Navy');
+      log(libRows().join() === 'Brand Navy,Lime' && navy?.lab.join() === '20,5,-40' && /1 added, 1 replaced/.test($('toast').textContent), `import adds new colours and replaces clashes (${$('toast').textContent})`);
+      $('libNewName').value = 'Hand Typed'; $('libNewL').value = '55'; $('libNewA').value = '10'; $('libNewB').value = '-12.5';
+      $('btnLibAdd').click();
+      log(libRows().join() === 'Brand Navy,Lime,Hand Typed' && $('libNewName').value === '', 'a colour can be typed into the library');
+      $('btnLibFromLast').click();
+      log(Number.isFinite(parseFloat($('libNewL').value)), 'Use last measurement fills L*a*b*');
 
       // ---- RGB / raster sheet
       setSel('mMode', 'rgb');

@@ -122,7 +122,7 @@ async function iccV4Check() {
 // ---- 3d. Print match: model fitting, convergence with a simulated printer, PDF sheet
 async function matchCheck() {
   const { designPatches, fitModel, analyseRound, nextStep, buildSheetPdf, buildSheetPng, averageReadings, patchSpotName, MODES } = await import('../js/match.js');
-  const { RIP_EXPORTS } = await import('../js/rip-export.js');
+  const { RIP_EXPORTS, readLibrary } = await import('../js/rip-export.js');
   const { printSpectrum } = await import('../js/printer-sim.js');
   const { loadProfile } = await import('../js/icc.js');
   const prof = await loadProfile('EpsonWideCMYK_Ver2');
@@ -196,6 +196,40 @@ async function matchCheck() {
     spec.getElementsByTagNameNS(NS, 'Illuminant')[0].textContent === 'D50' && spec.getElementsByTagNameNS(NS, 'Observer')[0].textContent === '2_Degree' &&
     objs[0].getElementsByTagNameNS(NS, 'CreationDate')[0].textContent === '2026-10-18T10:00:00Z';
   check('CxF3 export: well-formed core-namespace file, named objects with CIELab D50/2°', cxfOk, cxf.slice(0, 300));
+
+  // Adobe Color Book: byte layout of the reference ACB encoder (Lab book, 8-bit components, 'spflspot' trailer)
+  const acb = RIP_EXPORTS.acb.build({ library: 'Test', description: 'd', id: 4242, colours: [{ name: 'Brand Red', lab: [45.6, 60.4, -30.4] }, { name: 'Grey', lab: [50, 0, 0] }] });
+  const acbHex = [...acb].map((v) => v.toString(16).padStart(2, '0')).join('');
+  check('Adobe Color Book export matches the reference byte layout', acbHex === '38424342000110920000000400540065007300740000000000000000000000010064000200020001000700000009004200720061006e0064002000520065006453443030303174bc620000000400470072006500795344303030328080807370666c73706f74', acbHex);
+  const qz = RIP_EXPORTS.acb.quantize([45.6, 60.4, -30.4]);
+  check('Adobe Color Book quantisation: L* steps of 100/255, whole a*/b*', Math.abs(qz[0] - 116 * 100 / 255) < 1e-9 && qz[1] === 60 && qz[2] === -30);
+
+  // import: every export format reads back (ACB within its 8-bit rounding); CxF spectra and non-D50 data
+  const sample = [{ name: 'Brand Red', lab: [45.6, 60.4, -30.4] }, { name: 'Grün & Blau', lab: [70.25, -40.5, 12.75] }];
+  const back = Object.fromEntries(['cxf', 'versaworks', 'acb'].map((f) => {
+    const out = RIP_EXPORTS[f].build({ library: 'House', colours: sample });
+    return [f, readLibrary(typeof out === 'string' ? new TextEncoder().encode(out) : out, `x.${f}`)];
+  }));
+  const close = (lib, tol) => lib.colours.length === 2 && lib.colours.every((c, i) => c.name === sample[i].name && c.lab.every((v, k) => Math.abs(v - sample[i].lab[k]) <= tol));
+  check('import reads CxF3, VersaWorks and Adobe Color Book files back (names, L*a*b*, library name)', close(back.cxf, 0.005) && close(back.versaworks, 0.005) && close(back.acb, 0.51) && back.cxf.library === 'House' && back.versaworks.library === 'House' && back.acb.library === 'House' && back.acb.format === 'acb', JSON.stringify(back));
+  const sp = Array.from({ length: 36 }, (_, i) => (0.2 + 0.5 * Math.exp(-(((380 + 10 * i - 600) / 60) ** 2))).toFixed(4)).join(' ');
+  const cxfIn = `<?xml version="1.0"?><CxF xmlns="http://colorexchangeformat.com/CxF3-core"><Resources><ObjectCollection>
+    <Object ObjectType="Standard" Name="Spectral" Id="a"><CreationDate>2026-01-01</CreationDate><ColorValues><ReflectanceSpectrum ColorSpecification="S" StartWL="380">${sp}</ReflectanceSpectrum></ColorValues></Object>
+    <Object ObjectType="Standard" Name="D65 only" Id="b"><CreationDate>2026-01-01</CreationDate><ColorValues><ColorCIELab ColorSpecification="C65"><L>50</L><A>1</A><B>2</B></ColorCIELab></ColorValues></Object>
+    <Object ObjectType="Standard" Name="Two Labs" Id="c"><CreationDate>2026-01-01</CreationDate><ColorValues><ColorCIELab ColorSpecification="C65"><L>1</L><A>1</A><B>1</B></ColorCIELab><ColorCIELab ColorSpecification="C50"><L>60</L><A>-5</A><B>7</B></ColorCIELab></ColorValues></Object>
+  </ObjectCollection><ColorSpecificationCollection>
+    <ColorSpecification Id="S"><TristimulusSpec><Illuminant>D50</Illuminant><Observer>2_Degree</Observer></TristimulusSpec><MeasurementSpec><MeasurementType>Spectrum_Reflectance</MeasurementType><WavelengthRange StartWL="380" Increment="10"/></MeasurementSpec></ColorSpecification>
+    <ColorSpecification Id="C65"><TristimulusSpec><Illuminant>D65</Illuminant><Observer>10_Degree</Observer></TristimulusSpec></ColorSpecification>
+    <ColorSpecification Id="C50"><TristimulusSpec><Illuminant>D50</Illuminant><Observer>2_Degree</Observer></TristimulusSpec></ColorSpecification>
+  </ColorSpecificationCollection></Resources></CxF>`;
+  const lib3 = readLibrary(new TextEncoder().encode(cxfIn), 'in.cxf');
+  const want = spectrumToLab(Array.from({ length: 31 }, (_, i) => 0.2 + 0.5 * Math.exp(-(((400 + 10 * i - 600) / 60) ** 2))), 0, 2);
+  const spectral = lib3.colours.find((c) => c.name === 'Spectral');
+  check('CxF import: spectra -> Lab D50/2°, picks the D50 Lab of several, skips D65-only colours', spectral && spectral.lab.every((v, k) => Math.abs(v - want[k]) < 0.05) &&
+    lib3.colours.find((c) => c.name === 'Two Labs')?.lab.join() === '60,-5,7' && lib3.skipped.join() === 'D65 only', JSON.stringify(lib3));
+  let bad = '';
+  try { readLibrary(new TextEncoder().encode('<html/>'), 'page.html'); } catch (e) { bad = e.message; }
+  check('import rejects files that are not spot colour libraries', /not a CxF, Adobe Color Book or VersaWorks library/.test(bad), bad);
 
   // readings: mean + spread
   const avg = averageReadings([[50, 10, 10], [52, 10, 10], [51, 13, 7]]);

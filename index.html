@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <link rel="stylesheet" href="css/app.css?v=2026-10-18.82cab32-050529">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-18.504faa7-053836">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -305,9 +305,9 @@
         <div><label class="label" for="mReads">Readings per patch</label>
           <select id="mReads" class="input"><option value="1">1</option><option value="2">2</option><option value="3">3 (textured media)</option><option value="5">5</option></select></div>
         <div id="mRipFormatWrap"><label class="label" for="mRipFormat">Spot library format</label>
-          <select id="mRipFormat" class="input"><option value="cxf">CxF3 (.cxf)</option><option value="versaworks">VersaWorks (.spot)</option></select></div>
+          <select id="mRipFormat" class="input"><option value="cxf">CxF3 (.cxf)</option><option value="acb">Adobe Color Book (.acb)</option><option value="versaworks">VersaWorks (.spot)</option></select></div>
         <div id="mSpotNameWrap" class="col-span-2 sm:col-span-3"><label class="label" for="mSpotName">Spot colour name</label>
-          <input id="mSpotName" class="input" type="text" maxlength="60" placeholder="e.g. Brand Red – the name used in your artwork and the RIP" autocomplete="off"></div>
+          <input id="mSpotName" class="input" type="text" maxlength="60" placeholder="e.g. Brand Red – exactly as named in your artwork and the RIP" autocomplete="off"></div>
       </div>
       <p id="mModeHelp" class="text-xs text-slate-500"></p>
     </div>
@@ -348,9 +348,36 @@
       <div class="flex flex-wrap gap-2">
         <button id="btnMatchRefine" class="btn btn-primary">Make refinement sheet</button>
         <button id="btnMatchCopy" class="btn btn-ghost">Copy values</button>
-        <button id="btnMatchRipResult" class="btn btn-ghost hidden" title="Spot colour library with the matched colour, named as entered above">Spot library</button>
+        <button id="btnMatchAddLib" class="btn btn-ghost hidden" title="Add the matched colour to your spot library under the spot colour name">Add to spot library</button>
       </div>
       <div id="mHistory"></div>
+    </div>
+
+    <!-- 5. spot library: matched colours collected across jobs, exported together as one library file -->
+    <div id="mLibraryCard" class="card space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h3 class="font-semibold"><span class="text-indigo-500">5.</span> Spot library <span id="mLibCount" class="text-sm font-normal text-slate-500"></span></h3>
+        <div class="flex flex-wrap gap-2">
+          <button id="btnLibDownload" class="btn btn-primary" disabled>Download library</button>
+          <button id="btnLibImport" class="btn btn-ghost" title="Add the colours of a CxF (.cxf), Adobe Color Book (.acb) or VersaWorks (.spot) library">Import library…</button>
+          <button id="btnLibClear" class="btn btn-danger" disabled>Clear</button>
+          <input id="libFile" type="file" accept=".cxf,.acb,.spot,.xml" class="hidden">
+        </div>
+      </div>
+      <p class="text-sm text-slate-500">Collect your spot colours here – add matched colours, type them in, or import an existing library (CxF, Adobe Color Book or VersaWorks) – and download them as one file in the format chosen above to update all of those named colours in the RIP at once. The library is kept in this browser.</p>
+      <div class="max-w-sm"><label class="label" for="mLibName">Library name</label>
+        <input id="mLibName" class="input" type="text" maxlength="60" autocomplete="off"></div>
+      <div id="mLibList"></div>
+      <!-- add a colour by hand (or from the last measurement) -->
+      <form id="libAddForm" class="grid grid-cols-[minmax(0,2fr),repeat(3,minmax(0,1fr))] lg:grid-cols-[minmax(0,2fr),repeat(3,minmax(0,1fr)),auto,auto] gap-2 items-end">
+        <div><label class="label" for="libNewName">Add colour – name</label><input id="libNewName" class="input" type="text" maxlength="60" autocomplete="off" placeholder="Spot colour name"></div>
+        <div><label class="label" for="libNewL">L*</label><input id="libNewL" class="input font-mono" type="number" step="0.01" min="0" max="100"></div>
+        <div><label class="label" for="libNewA">a*</label><input id="libNewA" class="input font-mono" type="number" step="0.01" min="-128" max="127"></div>
+        <div><label class="label" for="libNewB">b*</label><input id="libNewB" class="input font-mono" type="number" step="0.01" min="-128" max="127"></div>
+        <button id="btnLibAdd" type="submit" class="btn btn-primary col-span-2 lg:col-span-1">Add</button>
+        <button id="btnLibFromLast" type="button" class="btn btn-ghost col-span-2 lg:col-span-1" title="Fill L*a*b* from the last measurement (D50 / 2°)">Use last measurement</button>
+      </form>
+      <p id="mLibNote" class="text-xs text-slate-500"></p>
     </div>
   </main>
 
@@ -359,21 +386,21 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-18.82cab32-050529",
-      "./js/transport.js": "./js/transport.js?v=2026-10-18.82cab32-050529",
-      "./js/mock.js": "./js/mock.js?v=2026-10-18.82cab32-050529",
-      "./js/session.js": "./js/session.js?v=2026-10-18.82cab32-050529",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-18.82cab32-050529",
-      "./js/color.js": "./js/color.js?v=2026-10-18.82cab32-050529",
-      "./js/weights.js": "./js/weights.js?v=2026-10-18.82cab32-050529",
-      "./js/storage.js": "./js/storage.js?v=2026-10-18.82cab32-050529",
-      "./js/icc.js": "./js/icc.js?v=2026-10-18.82cab32-050529",
-      "./js/match.js": "./js/match.js?v=2026-10-18.82cab32-050529",
-      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-18.82cab32-050529",
-      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-18.82cab32-050529"
+      "./js/app.js": "./js/app.js?v=2026-10-18.504faa7-053836",
+      "./js/transport.js": "./js/transport.js?v=2026-10-18.504faa7-053836",
+      "./js/mock.js": "./js/mock.js?v=2026-10-18.504faa7-053836",
+      "./js/session.js": "./js/session.js?v=2026-10-18.504faa7-053836",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-18.504faa7-053836",
+      "./js/color.js": "./js/color.js?v=2026-10-18.504faa7-053836",
+      "./js/weights.js": "./js/weights.js?v=2026-10-18.504faa7-053836",
+      "./js/storage.js": "./js/storage.js?v=2026-10-18.504faa7-053836",
+      "./js/icc.js": "./js/icc.js?v=2026-10-18.504faa7-053836",
+      "./js/match.js": "./js/match.js?v=2026-10-18.504faa7-053836",
+      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-18.504faa7-053836",
+      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-18.504faa7-053836"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-18.82cab32-050529"></script>
+  <script type="module" src="js/app.js?v=2026-10-18.504faa7-053836"></script>
 </body>
 </html>

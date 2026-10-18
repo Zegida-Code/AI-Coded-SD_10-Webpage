@@ -64,10 +64,16 @@ many rounds a real printer needs depends on how far the profile's first estimate
 If the reference is outside what the printer and paper can reproduce, the app says so and gives the closest values.
 
 **Spot library files:** in L\*a\*b\* modes the app also exports spot colour libraries for the RIP, in the format
-chosen under **Spot library format**: **CxF3** (`.cxf`, the ISO 17972-1 colour exchange standard that many RIPs import)
-or Roland **VersaWorks** `.spot`. **Sheet library** holds the test sheet's patch colours (import and enable it before
-printing the sheet, so the patches go through the RIP's named-colour path); **Spot library** in the result holds the
-matched colour under the **Spot colour name** you entered. Other formats can be added from a sample library exported by
+chosen under **Spot library format**: **CxF3** (`.cxf`, the ISO 17972-1 colour exchange standard that many RIPs import),
+**Adobe Color Book** (`.acb`, read by Photoshop and RIPs that import Adobe colour books – it stores L\* in steps of 0.4
+and a\*/b\* as whole numbers, and the spot library shows what that rounding costs) or Roland **VersaWorks** `.spot`. **Sheet library** holds the test sheet's patch colours (import and enable it before
+printing the sheet, so the patches go through the RIP's named-colour path). When a match is done, **Add to spot
+library** puts the result into your **Spot library** under the **Spot colour name** – exactly the name used in your
+artwork, since the RIP finds spot colours by name. The spot library collects colours across matches (rename, replace or
+remove them; it is kept in this browser). You can also type a colour in (or take the last measurement) and **Import
+library…** – a CxF, Adobe Color Book or VersaWorks file, e.g. one exported from your RIP – to update existing colours.
+CxF colours are read from their D50 / 2° L\*a\*b\* values, or computed from their reflectance spectra; colours with
+neither are skipped. **Download library** saves all of them as one file to import into the RIP. Other formats can be added from a sample library exported by
 that RIP.
 
 ### Other features
@@ -98,10 +104,10 @@ Open these pages in Chrome (on the live site, e.g. [sd-10.com/test/](https://sd-
 
 | Page | Checks |
 |---|---|
-| [`test/index.html`](https://sd-10.com/test/index.html) | 74 checks: command frames vs. the app's own (emulated) code, Lab and CMYK vs. the native libraries, ΔE2000 reference data, ICC v4 parsing, print-match model fitting/convergence for all four sheet types, PDF/PNG sheet structure, CxF3 structure, VersaWorks .spot output vs. a real VersaWorks export, a full session against the simulator |
+| [`test/index.html`](https://sd-10.com/test/index.html) | 80 checks: command frames vs. the app's own (emulated) code, Lab and CMYK vs. the native libraries, ΔE2000 reference data, ICC v4 parsing, print-match model fitting/convergence for all four sheet types, PDF/PNG sheet structure, CxF3 structure, Adobe Color Book bytes, library import (CxF incl. spectra, ACB, .spot), VersaWorks .spot output vs. a real VersaWorks export, a full session against the simulator |
 | [`test/ui-smoke.html`](https://sd-10.com/test/ui-smoke.html) | 34 checks driving the real UI against the simulator (calibrate, measure, compare, line scan, history sync, palettes, settings, custom ICC) |
 | [`test/mobile-check.html`](https://sd-10.com/test/mobile-check.html) | Layout at 375 px wide (no sideways scrolling) plus the compare/reference flows |
-| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 28 checks for Print match against the simulated device and printer: three rounds to within tolerance, spot colour sheets with averaged readings and CxF3 / VersaWorks libraries, RGB/PNG sheets |
+| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 37 checks for Print match against the simulated device and printer: three rounds to within tolerance, spot colour sheets with averaged readings, a spot library (add, import, type in) exported as CxF3 / Adobe Color Book / VersaWorks, RGB/PNG sheets |
 
 ## Project layout
 
@@ -116,7 +122,7 @@ js/mock.js          simulated SD-10 (demo mode and tests)
 js/color.js         spectrum → Lab, ΔE (76/94/2000), sRGB, LRV
 js/weights.js       CIE weighting tables from the app (12 illuminants × 2 observers)
 js/match.js         Print match: patch design, printer-response model, solver, PDF / PNG sheets
-js/rip-export.js    spot colour library files for RIPs (CxF3, VersaWorks .spot)
+js/rip-export.js    spot colour library files for RIPs (CxF3, Adobe Color Book, VersaWorks .spot)
 js/printer-sim.js   simulated CMYK printer (demo and tests)
 js/icc.js           ICC engine (lut8/lut16/lutBtoA) for Lab → CMYK; custom profile storage
 js/storage.js       history and preferences (localStorage)
