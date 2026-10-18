@@ -28,6 +28,13 @@
       w.addEventListener('unhandledrejection', (e) => errors.push(String(e.reason)));
       try { w.localStorage.clear(); } catch {}
       log($('logBody').classList.contains('hidden'), 'protocol log hidden by default');
+      $('btnConnectMenu').click();
+      const menuOpen = !$('connectMenu').classList.contains('hidden');
+      $('acceptAll').click();
+      const dotOn = !$('acceptAllDot').classList.contains('hidden') && frame.contentWindow.localStorage.getItem('sd10.acceptAll') === '1';
+      $('acceptAll').click();
+      d.body.click();
+      log(menuOpen && dotOn && $('connectMenu').classList.contains('hidden') && frame.contentWindow.localStorage.getItem('sd10.acceptAll') === '0', 'connect options menu: opens, switch remembered, closes on outside click');
       log(!$('btnDemo').classList.contains('hidden'), 'demo button shown with ?demo');
       log(!$('settingsPanel').open && d.getElementById('settingsPanel').contains($('settingsForm')), 'device settings are a collapsed sub-section of Device');
       await until(() => !$('btnDemo').disabled);

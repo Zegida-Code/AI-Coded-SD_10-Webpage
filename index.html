@@ -43,13 +43,30 @@
       </div>
       <span id="connPill" class="chip max-w-[45%] truncate bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300">● Disconnected</span>
       <div class="w-full sm:w-auto flex flex-wrap items-center gap-2">
-        <button id="btnConnect" class="btn btn-primary whitespace-nowrap flex-1 sm:flex-none"><span class="sm:hidden">Connect</span><span class="hidden sm:inline">Connect device</span></button>
+        <!-- Split button: Connect + options menu (device filter) -->
+        <div class="relative flex flex-1 sm:flex-none">
+          <button id="btnConnect" class="btn btn-primary whitespace-nowrap flex-1 !rounded-r-none"><span class="sm:hidden">Connect</span><span class="hidden sm:inline">Connect device</span></button>
+          <button id="btnConnectMenu" type="button" class="btn btn-primary !px-2 !rounded-l-none border-l border-indigo-400/40" aria-haspopup="true" aria-expanded="false" aria-controls="connectMenu" title="Connection options">
+            <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06Z" clip-rule="evenodd"/></svg>
+            <span id="acceptAllDot" class="hidden absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full bg-amber-400 ring-2 ring-white dark:ring-slate-900" title="Showing all Bluetooth devices"></span>
+          </button>
+          <div id="connectMenu" role="menu" class="hidden absolute left-0 sm:left-auto sm:right-0 top-full z-30 mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 shadow-xl">
+            <label class="flex items-start gap-3 cursor-pointer">
+              <span class="relative mt-0.5 inline-flex flex-none">
+                <input id="acceptAll" type="checkbox" role="switch" class="peer sr-only">
+                <span class="h-5 w-9 rounded-full bg-slate-300 dark:bg-slate-700 transition-colors peer-checked:bg-indigo-600 peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-500 peer-focus-visible:ring-offset-2 dark:peer-focus-visible:ring-offset-slate-900"></span>
+                <span class="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform peer-checked:translate-x-4"></span>
+              </span>
+              <span>
+                <span class="block text-sm font-medium">Show all Bluetooth devices</span>
+                <span class="block text-xs text-slate-500 mt-0.5">Only needed if your SD-10 doesn't appear in the device list.</span>
+              </span>
+            </label>
+          </div>
+        </div>
         <!-- Demo (simulated device) is hidden unless the page is opened with ?demo -->
         <button id="btnDemo" class="btn btn-ghost whitespace-nowrap flex-1 sm:flex-none hidden"><span class="sm:hidden">Demo</span><span class="hidden sm:inline">Demo (simulated)</span></button>
         <button id="btnDisconnect" class="btn btn-ghost whitespace-nowrap flex-1 sm:flex-none" disabled>Disconnect</button>
-        <label class="w-full sm:w-auto sm:order-first flex items-center gap-1 text-xs text-slate-500" title="Show every BLE device in the chooser (if the SD-10 does not appear)">
-          <input id="acceptAll" type="checkbox" class="rounded"> show all Bluetooth devices
-        </label>
       </div>
     </div>
     <div id="bleWarning" class="hidden bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-200 text-sm px-4 py-2 text-center">
@@ -263,18 +280,18 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-18.566cc6d-021809",
-      "./js/transport.js": "./js/transport.js?v=2026-10-18.566cc6d-021809",
-      "./js/mock.js": "./js/mock.js?v=2026-10-18.566cc6d-021809",
-      "./js/session.js": "./js/session.js?v=2026-10-18.566cc6d-021809",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-18.566cc6d-021809",
-      "./js/color.js": "./js/color.js?v=2026-10-18.566cc6d-021809",
-      "./js/weights.js": "./js/weights.js?v=2026-10-18.566cc6d-021809",
-      "./js/storage.js": "./js/storage.js?v=2026-10-18.566cc6d-021809",
-      "./js/icc.js": "./js/icc.js?v=2026-10-18.566cc6d-021809"
+      "./js/app.js": "./js/app.js?v=2026-10-18.c318e31-022434",
+      "./js/transport.js": "./js/transport.js?v=2026-10-18.c318e31-022434",
+      "./js/mock.js": "./js/mock.js?v=2026-10-18.c318e31-022434",
+      "./js/session.js": "./js/session.js?v=2026-10-18.c318e31-022434",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-18.c318e31-022434",
+      "./js/color.js": "./js/color.js?v=2026-10-18.c318e31-022434",
+      "./js/weights.js": "./js/weights.js?v=2026-10-18.c318e31-022434",
+      "./js/storage.js": "./js/storage.js?v=2026-10-18.c318e31-022434",
+      "./js/icc.js": "./js/icc.js?v=2026-10-18.c318e31-022434"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-18.566cc6d-021809"></script>
+  <script type="module" src="js/app.js?v=2026-10-18.c318e31-022434"></script>
 </body>
 </html>

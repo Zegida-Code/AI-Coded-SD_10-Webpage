@@ -175,6 +175,7 @@ function updateControls(busyLabel) {
   const on = !!state.session?.connected;
   const idle = on && !state.busy;
   $('btnConnect').disabled = on || state.busy;
+  $('btnConnectMenu').disabled = on || state.busy || !BleTransport.supported;
   $('btnDemo').disabled = on || state.busy;
   $('btnDisconnect').disabled = !on;
   for (const id of ['btnRefresh', 'btnCalibrate', 'btnReloadSettings', 'btnApply', 'btnReadGroups', 'btnSyncHistory', 'btnResyncAll', 'btnMeasure']) $(id).disabled = !idle;
@@ -678,9 +679,20 @@ function init() {
   refreshProfileList(p.cmykProfile);
   setMode(p.mode || 'spot');
 
-  if (!BleTransport.supported) { $('bleWarning').classList.remove('hidden'); $('btnConnect').disabled = true; }
+  if (!BleTransport.supported) { $('bleWarning').classList.remove('hidden'); $('btnConnect').disabled = true; $('btnConnectMenu').disabled = true; }
 
   $('btnConnect').onclick = () => connect(false);
+  // Connection options menu (device filter switch), remembered in this browser
+  const menu = $('connectMenu');
+  const setMenu = (open) => { menu.classList.toggle('hidden', !open); $('btnConnectMenu').setAttribute('aria-expanded', String(open)); };
+  $('btnConnectMenu').onclick = (e) => { e.stopPropagation(); setMenu(menu.classList.contains('hidden')); };
+  menu.onclick = (e) => e.stopPropagation();
+  document.addEventListener('click', () => setMenu(false));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setMenu(false); });
+  try { $('acceptAll').checked = localStorage.getItem('sd10.acceptAll') === '1'; } catch { /* ignore */ }
+  const syncDot = () => $('acceptAllDot').classList.toggle('hidden', !$('acceptAll').checked);
+  syncDot();
+  $('acceptAll').onchange = () => { syncDot(); try { localStorage.setItem('sd10.acceptAll', $('acceptAll').checked ? '1' : '0'); } catch { /* ignore */ } };
   $('btnDemo').onclick = () => connect(true);
   $('btnDisconnect').onclick = disconnect;
   $('btnRefresh').onclick = () => task('Refreshing', async () => { await state.session.getStatus(); await loadSettings(); });
