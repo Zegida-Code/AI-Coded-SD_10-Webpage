@@ -63,11 +63,12 @@ With the simulated printer in the demo, a first estimate 22 ΔE00 away reaches a
 many rounds a real printer needs depends on how far the profile's first estimate is from what it actually prints.
 If the reference is outside what the printer and paper can reproduce, the app says so and gives the closest values.
 
-**Spot library files:** in spot colour mode the app also exports spot colour libraries for the RIP – currently in
-Roland VersaWorks 6 `.spot` format. **Sheet library** holds the test sheet's patch colours (import and enable it
-before printing the sheet, so the patches go through the RIP's named-colour path); **Spot library** in the result holds
-the matched colour under the **Spot colour name** you entered. Other RIP formats can be added from a sample library
-exported by that RIP.
+**Spot library files:** in L\*a\*b\* modes the app also exports spot colour libraries for the RIP, in the format
+chosen under **Spot library format**: **CxF3** (`.cxf`, the ISO 17972-1 colour exchange standard that many RIPs import)
+or Roland **VersaWorks** `.spot`. **Sheet library** holds the test sheet's patch colours (import and enable it before
+printing the sheet, so the patches go through the RIP's named-colour path); **Spot library** in the result holds the
+matched colour under the **Spot colour name** you entered. Other formats can be added from a sample library exported by
+that RIP.
 
 ### Other features
 
@@ -97,10 +98,10 @@ Open these pages in Chrome (on the live site, e.g. [sd-10.com/test/](https://sd-
 
 | Page | Checks |
 |---|---|
-| [`test/index.html`](https://sd-10.com/test/index.html) | 74 checks: command frames vs. the app's own (emulated) code, Lab and CMYK vs. the native libraries, ΔE2000 reference data, ICC v4 parsing, print-match model fitting/convergence for all four sheet types, PDF/PNG sheet structure, VersaWorks .spot output vs. a real VersaWorks export, a full session against the simulator |
+| [`test/index.html`](https://sd-10.com/test/index.html) | 74 checks: command frames vs. the app's own (emulated) code, Lab and CMYK vs. the native libraries, ΔE2000 reference data, ICC v4 parsing, print-match model fitting/convergence for all four sheet types, PDF/PNG sheet structure, CxF3 structure, VersaWorks .spot output vs. a real VersaWorks export, a full session against the simulator |
 | [`test/ui-smoke.html`](https://sd-10.com/test/ui-smoke.html) | 34 checks driving the real UI against the simulator (calibrate, measure, compare, line scan, history sync, palettes, settings, custom ICC) |
 | [`test/mobile-check.html`](https://sd-10.com/test/mobile-check.html) | Layout at 375 px wide (no sideways scrolling) plus the compare/reference flows |
-| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 28 checks for Print match against the simulated device and printer: three rounds to within tolerance, spot colour sheets with averaged readings and VersaWorks files, RGB/PNG sheets |
+| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 28 checks for Print match against the simulated device and printer: three rounds to within tolerance, spot colour sheets with averaged readings and CxF3 / VersaWorks libraries, RGB/PNG sheets |
 
 ## Project layout
 
@@ -115,7 +116,7 @@ js/mock.js          simulated SD-10 (demo mode and tests)
 js/color.js         spectrum → Lab, ΔE (76/94/2000), sRGB, LRV
 js/weights.js       CIE weighting tables from the app (12 illuminants × 2 observers)
 js/match.js         Print match: patch design, printer-response model, solver, PDF / PNG sheets
-js/rip-export.js    spot colour library files for RIPs (VersaWorks .spot)
+js/rip-export.js    spot colour library files for RIPs (CxF3, VersaWorks .spot)
 js/printer-sim.js   simulated CMYK printer (demo and tests)
 js/icc.js           ICC engine (lut8/lut16/lutBtoA) for Lab → CMYK; custom profile storage
 js/storage.js       history and preferences (localStorage)

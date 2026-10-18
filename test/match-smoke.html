@@ -100,6 +100,8 @@
       await until(() => !state_busy());
       setSel('mMode', 'spot');
       setSel('mReads', '3');
+      log($('mRipFormat').value === 'cxf' && /CxF3/.test($('btnMatchRipSheet').textContent), 'CxF3 is the default spot library format');
+      setSel('mRipFormat', 'versaworks');
       $('mSpotName').value = 'Brand Red'; $('mSpotName').dispatchEvent(new Event('change'));
       await until(() => !$('btnMatchSheet').disabled);
       $('btnMatchSheet').click();
@@ -122,6 +124,11 @@
       $('btnMatchRipResult').click();
       const res = files.find((f) => f.name === 'Brand Red.spot');
       const resText = res ? await readFile(res) : '';
+      setSel('mRipFormat', 'cxf');
+      $('btnMatchRipResult').click();
+      const cxfFile = files.find((f) => f.name === 'Brand Red.cxf');
+      const cxfText = cxfFile ? await readFile(cxfFile) : '';
+      log(/<Object ObjectType="Standard" Name="Brand Red" Id="c1">/.test(cxfText) && /<ColorCIELab ColorSpecification="CSD50-2"><L>[\d.]+<\/L>/.test(cxfText), 'result .cxf file holds the matched colour under its name');
       log(/<Lab16SpotColor name="Brand Red" flags="0" redirectLibraryName="" redirectColorName=""><L VALUE="[\d.]+"\/><a VALUE="-?[\d.]+"\/><b VALUE="-?[\d.]+"\/><\/Lab16SpotColor>/.test(resText), 'result .spot file holds the matched colour under its name');
 
       // ---- RGB / raster sheet

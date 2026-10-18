@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <link rel="stylesheet" href="css/app.css?v=2026-10-18.64616bc-042836">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-18.82cab32-050529">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -304,8 +304,10 @@
         <div><label class="label" for="mTol">Tolerance (ΔE00)</label><input id="mTol" class="input" type="number" min="0.1" max="20" step="0.1"></div>
         <div><label class="label" for="mReads">Readings per patch</label>
           <select id="mReads" class="input"><option value="1">1</option><option value="2">2</option><option value="3">3 (textured media)</option><option value="5">5</option></select></div>
-        <div id="mSpotNameWrap" class="col-span-2 sm:col-span-1"><label class="label" for="mSpotName">Spot colour name</label>
-          <input id="mSpotName" class="input" type="text" maxlength="60" placeholder="e.g. Brand Red" autocomplete="off"></div>
+        <div id="mRipFormatWrap"><label class="label" for="mRipFormat">Spot library format</label>
+          <select id="mRipFormat" class="input"><option value="cxf">CxF3 (.cxf)</option><option value="versaworks">VersaWorks (.spot)</option></select></div>
+        <div id="mSpotNameWrap" class="col-span-2 sm:col-span-3"><label class="label" for="mSpotName">Spot colour name</label>
+          <input id="mSpotName" class="input" type="text" maxlength="60" placeholder="e.g. Brand Red – the name used in your artwork and the RIP" autocomplete="off"></div>
       </div>
       <p id="mModeHelp" class="text-xs text-slate-500"></p>
     </div>
@@ -319,7 +321,7 @@
       <div id="mSheetInfo" class="text-sm text-slate-500">Set a reference colour first.</div>
       <div id="mSheetActions" class="hidden flex flex-wrap gap-2">
         <button id="btnMatchPdf" class="btn btn-primary">Download PDF</button>
-        <button id="btnMatchRipSheet" class="btn btn-ghost hidden" title="Spot colour library with this sheet's patch colours, in VersaWorks .spot format – import it into the RIP before printing">Sheet library (VersaWorks .spot)</button>
+        <button id="btnMatchRipSheet" class="btn btn-ghost hidden" title="Spot colour library with this sheet's patch colours – import it into the RIP before printing">Sheet library</button>
         <button id="btnMatchRestart" class="btn btn-danger">Start over</button>
       </div>
       <div id="mPrintTips" class="rounded-lg bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-200 text-xs p-3 space-y-1"></div>
@@ -346,7 +348,7 @@
       <div class="flex flex-wrap gap-2">
         <button id="btnMatchRefine" class="btn btn-primary">Make refinement sheet</button>
         <button id="btnMatchCopy" class="btn btn-ghost">Copy values</button>
-        <button id="btnMatchRipResult" class="btn btn-ghost hidden" title="Spot colour library with the matched colour, named as entered above, in VersaWorks .spot format">Spot library (VersaWorks .spot)</button>
+        <button id="btnMatchRipResult" class="btn btn-ghost hidden" title="Spot colour library with the matched colour, named as entered above">Spot library</button>
       </div>
       <div id="mHistory"></div>
     </div>
@@ -357,21 +359,21 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-18.64616bc-042836",
-      "./js/transport.js": "./js/transport.js?v=2026-10-18.64616bc-042836",
-      "./js/mock.js": "./js/mock.js?v=2026-10-18.64616bc-042836",
-      "./js/session.js": "./js/session.js?v=2026-10-18.64616bc-042836",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-18.64616bc-042836",
-      "./js/color.js": "./js/color.js?v=2026-10-18.64616bc-042836",
-      "./js/weights.js": "./js/weights.js?v=2026-10-18.64616bc-042836",
-      "./js/storage.js": "./js/storage.js?v=2026-10-18.64616bc-042836",
-      "./js/icc.js": "./js/icc.js?v=2026-10-18.64616bc-042836",
-      "./js/match.js": "./js/match.js?v=2026-10-18.64616bc-042836",
-      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-18.64616bc-042836",
-      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-18.64616bc-042836"
+      "./js/app.js": "./js/app.js?v=2026-10-18.82cab32-050529",
+      "./js/transport.js": "./js/transport.js?v=2026-10-18.82cab32-050529",
+      "./js/mock.js": "./js/mock.js?v=2026-10-18.82cab32-050529",
+      "./js/session.js": "./js/session.js?v=2026-10-18.82cab32-050529",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-18.82cab32-050529",
+      "./js/color.js": "./js/color.js?v=2026-10-18.82cab32-050529",
+      "./js/weights.js": "./js/weights.js?v=2026-10-18.82cab32-050529",
+      "./js/storage.js": "./js/storage.js?v=2026-10-18.82cab32-050529",
+      "./js/icc.js": "./js/icc.js?v=2026-10-18.82cab32-050529",
+      "./js/match.js": "./js/match.js?v=2026-10-18.82cab32-050529",
+      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-18.82cab32-050529",
+      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-18.82cab32-050529"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-18.64616bc-042836"></script>
+  <script type="module" src="js/app.js?v=2026-10-18.82cab32-050529"></script>
 </body>
 </html>

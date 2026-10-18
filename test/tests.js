@@ -183,6 +183,20 @@ async function matchCheck() {
   const vwEsc = RIP_EXPORTS.versaworks.build({ library: 'A&B', colours: [{ name: 'Red "1" <x>', lab: [50.123, -3.456, 7.891] }] });
   check('VersaWorks export escapes names and rounds to 2 decimals', vwEsc.includes('name="A&amp;B"') && vwEsc.includes('name="Red &quot;1&quot; &lt;x&gt;"') && vwEsc.includes('<a VALUE="-3.46"/>') && new DOMParser().parseFromString(vwEsc, 'application/xml').querySelector('parsererror') === null);
 
+  // CxF3: well-formed, core namespace, one object per colour referencing a D50/2° colour specification
+  const cxf = RIP_EXPORTS.cxf.build({ library: 'Lib', description: 'x', created: new Date('2026-10-18T10:00:00Z'), colours: [{ name: 'Brand Red', lab: [45.678, 60.123, 30] }, { name: 'A&B', lab: [90, -1, 2] }] });
+  const cdoc = new DOMParser().parseFromString(cxf, 'application/xml');
+  const NS = 'http://colorexchangeformat.com/CxF3-core';
+  const objs = [...cdoc.getElementsByTagNameNS(NS, 'Object')];
+  const lab0 = objs[0] && ['L', 'A', 'B'].map((t) => objs[0].getElementsByTagNameNS(NS, t)[0]?.textContent);
+  const spec = cdoc.getElementsByTagNameNS(NS, 'ColorSpecification')[0];
+  const cxfOk = !cdoc.querySelector('parsererror') && cdoc.documentElement.localName === 'CxF' && cdoc.documentElement.namespaceURI === NS &&
+    objs.length === 2 && objs[0].getAttribute('Name') === 'Brand Red' && objs[1].getAttribute('Name') === 'A&B' && objs[0].getAttribute('ObjectType') === 'Standard' &&
+    lab0.join() === '45.68,60.12,30.00' && objs[0].getElementsByTagNameNS(NS, 'ColorCIELab')[0].getAttribute('ColorSpecification') === spec?.getAttribute('Id') &&
+    spec.getElementsByTagNameNS(NS, 'Illuminant')[0].textContent === 'D50' && spec.getElementsByTagNameNS(NS, 'Observer')[0].textContent === '2_Degree' &&
+    objs[0].getElementsByTagNameNS(NS, 'CreationDate')[0].textContent === '2026-10-18T10:00:00Z';
+  check('CxF3 export: well-formed core-namespace file, named objects with CIELab D50/2°', cxfOk, cxf.slice(0, 300));
+
   // readings: mean + spread
   const avg = averageReadings([[50, 10, 10], [52, 10, 10], [51, 13, 7]]);
   check('averageReadings: mean Lab and spread', Math.abs(avg.lab[0] - 51) < 1e-9 && Math.abs(avg.lab[1] - 11) < 1e-9 && avg.spread > 1 && averageReadings([[1, 2, 3]]).spread === 0);

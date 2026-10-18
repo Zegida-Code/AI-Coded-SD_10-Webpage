@@ -641,7 +641,7 @@ const MATCH_KEY = 'sd10.match';
 const match = (() => {
   let m = {};
   try { m = JSON.parse(localStorage.getItem(MATCH_KEY)) || {}; } catch { /* ignore */ }
-  return { target: null, mode: 'spot', paper: 'a4', mf: 1, tol: 1, reads: 1, spotName: '', jobId: null, refReads: [], rounds: [], next: 0, ...m };
+  return { target: null, mode: 'spot', paper: 'a4', mf: 1, tol: 1, reads: 1, spotName: '', ripFormat: 'cxf', jobId: null, refReads: [], rounds: [], next: 0, ...m };
 })();
 const saveMatch = () => { try { localStorage.setItem(MATCH_KEY, JSON.stringify(match)); } catch { /* ignore */ } };
 const currentRound = () => match.rounds[match.rounds.length - 1] ?? null;
@@ -692,7 +692,7 @@ function modeHelp(mode) {
 function printTips(mode) {
   const tips = ['<b>Print it exactly like the final job:</b> same printer, media, quality and colour settings, at 100% / actual size (not "fit to page"). Let the ink dry before scanning.',
     '<b>Transferred, cured or finished prints:</b> process the sheet exactly like production (pressing, curing, laminating …) and scan the finished product, not the raw print. On textured or uneven surfaces use 3 or more readings per patch.'];
-  if (mode === 'spot') tips.push('<b>Spot library:</b> if your RIP can import the sheet library (currently VersaWorks .spot format), import and enable it before printing, so the patches take the named-colour path. Otherwise unknown spot colours normally print from their L*a*b* alternate – check that the RIP does not substitute or reject them.');
+  if (mode === 'spot') tips.push('<b>Spot library:</b> if your RIP imports spot colour libraries (CxF3 is the common standard; VersaWorks uses .spot), import the sheet library and enable it before printing, so the patches take the named-colour path. Otherwise unknown spot colours normally print from their L*a*b* alternate – check that the RIP does not substitute or reject them.');
   if (mode === 'rgb') tips.push('<b>Substrate:</b> print on the same substrate colour, with the same underlayers or pre-treatment, as the final job.');
   return tips.map((t) => `<p>${t}</p>`).join('');
 }
@@ -723,6 +723,12 @@ function renderMatch() {
   $('mReads').value = match.reads;
   if (document.activeElement !== $('mSpotName')) $('mSpotName').value = match.spotName;
   $('mSpotNameWrap').classList.toggle('hidden', !isLabMode(match.mode));
+  $('mRipFormatWrap').classList.toggle('hidden', !isLabMode(match.mode));
+  if (!RIP_EXPORTS[match.ripFormat]) match.ripFormat = 'cxf';
+  $('mRipFormat').value = match.ripFormat;
+  const fmtLabel = ` (${RIP_EXPORTS[match.ripFormat].label})`;
+  $('btnMatchRipSheet').textContent = `Sheet library${fmtLabel}`;
+  $('btnMatchRipResult').textContent = `Spot library${fmtLabel}`;
   $('mModeHelp').innerHTML = modeHelp(match.mode);
   $('mPrintTips').innerHTML = printTips(match.mode);
   if (match.refReads.length) $('mStatusTarget').textContent = `reading ${match.refReads.length}/${match.reads} – measure another spot`;
@@ -890,16 +896,18 @@ async function downloadSheet() {
 const safeFileName = (s) => s.replace(/[\\/:*?"<>|]+/g, '_').trim() || 'spot';
 
 /** Spot colour library for the RIP: the current sheet's patch colours ('sheet') or the matched colour ('result'). */
-function downloadRipLibrary(what, rip = 'versaworks') {
+function downloadRipLibrary(what, rip = match.ripFormat) {
   const r = currentRound();
   const ex = RIP_EXPORTS[rip];
   if (!r || !ex) return;
   if (what === 'sheet') {
-    const text = ex.build({ library: `SD10 ${match.jobId} round ${r.round}`, colours: r.patches.map((p) => ({ name: p.name, lab: p.x })) });
+    const text = ex.build({ library: `SD10 ${match.jobId} round ${r.round}`, description: 'Print match test sheet patches, CIE L*a*b* D50/2°',
+      colours: r.patches.map((p) => ({ name: p.name, lab: p.x })) });
     downloadFile(text, ex.mime, `sd10-${match.jobId}-round${r.round}.${ex.ext}`);
   } else if (r.result) {
     const name = match.spotName.trim() || 'SD10 match';
-    downloadFile(ex.build({ library: 'SD-10 Print match', colours: [{ name, lab: r.result.x }] }), ex.mime, `${safeFileName(name)}.${ex.ext}`);
+    const description = `Matched to reference L*a*b* ${match.target.map((v) => v.toFixed(2)).join(' / ')} (D50/2°, M${match.mf}), predicted ΔE00 ${r.result.predictedDeltaE.toFixed(2)}`;
+    downloadFile(ex.build({ library: 'SD-10 Print match', description, colours: [{ name, lab: r.result.x }] }), ex.mime, `${safeFileName(name)}.${ex.ext}`);
   }
 }
 
@@ -984,6 +992,7 @@ function initMatch() {
   $('matchMf').onchange = () => { match.mf = +$('matchMf').value; saveMatch(); };
   $('mReads').onchange = () => { match.reads = Math.min(Math.max(+$('mReads').value || 1, 1), 9); match.refReads = []; saveMatch(); renderMatch(); };
   $('mSpotName').onchange = () => { match.spotName = $('mSpotName').value.trim(); saveMatch(); renderMatch(); };
+  $('mRipFormat').onchange = () => { match.ripFormat = $('mRipFormat').value; saveMatch(); renderMatch(); };
   $('btnMatchRipSheet').onclick = () => downloadRipLibrary('sheet');
   $('btnMatchRipResult').onclick = () => downloadRipLibrary('result');
   $('mTol').onchange = () => { match.tol = Math.min(Math.max(+$('mTol').value || 1, 0.1), 20); saveMatch(); renderMatch(); };
