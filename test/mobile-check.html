@@ -54,6 +54,17 @@
       $('btnMeasure').click();
       const cmpOk = await until(() => /PASS|FAIL/.test($('verdict').textContent) && !$('btnMeasure').disabled);
       lines.push(`${cmpOk ? 'PASS' : 'FAIL'} next measurement is compared (${$('verdict').textContent.replace(/\s+/g, ' ').trim()})`);
+      // Pick a different history row as reference: the sample on screen must be re-compared against it.
+      $('demoSample').value = 'Sky blue'; $('demoSample').dispatchEvent(new Event('change'));
+      $('btnMeasure').click();
+      await until(() => /PASS|FAIL/.test($('verdict').textContent) && !$('btnMeasure').disabled && d.querySelectorAll('#histBody tr').length === 3);
+      const sampleHex = $('swatch').title;
+      const before = $('verdict').textContent.replace(/\s+/g, ' ').trim();
+      d.querySelectorAll('#histBody tr')[1].querySelector('[data-act=ref]').click();   // previous sample becomes reference
+      const reOk = await until(() => /compared against it/.test($('toast').textContent));
+      const after = $('verdict').textContent.replace(/\s+/g, ' ').trim();
+      const refRow = d.querySelectorAll('#histBody tr')[1].textContent.includes('REF');
+      lines.push(`${reOk && $('swatch').title === sampleHex && after !== before && /PASS|FAIL/.test(after) && refRow ? 'PASS' : 'FAIL'} history "ref" re-compares the current sample (${before} -> ${after}, REF badge ${refRow})`);
       const res = frame.contentWindow.performance.getEntriesByType('resource').map((e) => e.name).filter((n) => /\/js\//.test(n));
       const versioned = res.length >= 8 && res.every((n) => /\?v=/.test(n));
       lines.push(`${versioned ? 'PASS' : 'FAIL'} all ${res.length} app modules loaded with ?v= cache-busting`);

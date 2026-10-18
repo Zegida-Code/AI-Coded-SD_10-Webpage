@@ -285,7 +285,8 @@ async function doSpot() {
   const lab = spectra.length > 1 ? medianLab(spectra.map((sp) => spectrumToLab(sp, p.lightSource, p.observer))) : null;
   const item = addHistory({ spectrum, labOverride: lab, mode: capturingReference ? 'reference' : compare ? 'compare' : 'spot', record: lastRec, readings: spectra.length });
   if (capturingReference) {
-    state.reference = { spectrum };
+    state.reference = { spectrum, id: item.id };
+    renderHistory();
     showResult({ spectrum, lab, item });
     toast('Reference captured – now measure the sample to compare against it.', 'ok');
     return;
@@ -322,11 +323,11 @@ function labFor(item, p = settingsFromUI()) {
   return spectrumToLab(item.spectrum, p.lightSource, p.observer);
 }
 
-function showResult({ spectrum, lab, strip }) {
+function showResult({ spectrum, lab, strip, item }) {
   const p = settingsFromUI();
   const d = describeSpectrum(spectrum, p.lightSource, p.observer);
   if (lab) { d.lab = lab; d.lch = labToLch(lab); }
-  state.last = { spectrum, lab: d.lab, d, strip };
+  state.last = { spectrum, lab: d.lab, d, strip, itemId: item?.id ?? null };
   $('resultArea').classList.remove('hidden');
   $('swatch').style.background = d.hex;
   $('swatch').title = d.hex;
@@ -464,7 +465,7 @@ function renderHistory() {
     const when = new Date(it.time);
     return `<tr class="border-t border-slate-100 dark:border-slate-800" data-id="${it.id}">
       <td><input type="checkbox" data-act="check" ${state.checked.has(it.id) ? 'checked' : ''} aria-label="select"></td>
-      <td class="py-1.5"><button data-act="show" class="flex items-center gap-2"><span class="h-6 w-6 rounded border border-slate-200 dark:border-slate-700" style="background:${hexc}"></span><span class="text-xs text-slate-500">${it.mode}${it.source === 'device' ? ' · device' : ''}</span></button></td>
+      <td class="py-1.5"><button data-act="show" class="flex items-center gap-2"><span class="h-6 w-6 rounded border border-slate-200 dark:border-slate-700" style="background:${hexc}"></span><span class="text-xs text-slate-500">${it.mode}${it.source === 'device' ? ' · device' : ''}</span>${state.reference?.id === it.id ? '<span class="chip bg-indigo-600 text-white !px-1.5 !py-0 text-[10px]" title="Current comparison reference">REF</span>' : ''}</button></td>
       <td class="font-mono tabular-nums">${fmt(lab[0])}</td><td class="font-mono tabular-nums">${fmt(lab[1])}</td><td class="font-mono tabular-nums">${fmt(lab[2])}</td>
       <td class="font-mono hidden sm:table-cell">${hexc}</td>
       <td class="text-xs text-slate-500 hidden md:table-cell">${when.toLocaleString()}</td>
@@ -482,20 +483,30 @@ function onHistoryClick(e) {
   if (!item) return;
   switch (btn.dataset.act) {
     case 'check': btn.checked ? state.checked.add(id) : state.checked.delete(id); updateControls(); break;
-    case 'show': showResult({ spectrum: item.spectrum, lab: labFor(item) }); break;
-    case 'ref': setReference(item.spectrum); break;
+    case 'show': showResult({ spectrum: item.spectrum, lab: labFor(item), item }); break;
+    case 'ref': setReference(item.spectrum, { id: item.id, compareCurrent: true }); break;
     case 'del':
       state.history = state.history.filter((h) => h.id !== id); state.checked.delete(id);
       historyStore.save(state.history); renderHistory(); break;
   }
 }
 
-/** Make this colour the comparison reference and switch to the Compare tab. */
-function setReference(spectrum) {
-  state.reference = { spectrum };
+/**
+ * Make this colour the comparison reference and switch to the Compare tab.
+ * compareCurrent: re-compare the sample currently on screen against the new reference (used from History).
+ */
+function setReference(spectrum, { id = null, compareCurrent = false } = {}) {
+  state.reference = { spectrum, id };
   setMode('compare');
-  showResult({ spectrum });
-  toast('Reference set – measure a sample to compare against it.', 'ok');
+  renderHistory();
+  const sample = compareCurrent && state.last && state.last.spectrum !== spectrum && state.last.itemId !== id ? state.last : null;
+  if (sample) {
+    showResult({ spectrum: sample.spectrum, strip: sample.strip, item: { id: sample.itemId } });
+    toast('Reference changed – the current sample is now compared against it.', 'ok');
+  } else {
+    showResult({ spectrum, item: id ? { id } : undefined });
+    toast('Reference set – measure a sample to compare against it.', 'ok');
+  }
 }
 
 function exportCsv() {
@@ -680,7 +691,7 @@ function init() {
   $('btnReadGroups').onclick = () => task('Reading palettes', readGroups);
   $('btnWriteGroup').onclick = writeGroup;
   $('groupList').onclick = (e) => { const b = e.target.closest('[data-delslot]'); if (b) deleteGroup(+b.dataset.delslot); };
-  $('btnSetRef').onclick = () => state.last && setReference(state.last.spectrum);
+  $('btnSetRef').onclick = () => state.last && setReference(state.last.spectrum, { id: state.last.itemId });
   $('btnCopyValues').onclick = copyValues;
   $('resultValues').onclick = (e) => {
     const b = e.target.closest('[data-copy]');
