@@ -181,22 +181,24 @@
         </div>
 
         <div id="resultArea" class="mt-5 hidden space-y-4">
-          <!-- swatches + verdict -->
-          <div class="flex flex-wrap items-center gap-4">
-            <div class="flex gap-2">
-              <figure class="m-0">
-                <div id="swatch" class="h-24 w-24 sm:h-28 sm:w-28 rounded-xl ring-1 ring-black/10 dark:ring-white/10 shadow-sm"></div>
-                <figcaption class="text-[11px] text-center text-slate-500 mt-1">Sample</figcaption>
-              </figure>
-              <figure id="refBox" class="m-0 hidden">
-                <div id="refSwatch" class="h-24 w-24 sm:h-28 sm:w-28 rounded-xl ring-1 ring-black/10 dark:ring-white/10 shadow-sm"></div>
-                <figcaption class="text-[11px] text-center text-slate-500 mt-1">Reference</figcaption>
-              </figure>
-            </div>
-            <div class="flex-1 min-w-[12rem] space-y-2">
-              <div id="verdict" class="hidden"></div>
+          <!-- swatches: full width, split 50/50 when a reference is shown -->
+          <div class="flex w-full gap-2">
+            <figure class="m-0 flex-1 min-w-0">
+              <div id="swatch" class="h-28 sm:h-36 w-full rounded-xl ring-1 ring-black/10 dark:ring-white/10 shadow-sm"></div>
+              <figcaption class="flex justify-between gap-2 text-[11px] text-slate-500 mt-1 px-0.5"><span>Sample</span><span id="swatchHex" class="font-mono"></span></figcaption>
+            </figure>
+            <figure id="refBox" class="m-0 flex-1 min-w-0 hidden">
+              <div id="refSwatch" class="h-28 sm:h-36 w-full rounded-xl ring-1 ring-black/10 dark:ring-white/10 shadow-sm"></div>
+              <figcaption class="flex justify-between gap-2 text-[11px] text-slate-500 mt-1 px-0.5"><span>Reference</span><span id="refHex" class="font-mono"></span></figcaption>
+            </figure>
+          </div>
+
+          <!-- verdict + conditions + actions -->
+          <div class="space-y-2">
+            <div id="verdict" class="hidden"></div>
+            <div class="flex flex-wrap items-center justify-between gap-2">
               <div id="conditions" class="flex flex-wrap gap-1.5"></div>
-              <div class="flex flex-wrap gap-2 pt-1">
+              <div class="flex flex-wrap gap-2">
                 <button id="btnSetRef" class="btn btn-ghost">Use as reference</button>
                 <button id="btnCopyValues" class="btn btn-ghost">Copy values</button>
               </div>
@@ -280,18 +282,18 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-18.c318e31-022434",
-      "./js/transport.js": "./js/transport.js?v=2026-10-18.c318e31-022434",
-      "./js/mock.js": "./js/mock.js?v=2026-10-18.c318e31-022434",
-      "./js/session.js": "./js/session.js?v=2026-10-18.c318e31-022434",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-18.c318e31-022434",
-      "./js/color.js": "./js/color.js?v=2026-10-18.c318e31-022434",
-      "./js/weights.js": "./js/weights.js?v=2026-10-18.c318e31-022434",
-      "./js/storage.js": "./js/storage.js?v=2026-10-18.c318e31-022434",
-      "./js/icc.js": "./js/icc.js?v=2026-10-18.c318e31-022434"
+      "./js/app.js": "./js/app.js?v=2026-10-18.3e6eeb8-023111",
+      "./js/transport.js": "./js/transport.js?v=2026-10-18.3e6eeb8-023111",
+      "./js/mock.js": "./js/mock.js?v=2026-10-18.3e6eeb8-023111",
+      "./js/session.js": "./js/session.js?v=2026-10-18.3e6eeb8-023111",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-18.3e6eeb8-023111",
+      "./js/color.js": "./js/color.js?v=2026-10-18.3e6eeb8-023111",
+      "./js/weights.js": "./js/weights.js?v=2026-10-18.3e6eeb8-023111",
+      "./js/storage.js": "./js/storage.js?v=2026-10-18.3e6eeb8-023111",
+      "./js/icc.js": "./js/icc.js?v=2026-10-18.3e6eeb8-023111"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-18.c318e31-022434"></script>
+  <script type="module" src="js/app.js?v=2026-10-18.3e6eeb8-023111"></script>
 </body>
 </html>

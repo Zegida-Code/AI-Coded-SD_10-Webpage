@@ -332,6 +332,7 @@ function showResult({ spectrum, lab, strip, item }) {
   $('resultArea').classList.remove('hidden');
   $('swatch').style.background = d.hex;
   $('swatch').title = d.hex;
+  $('swatchHex').textContent = d.hex;
 
   const ill = LIGHT_SOURCE_NAME[p.lightSource];
   const chip = (t) => `<span class="chip bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">${t}</span>`;
@@ -348,7 +349,10 @@ function showResult({ spectrum, lab, strip, item }) {
     const refLab = spectrumToLab(ref.spectrum, p.lightSource, p.observer);
     const dE = deltaE(refLab, d.lab, p.formula);
     const pass = dE <= p.threshold;
-    $('refSwatch').style.background = describeSpectrum(ref.spectrum).hex;
+    const refHex = describeSpectrum(ref.spectrum).hex;
+    $('refSwatch').style.background = refHex;
+    $('refSwatch').title = refHex;
+    $('refHex').textContent = refHex;
     verdict.className = `flex items-center gap-3 rounded-xl px-3 py-2 ${pass ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200' : 'bg-rose-50 text-rose-800 dark:bg-rose-950 dark:text-rose-200'}`;
     verdict.innerHTML = `<span class="rounded-md px-2 py-0.5 text-xs font-bold tracking-wide text-white ${pass ? 'bg-emerald-600' : 'bg-rose-600'}">${pass ? 'PASS' : 'FAIL'}</span>
       <span class="text-2xl font-semibold tabular-nums leading-none">${dE.toFixed(2)}</span>
