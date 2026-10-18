@@ -11,7 +11,7 @@ import { deltaE2000 } from './color.js';
 
 const LAB = { axes: ['L*', 'a*', 'b*'], min: [0, -127, -127], max: [100, 127, 127], step0: [5, 8, 8], minStep: [1, 1.5, 1.5], maxStep: [10, 16, 16], decimals: 2 };
 // spot: L*a*b* patches written as named spot colours (Separation, Lab alternate) – for RIPs with a named-colour
-// library. lab: plain CIE Lab objects. cmyk: DeviceCMYK numbers. rgb: an sRGB raster image (raster-only software, e.g. DTG).
+// library. lab: plain CIE Lab objects. cmyk: DeviceCMYK numbers. rgb: an sRGB raster image (software that only accepts images).
 export const MODES = {
   spot: LAB,
   lab: LAB,
@@ -181,7 +181,7 @@ const NOTES = {
   cmyk: (k) => [`Patch values are CMYK percentages (K fixed at ${k.toFixed(1)}%). Scan the patches in number order.`,
     'If your print dialog offers it, turn colour management off / preserve CMYK numbers - exactly as for the final job.'],
   rgb: ['Patch values are sRGB (0-255) in a 300 dpi image. Scan the patches in number order.',
-    'Use the same software, colour settings, garment and pre-treatment as the final job.'],
+    'Use the same software, colour settings, substrate and pre-treatment as the final job.'],
 };
 
 /** Sheet layout in PDF points (origin bottom-left): texts and 16 patch boxes, shared by the PDF and the PNG. */
@@ -198,7 +198,7 @@ function sheetLayout({ mode, patches, target, round, paper = 'a4', created = new
   const notes = mode === 'cmyk' ? NOTES.cmyk(kFixed) : NOTES[mode];
   notes.forEach((n, i) => { y -= i ? 11 : 13; t(margin, y, i ? 8 : 9, n); });
   y -= 11;
-  t(margin, y, 8, 'Print at 100% / actual size. Let the ink dry - on fabric, press / cure like production and scan the finished product.');
+  t(margin, y, 8, 'Print at 100% / actual size. Let the ink dry - transferred or cured prints: process like production, then scan.');
   y -= 18;
 
   const cols = 4, cell = (W - 2 * margin) / cols;
@@ -266,7 +266,7 @@ export function buildSheetPdf(opts) {
   return Uint8Array.from(pdf, (c) => c.charCodeAt(0) & 0xff);
 }
 
-// ---------------------------------------------------------------- PNG sheet (raster-only workflows, e.g. DTG)
+// ---------------------------------------------------------------- PNG sheet (raster-only workflows)
 const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
   let c = n;
   for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;

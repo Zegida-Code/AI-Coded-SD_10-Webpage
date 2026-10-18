@@ -682,18 +682,18 @@ const newJobId = () => [...crypto.getRandomValues(new Uint8Array(4))].map((b) =>
 function modeHelp(mode) {
   const profile = escapeHtml(settingsFromUI().cmykProfile.replace(CUSTOM_PREFIX, ''));
   return {
-    spot: 'For RIPs that colour named spot colours from an L*a*b* library (e.g. VersaWorks, Digital Factory, Edge Print). Every patch is a uniquely named spot colour with its L*a*b* value as the alternate, so the RIP handles the sheet like the spot colours in your artwork. Enter the result as the L*a*b* value of your named colour in the RIP.',
+    spot: 'For RIPs and workflows that colour named spot colours from an L*a*b* library. Every patch is a uniquely named spot colour with its L*a*b* value as the alternate, so the RIP handles the sheet like the spot colours in your artwork. Enter the result as the L*a*b* value of your named colour in the RIP.',
     lab: 'Patches are plain CIE L*a*b* objects. This only matches a spot colour workflow if the RIP converts Lab objects with the same profile and rendering intent as named colours – otherwise use spot colours.',
     cmyk: `For documents that send CMYK numbers to the printer. The starting values come from the CMYK profile selected in the Console (${profile}); K is kept fixed.`,
-    rgb: 'For raster-only software (e.g. DTG). The sheet is a 300 dpi sRGB PNG and the result is an sRGB value / hex for your artwork – keep the artwork in sRGB like the sheet.',
+    rgb: 'For software that only accepts raster images. The sheet is a 300 dpi sRGB PNG and the result is an sRGB value / hex for your artwork – keep the artwork in sRGB like the sheet.',
   }[mode] + ' Colours are measured at D50 / 2°.';
 }
 
 function printTips(mode) {
   const tips = ['<b>Print it exactly like the final job:</b> same printer, media, quality and colour settings, at 100% / actual size (not "fit to page"). Let the ink dry before scanning.',
-    '<b>DTF, sublimation, DTG:</b> press / cure the sheet exactly like production and scan the finished product, not the print. On fabric use 3 or more readings per patch.'];
-  if (mode === 'spot') tips.push('<b>VersaWorks:</b> import this sheet’s .spot library and enable it before printing, so the patches take the named-colour path. <b>Other RIPs:</b> unknown spot colours normally print from their L*a*b* alternate – check that the RIP does not substitute or reject them.');
-  if (mode === 'rgb') tips.push('<b>DTG:</b> print on the garment colour (and with the white underbase / pre-treatment) you will use for the job.');
+    '<b>Transferred, cured or finished prints:</b> process the sheet exactly like production (pressing, curing, laminating …) and scan the finished product, not the raw print. On textured or uneven surfaces use 3 or more readings per patch.'];
+  if (mode === 'spot') tips.push('<b>Spot library:</b> if your RIP can import the sheet library (currently VersaWorks .spot format), import and enable it before printing, so the patches take the named-colour path. Otherwise unknown spot colours normally print from their L*a*b* alternate – check that the RIP does not substitute or reject them.');
+  if (mode === 'rgb') tips.push('<b>Substrate:</b> print on the same substrate colour, with the same underlayers or pre-treatment, as the final job.');
   return tips.map((t) => `<p>${t}</p>`).join('');
 }
 

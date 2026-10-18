@@ -45,15 +45,15 @@ with downloaded sheets and your RIP software, so phones only show the Console.
 
    | Sheet type | For | You get |
    |---|---|---|
-   | **Spot colours (RIP, L\*a\*b\*)** | RIPs that colour named spot colours from an L\*a\*b\* library (VersaWorks, Digital Factory, Edge Print …) | PDF where every patch is a uniquely named spot colour with its L\*a\*b\* as the alternate; the result is the L\*a\*b\* to enter for your named colour |
+   | **Spot colours (RIP, L\*a\*b\*)** | RIPs and workflows that colour named spot colours from an L\*a\*b\* library | PDF where every patch is a uniquely named spot colour with its L\*a\*b\* as the alternate; the result is the L\*a\*b\* to enter for your named colour |
    | **L\*a\*b\* objects** | workflows that print Lab colours directly | PDF with CIE Lab (D50) patches |
    | **CMYK numbers** | documents that send CMYK to the printer (K is kept fixed; first estimate from the selected CMYK profile) | PDF with CMYK patches |
-   | **RGB image (DTG / raster)** | raster-only software such as DTG | 300 dpi sRGB PNG; the result is an RGB / hex value for your artwork |
+   | **RGB image (raster workflows)** | software that only accepts raster images | 300 dpi sRGB PNG; the result is an RGB / hex value for your artwork |
 
 3. **Print** it exactly like the final job – same printer, media, quality and colour settings, at 100% – and scan
-   the patches in number order (the SD-10's button works too; tap a patch to re-measure it). For DTF, sublimation and
-   DTG, press / cure the sheet like production and scan the finished product. On fabric set **Readings per patch** to
-   3 or more: each patch is then the average of several readings taken at different spots (a **!** marks patches
+   the patches in number order (the SD-10's button works too; tap a patch to re-measure it). If the print is
+   transferred, cured or finished (pressing, curing, laminating …), process the sheet the same way and scan the finished
+   product. On textured or uneven surfaces set **Readings per patch** to 3 or more: each patch is then the average of several readings taken at different spots (a **!** marks patches
    whose readings disagree by more than 1.5 ΔE00).
 4. **Result** – the app models how your printer responds around the colour and calculates the values that should
    print closest to the reference, with the predicted ΔE00. **Make refinement sheet** prints a finer sheet centred on
@@ -63,10 +63,11 @@ With the simulated printer in the demo, a first estimate 22 ΔE00 away reaches a
 many rounds a real printer needs depends on how far the profile's first estimate is from what it actually prints.
 If the reference is outside what the printer and paper can reproduce, the app says so and gives the closest values.
 
-**VersaWorks 6:** in spot colour mode the app also exports `.spot` libraries – **VersaWorks library (.spot)** holds the
-test sheet's patch colours (import and enable it before printing the sheet, so the patches go through the named-colour
-path), and **VersaWorks spot (.spot)** in the result holds the matched colour under the **Spot colour name** you
-entered, ready to import. Library exports for other RIPs can be added from a sample file exported by that RIP.
+**Spot library files:** in spot colour mode the app also exports spot colour libraries for the RIP – currently in
+Roland VersaWorks 6 `.spot` format. **Sheet library** holds the test sheet's patch colours (import and enable it
+before printing the sheet, so the patches go through the RIP's named-colour path); **Spot library** in the result holds
+the matched colour under the **Spot colour name** you entered. Other RIP formats can be added from a sample library
+exported by that RIP.
 
 ### Other features
 

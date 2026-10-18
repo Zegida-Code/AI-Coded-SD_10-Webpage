@@ -100,7 +100,7 @@
       await until(() => !state_busy());
       setSel('mMode', 'spot');
       setSel('mReads', '3');
-      $('mSpotName').value = 'RVW-PR22J'; $('mSpotName').dispatchEvent(new Event('change'));
+      $('mSpotName').value = 'Brand Red'; $('mSpotName').dispatchEvent(new Event('change'));
       await until(() => !$('btnMatchSheet').disabled);
       $('btnMatchSheet').click();
       await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 16 && /round 1/.test($('mRoundLabel').textContent));
@@ -118,11 +118,11 @@
       log($('mProgress').textContent.startsWith('5 /'), `15 readings -> 5 patches averaged (${$('mProgress').textContent})`);
       $('btnMatchAnalyse').click();
       await until(() => !$('mResultCard').classList.contains('hidden'));
-      log(/named colour RVW-PR22J/.test($('mResult').textContent) && !$('btnMatchRipResult').classList.contains('hidden'), 'spot result names the colour and offers a VersaWorks spot file');
+      log(/named colour Brand Red/.test($('mResult').textContent) && !$('btnMatchRipResult').classList.contains('hidden'), 'spot result names the colour and offers a VersaWorks spot file');
       $('btnMatchRipResult').click();
-      const res = files.find((f) => f.name === 'RVW-PR22J.spot');
+      const res = files.find((f) => f.name === 'Brand Red.spot');
       const resText = res ? await readFile(res) : '';
-      log(/<Lab16SpotColor name="RVW-PR22J" flags="0" redirectLibraryName="" redirectColorName=""><L VALUE="[\d.]+"\/><a VALUE="-?[\d.]+"\/><b VALUE="-?[\d.]+"\/><\/Lab16SpotColor>/.test(resText), 'result .spot file holds the matched colour under its name');
+      log(/<Lab16SpotColor name="Brand Red" flags="0" redirectLibraryName="" redirectColorName=""><L VALUE="[\d.]+"\/><a VALUE="-?[\d.]+"\/><b VALUE="-?[\d.]+"\/><\/Lab16SpotColor>/.test(resText), 'result .spot file holds the matched colour under its name');
 
       // ---- RGB / raster sheet
       setSel('mMode', 'rgb');
