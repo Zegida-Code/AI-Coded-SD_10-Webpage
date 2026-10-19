@@ -33,48 +33,65 @@ The demo ([sd-10.com/?demo](https://sd-10.com/?demo)) works in every modern brow
 4. **Read the result** – sample/reference swatches, L\*a\*b\*, LCh, HEX/RGB, CMYK, LRV and the spectral curve.
    **Copy values** copies everything as text.
 
-### Print match (matching a colour on your printer)
+### Print match (matching colours on your printer)
 
 Open **Print match** in the header (or [sd-10.com/#match](https://sd-10.com/#match)). It finds the values to put in your
-document so your printer reproduces a reference colour. It needs a computer or tablet (768 px or wider) – it works
+document so your printer reproduces reference colours. It needs a computer or tablet (768 px or wider) – it works
 with downloaded sheets and your RIP software, so phones only show the Console.
 
-1. **Reference** – scan the colour to match (or use the last measurement, or type L\*a\*b\*).
-2. **Test sheet** – pick the sheet type that matches how the colour reaches your printer and download it:
-   16 patches around a first estimate.
+1. **Reference colours** – scan the colour to match (or use the last measurement, or type L\*a\*b\*) and give it the
+   name it has in your artwork. **+ Add colour** matches several colours at once: they share every test sheet, and each
+   colour keeps its own model and rounds.
+2. **Test sheet** – pick the sheet type that matches how the colour reaches your printer and download it. Each colour
+   gets its own file (named after the colour and sheet), with 16 patches around a first estimate – or 8 with
+   **Patches per colour: 8** to save media.
 
    | Sheet type | For | You get |
    |---|---|---|
    | **Spot colours (RIP, L\*a\*b\*)** | RIPs and workflows that colour named spot colours from an L\*a\*b\* library | PDF where every patch is a uniquely named spot colour with its L\*a\*b\* as the alternate; the result is the L\*a\*b\* to enter for your named colour |
    | **L\*a\*b\* objects** | workflows that print Lab colours directly | PDF with CIE Lab (D50) patches |
    | **CMYK numbers** | documents that send CMYK to the printer (K is kept fixed; first estimate from the selected CMYK profile) | PDF with CMYK patches |
-   | **RGB image (raster workflows)** | software that only accepts raster images | 300 dpi sRGB PNG; the result is an RGB / hex value for your artwork |
+   | **RGB image (raster workflows)** | software that only accepts raster images | sRGB PNG (300 dpi); the result is an RGB / hex value for your artwork |
 
+   **Media** is A4, Letter, A3, Tabloid or a custom width × height in mm, and **Patch size** is 10–30 mm. From 20 mm the
+   values (and spot names) are printed under each patch, smaller patches only carry their number. Patches that do not
+   fit on one page continue on further pages. Patches must cover the SD-10's whole measuring area – if readings of
+   one patch jump around, use larger patches.
 3. **Print** it exactly like the final job – same printer, media, quality and colour settings, at 100% – and scan
    the patches in number order (the SD-10's button works too; tap a patch to re-measure it). If the print is
    transferred, cured or finished (pressing, curing, laminating …), process the sheet the same way and scan the finished
-   product. On textured or uneven surfaces set **Readings per patch** to 3 or more: each patch is then the average of several readings taken at different spots (a **!** marks patches
-   whose readings disagree by more than 1.5 ΔE00).
-4. **Result** – the app models how your printer responds around the colour and calculates the values that should
-   print closest to the reference, with the predicted ΔE00. **Make refinement sheet** prints a finer sheet centred on
-   that answer; its centre patch verifies it. It reports **Done** once the values print within your tolerance.
+   product. On textured or uneven surfaces set **Readings per patch** to 3 or more: each patch is then the average of
+   several readings taken at different spots (a **!** marks patches whose readings disagree by more than 1.5 ΔE00).
+4. **Results** – for each colour, the app models how your printer responds around it and calculates the values that
+   should print closest to the reference, with the predicted ΔE00. **Make next sheet** prints a finer sheet centred on
+   those answers; its centre patches verify them. A colour reports **Done** once its values print within your
+   tolerance – **Accept** it to leave it off the next sheets.
 
-With the simulated printer in the demo, a first estimate 22 ΔE00 away reaches about 0.2 ΔE00 in three rounds. How
-many rounds a real printer needs depends on how far the profile's first estimate is from what it actually prints.
-If the reference is outside what the printer and paper can reproduce, the app says so and gives the closest values.
+Each round's move is limited to the range the sheet's measurements can be trusted for, and the app never recommends
+values predicted to print worse than a patch you already measured. If a reference is outside what the printer and
+media can reproduce, it says so and gives the closest values instead of chasing it. With the simulated printer in the
+demo, a first estimate 22 ΔE00 away reaches about 0.2 ΔE00 in three to four rounds; a real RIP's first estimate is
+usually much closer.
 
 **Spot library files:** in L\*a\*b\* modes the app also exports spot colour libraries for the RIP, in the format
-chosen under **Spot library format**: **CxF3** (`.cxf`, the ISO 17972-1 colour exchange standard that many RIPs import),
-**Adobe Color Book** (`.acb`, read by Photoshop and RIPs that import Adobe colour books – it stores L\* in steps of 0.4
-and a\*/b\* as whole numbers, and the spot library shows what that rounding costs) or Roland **VersaWorks** `.spot`. **Sheet library** holds the test sheet's patch colours (import and enable it before
-printing the sheet, so the patches go through the RIP's named-colour path). When a match is done, **Add to spot
-library** puts the result into your **Spot library** under the **Spot colour name** – exactly the name used in your
-artwork, since the RIP finds spot colours by name. The spot library collects colours across matches (rename, replace or
-remove them; it is kept in this browser). You can also type a colour in (or take the last measurement) and **Import
-library…** – a CxF, Adobe Color Book or VersaWorks file, e.g. one exported from your RIP – to update existing colours.
-CxF colours are read from their D50 / 2° L\*a\*b\* values, or computed from their reflectance spectra; colours with
-neither are skipped. **Download library** saves all of them as one file to import into the RIP. Other formats can be added from a sample library exported by
-that RIP.
+chosen under **Spot library format**:
+
+| Format | Notes |
+|---|---|
+| **CxF3** (`.cxf`) | the ISO 17972-1 colour exchange standard that many RIPs import |
+| **Adobe Color Book** (`.acb`) | read by Photoshop and RIPs that import Adobe colour books; stores L\* in steps of 0.4 and a\*/b\* as whole numbers (the spot library shows what that rounding costs) |
+| **Epson Edge Print** (`.epcc`) | Edge Print colour collection, values with one decimal |
+| **Roland VersaWorks** (`.spot`) | VersaWorks 6 spot colour library (it imports switched off – enable it in the library list) |
+
+**Sheet library** holds the test sheet's patch colours (import and enable it before printing the sheet, so the patches
+go through the RIP's named-colour path). When a match is done, **Add to spot library** puts the result into your
+**Spot library** under the colour's name – exactly the name used in your artwork, since the RIP finds spot colours by
+name. The spot library collects colours across matches (rename, replace or remove them; it is kept in this browser).
+You can also type a colour in (or take the last measurement) and **Import library…** – any of the formats above, e.g.
+one exported from your RIP – to update existing colours. CxF colours are read from their D50 / 2° L\*a\*b\* values, or
+computed from their reflectance spectra; colours without L\*a\*b\* (e.g. CMYK entries) are skipped. **Download
+library** saves all of them as one file to import into the RIP. Other formats can be added from a sample library
+exported by that RIP.
 
 ### Other features
 
@@ -104,10 +121,10 @@ Open these pages in Chrome (on the live site, e.g. [sd-10.com/test/](https://sd-
 
 | Page | Checks |
 |---|---|
-| [`test/index.html`](https://sd-10.com/test/index.html) | 80 checks: command frames vs. the app's own (emulated) code, Lab and CMYK vs. the native libraries, ΔE2000 reference data, ICC v4 parsing, print-match model fitting/convergence for all four sheet types, PDF/PNG sheet structure, CxF3 structure, Adobe Color Book bytes, library import (CxF incl. spectra, ACB, .spot), VersaWorks .spot output vs. a real VersaWorks export, a full session against the simulator |
+| [`test/index.html`](https://sd-10.com/test/index.html) | 88 checks: command frames vs. the app's own (emulated) code, Lab and CMYK vs. the native libraries, ΔE2000 reference data, ICC v4 parsing, print-match model fitting/convergence for all four sheet types, PDF/PNG sheet structure, CxF3 structure, Adobe Color Book bytes, Edge Print .epcc vs. a real Edge Print export, compact design, multi-page layout, library import (CxF incl. spectra, ACB, .epcc, .spot), VersaWorks .spot output vs. a real VersaWorks export, a full session against the simulator |
 | [`test/ui-smoke.html`](https://sd-10.com/test/ui-smoke.html) | 34 checks driving the real UI against the simulator (calibrate, measure, compare, line scan, history sync, palettes, settings, custom ICC) |
 | [`test/mobile-check.html`](https://sd-10.com/test/mobile-check.html) | Layout at 375 px wide (no sideways scrolling) plus the compare/reference flows |
-| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 37 checks for Print match against the simulated device and printer: three rounds to within tolerance, spot colour sheets with averaged readings, a spot library (add, import, type in) exported as CxF3 / Adobe Color Book / VersaWorks, RGB/PNG sheets |
+| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 40 checks for Print match against the simulated device and printer: rounds to within tolerance, several colours on custom media (one PDF per colour, accepting a colour), spot colour sheets with averaged readings, a spot library (add, import, type in) exported as CxF3 / Adobe Color Book / VersaWorks, RGB/PNG sheets |
 
 ## Project layout
 
@@ -122,7 +139,7 @@ js/mock.js          simulated SD-10 (demo mode and tests)
 js/color.js         spectrum → Lab, ΔE (76/94/2000), sRGB, LRV
 js/weights.js       CIE weighting tables from the app (12 illuminants × 2 observers)
 js/match.js         Print match: patch design, printer-response model, solver, PDF / PNG sheets
-js/rip-export.js    spot colour library files for RIPs (CxF3, Adobe Color Book, VersaWorks .spot)
+js/rip-export.js    spot colour library files for RIPs (CxF3, Adobe Color Book, Edge Print, VersaWorks): export and import
 js/printer-sim.js   simulated CMYK printer (demo and tests)
 js/icc.js           ICC engine (lut8/lut16/lutBtoA) for Lab → CMYK; custom profile storage
 js/storage.js       history and preferences (localStorage)

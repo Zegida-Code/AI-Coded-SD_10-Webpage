@@ -37,11 +37,11 @@
       const setSel = (id, v) => { $(id).value = v; $(id).dispatchEvent(new Event('change')); };
 
       log(!$('viewMatch').classList.contains('hidden') && $('viewConsole').classList.contains('hidden'), '#match opens the Print match view');
-      log($('mMode').value === 'spot' && !$('mSpotNameWrap').classList.contains('hidden'), 'spot colour sheets are the default, with a spot name field');
+      log($('mMode').value === 'spot' && $('mDesign').value === 'full' && $('mPaper').value === 'a4' && d.querySelectorAll('#mColourList li').length === 1, 'defaults: spot colour sheets, 16 patches, A4, one colour');
       const ids = [...d.querySelectorAll('[id]')].map((e) => e.id);
       log(ids.length === new Set(ids).size && $('matchMf').value === '1', 'element ids are unique; match M-factor shows the job default (M1)');
       setSel('mMode', 'cmyk');
-      log($('mSpotNameWrap').classList.contains('hidden') && /CMYK profile/.test($('mModeHelp').textContent), 'CMYK mode hides the spot name and explains the profile');
+      log($('mRipFormatWrap').classList.contains('hidden') && /CMYK profile/.test($('mModeHelp').textContent), 'CMYK mode hides the library format and explains the profile');
       $('btnConnect').click();
       await until(() => /simulated/.test($('connPill').textContent) && !$('btnMatchTarget').disabled);
       $('demoShutter').click(); await sleep(200);
@@ -74,27 +74,66 @@
       log(Number.isFinite(centre1), `round 1 centre patch (profile guess) ΔE00 ${centre1}`);
 
       $('btnMatchRefine').click();
-      log(await until(() => /round 2/.test($('mRoundLabel').textContent) && $('mProgress').textContent.startsWith('0 /')), 'refinement sheet (round 2) created');
+      log(await until(() => /sheet 2/.test($('mRoundLabel').textContent) && $('mProgress').textContent.startsWith('0 /')), 'refinement sheet (round 2) created');
       log(await scanAll(2), 'round 2 scanned -> result shown');
       const r2 = $('mResult').textContent.replace(/\s+/g, ' ');
       const centre2 = parseFloat(r2.match(/Centre patch\s*ΔE00 ([\d.]+)/)?.[1]);
       log(centre2 < centre1, `round 2 centre patch (round-1 answer) ΔE00 ${centre2} – improved`);
       log(/rough estimate/.test(r1) || /EXPECTED MATCH/.test(r1), 'round 1 flags an extrapolated answer as a rough estimate');
-      $('btnMatchRefine').click();
-      await until(() => /round 3/.test($('mRoundLabel').textContent) && $('mProgress').textContent.startsWith('0 /'));
-      log(await scanAll(3), 'round 3 scanned -> result shown');
-      const r3 = $('mResult').textContent.replace(/\s+/g, ' ');
-      const centre3 = parseFloat(r3.match(/Centre patch\s*ΔE00 ([\d.]+)/)?.[1]);
-      log(centre3 <= 1, `round 3 centre patch (round-2 answer) ΔE00 ${centre3} – within tolerance 1`);
-      log(/Done\./.test(r3), 'shows "Done" once the previous values print within tolerance');
-      log(d.querySelectorAll('#mHistory tbody tr').length === 3, 'round history lists 3 rounds');
+      // refine until the previous round's values print within tolerance (the simulated printer's first guess is
+      // ~22 ΔE00 off, and each round's move is capped, so this takes 3–4 rounds)
+      let round = 2, rN = r2, centreN = centre2;
+      while (!/Done\./.test(rN) && round < 5) {
+        round++;
+        $('btnMatchRefine').click();
+        await until(() => new RegExp(`sheet ${round}`).test($('mRoundLabel').textContent) && $('mProgress').textContent.startsWith('0 /'));
+        await scanAll(round);
+        rN = $('mResult').textContent.replace(/\s+/g, ' ');
+        centreN = parseFloat(rN.match(/Centre patch\s*ΔE00 ([\d.]+)/)?.[1]);
+      }
+      log(round <= 4 && centreN <= 1, `round ${round} centre patch (round-${round - 1} answer) ΔE00 ${centreN} – within tolerance 1 by round 4`);
+      log(/Done\./.test(rN), 'shows "Done" once the previous values print within tolerance');
+      log(d.querySelectorAll('#mResult tbody tr').length === round, `round history lists ${round} rounds`);
 
       // device button measures a patch in this view
       $('btnMatchRefine').click();
-      await until(() => /round 4/.test($('mRoundLabel').textContent));
+      await until(() => new RegExp(`sheet ${round + 1}`).test($('mRoundLabel').textContent));
       w.document.querySelector('[data-view=match]').click();
       $('demoButton').click();
       log(await until(() => $('mProgress').textContent.startsWith('1 /')), 'SD-10 button measures the next patch');
+
+      // ---- several colours on one sheet: compact 8-patch design, custom media, one PDF per colour, accept one
+      await until(() => !state_busy());
+      setSel('mMode', 'lab'); setSel('mDesign', 'compact'); setSel('mPaper', 'custom'); setSel('mPatchMm', '15');
+      $('mMediaW').value = '150'; $('mMediaW').dispatchEvent(new Event('change'));
+      $('mMediaH').value = '200'; $('mMediaH').dispatchEvent(new Event('change'));
+      $('btnColourAdd').click();
+      $('mSpotName').value = 'Second'; $('mSpotName').dispatchEvent(new Event('change'));
+      const t2 = spectrumToLab(printSpectrum([60, 10, 20, 0]), 0, 2);
+      [['mL', 0], ['mA', 1], ['mB', 2]].forEach(([id, i]) => { $(id).value = t2[i].toFixed(2); });
+      $('mB').dispatchEvent(new Event('change'));
+      log(d.querySelectorAll('#mColourList li').length === 2 && !$('mCustomWrap').classList.contains('hidden'), 'a second colour can be added; custom media size shown');
+      await until(() => !$('btnMatchSheet').disabled);
+      $('btnMatchSheet').click();
+      await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 16 && /sheet 1/.test($('mRoundLabel').textContent));
+      const nFiles = files.length;
+      $('btnMatchPdf').click();
+      const colourPdfs = files.slice(nFiles).filter((f) => f.name.endsWith('.pdf'));
+      const pdf1 = colourPdfs[0] ? await readFile(colourPdfs[0]) : '';
+      log(colourPdfs.length === 2 && /MediaBox \[0 0 425\.20 566\.93\]/.test(pdf1) && colourPdfs[1].name === 'Second - sheet 1.pdf', `2 colours × 8 patches, one PDF per colour on 150 × 200 mm (${colourPdfs.map((f) => f.name).join(', ')})`);
+      for (let i = 0; i < 16; i++) {
+        await until(() => !$('btnMatchMeasure').disabled);
+        $('btnMatchMeasure').click();
+        await until(() => $('mProgress').textContent.startsWith(`${i + 1} /`));
+      }
+      await until(() => d.querySelectorAll('#mResult [data-res]').length === 2);
+      log(d.querySelectorAll('#mResult [data-res]').length === 2, 'each colour gets its own result');
+      d.querySelector('#mResult [data-res] [data-res-act=accept]').click();
+      $('btnMatchRefine').click();
+      await until(() => /sheet 2/.test($('mRoundLabel').textContent));
+      log(d.querySelectorAll('#mPatchGrid [data-patch]').length === 8 && /Second/.test($('mSheetInfo').textContent) && /accepted/.test($('mColourList').textContent), 'an accepted colour is left off the next sheet');
+      d.querySelectorAll('#mColourList [data-colour-act=remove]')[1].click();
+      setSel('mDesign', 'full'); setSel('mPaper', 'a4'); setSel('mPatchMm', '20');
 
       // ---- spot colour sheet, 3 readings per patch, VersaWorks libraries
       await until(() => !state_busy());
@@ -105,14 +144,14 @@
       $('mSpotName').value = 'Brand Red'; $('mSpotName').dispatchEvent(new Event('change'));
       await until(() => !$('btnMatchSheet').disabled);
       $('btnMatchSheet').click();
-      await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 16 && /round 1/.test($('mRoundLabel').textContent));
+      await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 16 && /sheet 1/.test($('mRoundLabel').textContent));
       log(/SD10-[A-Z2-9]{4}-R1-01/.test($('mSheetInfo').textContent) && !$('btnMatchRipSheet').classList.contains('hidden'), 'spot sheet: patches get unique spot names, VersaWorks library offered');
       $('btnMatchPdf').click();
       $('btnMatchRipSheet').click();
       const lib = files.find((f) => f.name.endsWith('.spot'));
       const libText = lib ? await readFile(lib) : '';
       const libNames = [...libText.matchAll(/<Lab16SpotColor name="(SD10-[^"]+)"/g)].map((m) => m[1]);
-      log(downloads() === 2 && libNames.length === 16 && libText.startsWith('<?xml version="1.0" encoding="UTF-8"?>\n<SpotColorLibraryList strVersion="4.3.0.0">'), `sheet .spot library has the 16 patch colours (${lib?.name})`);
+      log(files.filter((f) => f.name.endsWith('.pdf')).pop()?.name === 'Brand Red - sheet 1.pdf' && libNames.length === 16 && libText.startsWith('<?xml version="1.0" encoding="UTF-8"?>\n<SpotColorLibraryList strVersion="4.3.0.0">'), `sheet .spot library has the 16 patch colours (${lib?.name})`);
       for (let i = 0; i < 2; i++) { await until(() => !$('btnMatchMeasure').disabled); $('btnMatchMeasure').click(); await until(() => d.querySelector('[data-patch="0"]').textContent.includes(`${i + 1}/3`)); }
       log($('mProgress').textContent.startsWith('0 /') && /reading 3\/3/.test($('btnMatchMeasure').textContent), 'patch stays open until its 3rd reading');
       for (let n = 0; n < 5 * 3 - 2; n++) { await until(() => !$('btnMatchMeasure').disabled); $('btnMatchMeasure').click(); await until(() => $('btnMatchMeasure').disabled === false && !w.document.querySelector('#btnMatchMeasure').textContent.endsWith('…'), 5000); await sleep(30); }
@@ -120,14 +159,14 @@
       log($('mProgress').textContent.startsWith('5 /'), `15 readings -> 5 patches averaged (${$('mProgress').textContent})`);
       $('btnMatchAnalyse').click();
       await until(() => !$('mResultCard').classList.contains('hidden'));
-      log(/named colour Brand Red/.test($('mResult').textContent) && !$('btnMatchAddLib').classList.contains('hidden'), 'spot result names the colour and offers Add to spot library');
+      log(/named colour Brand Red/.test($('mResult').textContent) && d.querySelector('#mResult [data-res-act=add]'), 'spot result names the colour and offers Add to spot library');
       const libRows = () => [...d.querySelectorAll('#mLibList tr[data-lib]')].map((tr) => tr.querySelector('.font-medium').textContent);
-      $('btnMatchAddLib').click();
+      d.querySelector('#mResult [data-res-act=add]').click();
       $('mSpotName').value = 'Brand Blue'; $('mSpotName').dispatchEvent(new Event('change'));
-      $('btnMatchAddLib').click();
+      d.querySelector('#mResult [data-res-act=add]').click();
       $('mSpotName').value = 'Brand Red'; $('mSpotName').dispatchEvent(new Event('change'));
       let asked = 0; w.confirm = () => { asked++; return true; };
-      $('btnMatchAddLib').click();
+      d.querySelector('#mResult [data-res-act=add]').click();
       log(libRows().join() === 'Brand Red,Brand Blue' && asked === 1 && $('mLibCount').textContent === '(2)', `spot library collects colours; same name asks and replaces (${libRows().join(', ')})`);
       $('btnLibDownload').click();
       const libFile = files.find((f) => f.name === 'SD-10 spot colours.spot');
@@ -172,7 +211,7 @@
       setSel('mMode', 'rgb');
       await until(() => !$('btnMatchSheet').disabled);
       $('btnMatchSheet').click();
-      await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 16 && /round 1/.test($('mRoundLabel').textContent));
+      await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 16 && /sheet 1/.test($('mRoundLabel').textContent));
       log($('btnMatchPdf').textContent === 'Download PNG' && /R \d+\s+G \d+\s+B \d+/.test($('mSheetInfo').textContent), 'RGB sheet offers a PNG and shows integer RGB values');
       $('btnMatchPdf').click();
       const pngFile = await until(() => files.some((f) => f.name.endsWith('.png'))) && files.find((f) => f.name.endsWith('.png'));

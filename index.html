@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <link rel="stylesheet" href="css/app.css?v=2026-10-18.504faa7-053836">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-19.3dd99c4-164318">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -269,23 +269,28 @@
         Repeat with a finer sheet until it is within tolerance.</p>
     </div>
 
-    <!-- 1. target -->
+    <!-- 1. reference colours: one or more colours, matched together on the same sheets -->
     <div class="card space-y-3">
-      <div class="flex items-center justify-between gap-2">
-        <h3 class="font-semibold"><span class="text-indigo-500">1.</span> Reference colour</h3>
-        <span id="mStatusTarget" class="text-xs text-slate-500"></span>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h3 class="font-semibold"><span class="text-indigo-500">1.</span> Reference colours <span id="mColourCount" class="text-sm font-normal text-slate-500"></span></h3>
+        <button id="btnColourAdd" class="btn btn-ghost" title="Match another colour on the same sheets">+ Add colour</button>
       </div>
-      <div class="flex flex-wrap gap-3 items-stretch">
-        <div id="mTargetSwatch" class="h-24 w-full sm:w-40 rounded-xl ring-1 ring-black/10 dark:ring-white/10 bg-slate-200 dark:bg-slate-800"></div>
-        <div class="flex-1 min-w-[14rem] space-y-2">
-          <div class="grid grid-cols-3 gap-2">
-            <div><label class="label" for="mL">L*</label><input id="mL" class="input font-mono" type="number" step="0.01" min="0" max="100"></div>
-            <div><label class="label" for="mA">a*</label><input id="mA" class="input font-mono" type="number" step="0.01" min="-128" max="127"></div>
-            <div><label class="label" for="mB">b*</label><input id="mB" class="input font-mono" type="number" step="0.01" min="-128" max="127"></div>
-          </div>
-          <div class="flex flex-wrap gap-2">
-            <button id="btnMatchTarget" class="btn btn-primary" disabled>Measure reference</button>
-            <button id="btnMatchUseLast" class="btn btn-ghost" disabled>Use last measurement</button>
+      <ul id="mColourList" class="space-y-1.5"></ul>
+      <div id="mColourEditor" class="rounded-xl border border-slate-200 dark:border-slate-800 p-3 space-y-2">
+        <div class="flex flex-wrap gap-3 items-stretch">
+          <div id="mTargetSwatch" class="h-24 w-full sm:w-32 rounded-xl ring-1 ring-black/10 dark:ring-white/10 bg-slate-200 dark:bg-slate-800"></div>
+          <div class="flex-1 min-w-[14rem] space-y-2">
+            <div id="mSpotNameWrap"><label class="label" for="mSpotName">Colour / spot colour name <span id="mStatusTarget" class="font-normal text-slate-500"></span></label>
+              <input id="mSpotName" class="input" type="text" maxlength="60" placeholder="e.g. Brand Red – exactly as named in your artwork and the RIP" autocomplete="off"></div>
+            <div class="grid grid-cols-3 gap-2">
+              <div><label class="label" for="mL">L*</label><input id="mL" class="input font-mono" type="number" step="0.01" min="0" max="100"></div>
+              <div><label class="label" for="mA">a*</label><input id="mA" class="input font-mono" type="number" step="0.01" min="-128" max="127"></div>
+              <div><label class="label" for="mB">b*</label><input id="mB" class="input font-mono" type="number" step="0.01" min="-128" max="127"></div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button id="btnMatchTarget" class="btn btn-primary" disabled>Measure reference</button>
+              <button id="btnMatchUseLast" class="btn btn-ghost" disabled>Use last measurement</button>
+            </div>
           </div>
         </div>
       </div>
@@ -297,17 +302,23 @@
             <option value="cmyk">CMYK numbers</option>
             <option value="rgb">RGB image (raster workflows)</option>
           </select></div>
-        <div><label class="label" for="mPaper">Paper</label>
-          <select id="mPaper" class="input"><option value="a4">A4</option><option value="letter">Letter</option></select></div>
+        <div><label class="label" for="mPaper">Media</label>
+          <select id="mPaper" class="input"><option value="a4">A4</option><option value="letter">Letter</option><option value="a3">A3</option><option value="tabloid">Tabloid</option><option value="custom">Custom size…</option></select></div>
+        <div id="mCustomWrap" class="grid grid-cols-2 gap-2">
+          <div><label class="label" for="mMediaW">Width (mm)</label><input id="mMediaW" class="input" type="number" min="50" max="3000" step="1"></div>
+          <div><label class="label" for="mMediaH">Height (mm)</label><input id="mMediaH" class="input" type="number" min="50" max="10000" step="1"></div>
+        </div>
+        <div><label class="label" for="mPatchMm">Patch size</label>
+          <select id="mPatchMm" class="input"><option value="10">10 mm</option><option value="12">12 mm</option><option value="15">15 mm</option><option value="20">20 mm</option><option value="25">25 mm</option><option value="30">30 mm</option></select></div>
+        <div><label class="label" for="mDesign">Patches per colour</label>
+          <select id="mDesign" class="input"><option value="full">16 (most robust)</option><option value="compact">8 (saves media)</option></select></div>
         <div><label class="label" for="matchMf">M-factor</label>
           <select id="matchMf" class="input"><option value="0">M0</option><option value="1">M1</option><option value="2">M2</option></select></div>
         <div><label class="label" for="mTol">Tolerance (ΔE00)</label><input id="mTol" class="input" type="number" min="0.1" max="20" step="0.1"></div>
         <div><label class="label" for="mReads">Readings per patch</label>
           <select id="mReads" class="input"><option value="1">1</option><option value="2">2</option><option value="3">3 (textured media)</option><option value="5">5</option></select></div>
         <div id="mRipFormatWrap"><label class="label" for="mRipFormat">Spot library format</label>
-          <select id="mRipFormat" class="input"><option value="cxf">CxF3 (.cxf)</option><option value="acb">Adobe Color Book (.acb)</option><option value="versaworks">VersaWorks (.spot)</option></select></div>
-        <div id="mSpotNameWrap" class="col-span-2 sm:col-span-3"><label class="label" for="mSpotName">Spot colour name</label>
-          <input id="mSpotName" class="input" type="text" maxlength="60" placeholder="e.g. Brand Red – exactly as named in your artwork and the RIP" autocomplete="off"></div>
+          <select id="mRipFormat" class="input"><option value="cxf">CxF3 (.cxf)</option><option value="acb">Adobe Color Book (.acb)</option><option value="epcc">Epson Edge Print (.epcc)</option><option value="versaworks">VersaWorks (.spot)</option></select></div>
       </div>
       <p id="mModeHelp" class="text-xs text-slate-500"></p>
     </div>
@@ -333,7 +344,7 @@
         <h3 class="font-semibold"><span class="text-indigo-500">3.</span> Scan the printed patches</h3>
         <span id="mProgress" class="text-xs text-slate-500"></span>
       </div>
-      <div id="mPatchGrid" class="grid grid-cols-4 gap-2"></div>
+      <div id="mPatchGrid" class="space-y-3"></div>
       <div class="flex flex-wrap items-center gap-2">
         <button id="btnMatchMeasure" class="btn btn-primary w-full sm:w-auto px-6 py-3 sm:py-2.5" disabled>Measure patch</button>
         <button id="btnMatchAnalyse" class="btn btn-ghost" disabled>Calculate now</button>
@@ -341,16 +352,13 @@
       </div>
     </div>
 
-    <!-- 4. result -->
+    <!-- 4. results: one block per colour -->
     <div id="mResultCard" class="card space-y-3 hidden">
-      <h3 class="font-semibold"><span class="text-indigo-500">4.</span> Result</h3>
-      <div id="mResult"></div>
-      <div class="flex flex-wrap gap-2">
-        <button id="btnMatchRefine" class="btn btn-primary">Make refinement sheet</button>
-        <button id="btnMatchCopy" class="btn btn-ghost">Copy values</button>
-        <button id="btnMatchAddLib" class="btn btn-ghost hidden" title="Add the matched colour to your spot library under the spot colour name">Add to spot library</button>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h3 class="font-semibold"><span class="text-indigo-500">4.</span> Results</h3>
+        <button id="btnMatchRefine" class="btn btn-primary">Make next sheet</button>
       </div>
-      <div id="mHistory"></div>
+      <div id="mResult" class="space-y-4"></div>
     </div>
 
     <!-- 5. spot library: matched colours collected across jobs, exported together as one library file -->
@@ -359,12 +367,12 @@
         <h3 class="font-semibold"><span class="text-indigo-500">5.</span> Spot library <span id="mLibCount" class="text-sm font-normal text-slate-500"></span></h3>
         <div class="flex flex-wrap gap-2">
           <button id="btnLibDownload" class="btn btn-primary" disabled>Download library</button>
-          <button id="btnLibImport" class="btn btn-ghost" title="Add the colours of a CxF (.cxf), Adobe Color Book (.acb) or VersaWorks (.spot) library">Import library…</button>
+          <button id="btnLibImport" class="btn btn-ghost" title="Add the colours of a CxF (.cxf), Adobe Color Book (.acb), Epson Edge Print (.epcc) or VersaWorks (.spot) library">Import library…</button>
           <button id="btnLibClear" class="btn btn-danger" disabled>Clear</button>
-          <input id="libFile" type="file" accept=".cxf,.acb,.spot,.xml" class="hidden">
+          <input id="libFile" type="file" accept=".cxf,.acb,.spot,.epcc,.xml" class="hidden">
         </div>
       </div>
-      <p class="text-sm text-slate-500">Collect your spot colours here – add matched colours, type them in, or import an existing library (CxF, Adobe Color Book or VersaWorks) – and download them as one file in the format chosen above to update all of those named colours in the RIP at once. The library is kept in this browser.</p>
+      <p class="text-sm text-slate-500">Collect your spot colours here – add matched colours, type them in, or import an existing library (CxF, Adobe Color Book, Edge Print or VersaWorks) – and download them as one file in the format chosen above to update all of those named colours in the RIP at once. The library is kept in this browser.</p>
       <div class="max-w-sm"><label class="label" for="mLibName">Library name</label>
         <input id="mLibName" class="input" type="text" maxlength="60" autocomplete="off"></div>
       <div id="mLibList"></div>
@@ -386,21 +394,21 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-18.504faa7-053836",
-      "./js/transport.js": "./js/transport.js?v=2026-10-18.504faa7-053836",
-      "./js/mock.js": "./js/mock.js?v=2026-10-18.504faa7-053836",
-      "./js/session.js": "./js/session.js?v=2026-10-18.504faa7-053836",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-18.504faa7-053836",
-      "./js/color.js": "./js/color.js?v=2026-10-18.504faa7-053836",
-      "./js/weights.js": "./js/weights.js?v=2026-10-18.504faa7-053836",
-      "./js/storage.js": "./js/storage.js?v=2026-10-18.504faa7-053836",
-      "./js/icc.js": "./js/icc.js?v=2026-10-18.504faa7-053836",
-      "./js/match.js": "./js/match.js?v=2026-10-18.504faa7-053836",
-      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-18.504faa7-053836",
-      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-18.504faa7-053836"
+      "./js/app.js": "./js/app.js?v=2026-10-19.3dd99c4-164318",
+      "./js/transport.js": "./js/transport.js?v=2026-10-19.3dd99c4-164318",
+      "./js/mock.js": "./js/mock.js?v=2026-10-19.3dd99c4-164318",
+      "./js/session.js": "./js/session.js?v=2026-10-19.3dd99c4-164318",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-19.3dd99c4-164318",
+      "./js/color.js": "./js/color.js?v=2026-10-19.3dd99c4-164318",
+      "./js/weights.js": "./js/weights.js?v=2026-10-19.3dd99c4-164318",
+      "./js/storage.js": "./js/storage.js?v=2026-10-19.3dd99c4-164318",
+      "./js/icc.js": "./js/icc.js?v=2026-10-19.3dd99c4-164318",
+      "./js/match.js": "./js/match.js?v=2026-10-19.3dd99c4-164318",
+      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-19.3dd99c4-164318",
+      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-19.3dd99c4-164318"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-18.504faa7-053836"></script>
+  <script type="module" src="js/app.js?v=2026-10-19.3dd99c4-164318"></script>
 </body>
 </html>

@@ -60,6 +60,7 @@ export const RIP_EXPORTS = {
     label: 'Adobe Color Book',
     ext: 'acb',
     mime: 'application/octet-stream',
+    precision: 'L* in steps of 0.4 and a*/b* as whole numbers',
     quantize: ([L, a, b]) => [Math.round((clamp(L, 0, 100) * 255) / 100) * 100 / 255, Math.round(clamp(a, -128, 127)), Math.round(clamp(b, -128, 127))],
     build({ library, colours, description = '', id = bookId(library) }) {
       const out = [];
@@ -80,6 +81,28 @@ export const RIP_EXPORTS = {
       });
       ascii('spflspot');
       return Uint8Array.from(out);
+    },
+  },
+
+  // Epson Edge Print colour collection (.epcc) – format taken from collections exported by Edge Print: UTF-16LE text
+  // with a BOM and CRLF lines: 'EpsonEdgePrint', '200', '0', collection name, colour count, then one line per colour
+  // '0,<name length>,<name>,<colour type>,<value count>,<values ;-separated>' – type 0 = L*a*b* (3 values),
+  // type 1 = CMYK (4 values). Values are written with at most one decimal, as Edge Print does.
+  epcc: {
+    label: 'Edge Print',
+    ext: 'epcc',
+    mime: 'application/octet-stream',
+    precision: 'values with one decimal',
+    quantize: (lab) => lab.map((v) => Math.round(v * 10) / 10),
+    build({ library, colours }) {
+      const num = (v) => String(Math.round(v * 10) / 10 + 0); // 42, 15.4 (and never "-0")
+      const lines = ['EpsonEdgePrint', '200', '0', String(library), String(colours.length),
+        ...colours.map(({ name, lab }) => `0,${String(name).length},${name},0,3,${lab.map(num).join(';')}`)];
+      const text = lines.map((l) => `${l}\r\n`).join('');
+      const out = new Uint8Array(2 + text.length * 2);
+      out[0] = 0xff; out[1] = 0xfe;
+      for (let i = 0; i < text.length; i++) { const c = text.charCodeAt(i); out[2 + 2 * i] = c & 0xff; out[3 + 2 * i] = c >> 8; }
+      return out;
     },
   },
 
@@ -108,13 +131,17 @@ export const RIP_EXPORTS = {
 export function readLibrary(bytes, fileName = '') {
   bytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   if (String.fromCharCode(...bytes.subarray(0, 4)) === '8BCB') return readAcb(bytes);
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) {
+    const text = new TextDecoder('utf-16le').decode(bytes.subarray(2));
+    if (text.startsWith('EpsonEdgePrint')) return readEpcc(text);
+  }
   const text = new TextDecoder().decode(bytes);
   const doc = new DOMParser().parseFromString(text, 'application/xml');
-  if (doc.querySelector('parsererror')) throw new Error(`${fileName || 'The file'} is not a CxF, Adobe Color Book or VersaWorks library`);
+  if (doc.querySelector('parsererror')) throw new Error(`${fileName || 'The file'} is not a CxF, Adobe Color Book, Edge Print or VersaWorks library`);
   const root = doc.documentElement.localName;
   if (root === 'CxF') return readCxf(doc);
   if (root === 'SpotColorLibraryList') return readVersaWorks(doc);
-  throw new Error(`${fileName || 'The file'} is not a CxF, Adobe Color Book or VersaWorks library (root element <${root}>)`);
+  throw new Error(`${fileName || 'The file'} is not a CxF, Adobe Color Book, Edge Print or VersaWorks library (root element <${root}>)`);
 }
 
 const byLocal = (el, name) => [...el.getElementsByTagName('*')].filter((e) => e.localName === name);
@@ -175,6 +202,24 @@ function readCxf(doc) {
   const info = byLocal(doc, 'FileInformation')[0];
   const library = (info && child(info, 'Description')?.textContent.split(' – ')[0].trim()) || '';
   return { format: 'cxf', library, colours, skipped };
+}
+
+function readEpcc(text) {
+  const lines = text.split(/\r?\n/);
+  const library = lines[3] ?? '';
+  const colours = [], skipped = [];
+  for (const line of lines.slice(5)) {
+    if (!line.trim()) continue;
+    // 0,<name length>,<name>,<type>,<count>,<values>  – the length lets names contain commas
+    const m = /^(\d+),(\d+),/.exec(line);
+    if (!m) continue;
+    const start = m[0].length, name = line.substr(start, +m[2]);
+    const [type, count, values] = line.slice(start + name.length + 1).split(',');
+    const v = (values ?? '').split(';').map(Number);
+    if (type === '0' && count === '3' && v.length === 3 && v.every(Number.isFinite)) colours.push({ name, lab: v });
+    else skipped.push(name);
+  }
+  return { format: 'epcc', library, colours, skipped };
 }
 
 function readAcb(bytes) {

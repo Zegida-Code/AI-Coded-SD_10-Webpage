@@ -121,7 +121,7 @@ async function iccV4Check() {
 
 // ---- 3d. Print match: model fitting, convergence with a simulated printer, PDF sheet
 async function matchCheck() {
-  const { designPatches, fitModel, analyseRound, nextStep, buildSheetPdf, buildSheetPng, averageReadings, patchSpotName, MODES } = await import('../js/match.js');
+  const { designPatches, fitModel, analyseRound, nextStep, trustRadius, buildSheetPdf, buildSheetPng, sheetLayout, averageReadings, patchSpotName, MODES } = await import('../js/match.js');
   const { RIP_EXPORTS, readLibrary } = await import('../js/rip-export.js');
   const { printSpectrum } = await import('../js/printer-sim.js');
   const { loadProfile } = await import('../js/icc.js');
@@ -157,6 +157,25 @@ async function matchCheck() {
     }
     const finalDE = deltaE2000(target, printed(centre, k));
     check(`print match converges (${mode}): first guess ΔE00 ${firstDE.toFixed(2)} -> ${finalDE.toFixed(2)} after ${Math.min(round, 4)} round(s) [${log.join('; ')}]`, finalDE < 1 && firstDE > 2);
+  }
+
+  // out-of-gamut reference (a dark, saturated purple like a real test that ran away to L 0 / a ±127):
+  // every round must stay near measured colours, never recommend worse than the best patch, and flag the gamut limit
+  {
+    const target = [20, 60, -85];
+    const printed = (x) => spectrumToLab(printSpectrum(prof.fromLab(x, 0)), 0, 2);
+    let centre = [...target], step = [...MODES.lab.step0], res, bestEver = Infinity, log = [], runaway = false;
+    for (let round = 1; round <= 5; round++) {
+      const patches = designPatches('lab', centre, step).map((p) => ({ ...p, lab: printed(p.x) }));
+      res = analyseRound({ mode: 'lab', centre, step, patches }, target);
+      bestEver = Math.min(bestEver, res.best.dE);
+      if (res.x.some((v, k) => Math.abs(v - centre[k]) > trustRadius('lab', step)[k] + 1e-6) || res.x[0] <= 0 || Math.abs(res.x[1]) >= 127 || Math.abs(res.x[2]) >= 127) runaway = true;
+      log.push(`r${round}: centre ΔE ${res.centreDE.toFixed(2)}, best ${res.best.dE.toFixed(2)}, rec ${res.x.map((v) => v.toFixed(1)).join('/')} (${res.source}${res.gamutLimited ? ', gamut' : ''})`);
+      step = nextStep('lab', step, res.correction);
+      centre = res.x;
+    }
+    const finalDE = deltaE2000(target, printed(centre));
+    check(`print match stays bounded for an out-of-gamut reference and flags it [${log.join('; ')}]`, !runaway && finalDE <= bestEver + 0.5 && res.gamutLimited && res.predictedDeltaE > 2);
   }
 
   // PDF structure
@@ -206,12 +225,12 @@ async function matchCheck() {
 
   // import: every export format reads back (ACB within its 8-bit rounding); CxF spectra and non-D50 data
   const sample = [{ name: 'Brand Red', lab: [45.6, 60.4, -30.4] }, { name: 'Grün & Blau', lab: [70.25, -40.5, 12.75] }];
-  const back = Object.fromEntries(['cxf', 'versaworks', 'acb'].map((f) => {
+  const back = Object.fromEntries(['cxf', 'versaworks', 'acb', 'epcc'].map((f) => {
     const out = RIP_EXPORTS[f].build({ library: 'House', colours: sample });
     return [f, readLibrary(typeof out === 'string' ? new TextEncoder().encode(out) : out, `x.${f}`)];
   }));
   const close = (lib, tol) => lib.colours.length === 2 && lib.colours.every((c, i) => c.name === sample[i].name && c.lab.every((v, k) => Math.abs(v - sample[i].lab[k]) <= tol));
-  check('import reads CxF3, VersaWorks and Adobe Color Book files back (names, L*a*b*, library name)', close(back.cxf, 0.005) && close(back.versaworks, 0.005) && close(back.acb, 0.51) && back.cxf.library === 'House' && back.versaworks.library === 'House' && back.acb.library === 'House' && back.acb.format === 'acb', JSON.stringify(back));
+  check('import reads CxF3, VersaWorks and Adobe Color Book files back (names, L*a*b*, library name)', close(back.cxf, 0.005) && close(back.versaworks, 0.005) && close(back.acb, 0.51) && close(back.epcc, 0.051) && back.cxf.library === 'House' && back.versaworks.library === 'House' && back.acb.library === 'House' && back.acb.format === 'acb', JSON.stringify(back));
   const sp = Array.from({ length: 36 }, (_, i) => (0.2 + 0.5 * Math.exp(-(((380 + 10 * i - 600) / 60) ** 2))).toFixed(4)).join(' ');
   const cxfIn = `<?xml version="1.0"?><CxF xmlns="http://colorexchangeformat.com/CxF3-core"><Resources><ObjectCollection>
     <Object ObjectType="Standard" Name="Spectral" Id="a"><CreationDate>2026-01-01</CreationDate><ColorValues><ReflectanceSpectrum ColorSpecification="S" StartWL="380">${sp}</ReflectanceSpectrum></ColorValues></Object>
@@ -229,7 +248,59 @@ async function matchCheck() {
     lib3.colours.find((c) => c.name === 'Two Labs')?.lab.join() === '60,-5,7' && lib3.skipped.join() === 'D65 only', JSON.stringify(lib3));
   let bad = '';
   try { readLibrary(new TextEncoder().encode('<html/>'), 'page.html'); } catch (e) { bad = e.message; }
-  check('import rejects files that are not spot colour libraries', /not a CxF, Adobe Color Book or VersaWorks library/.test(bad), bad);
+  check('import rejects files that are not spot colour libraries', /not a CxF, Adobe Color Book, Edge Print or VersaWorks library/.test(bad), bad);
+
+  // compact design: 8 patches (centre twice + ±step on each axis) – fewer patches per colour, still converges
+  {
+    const cp = designPatches('lab', [50, 10, 10], [5, 8, 8], 'compact');
+    const target = spectrumToLab(printSpectrum([18, 62, 74, 6]), 0, 2);
+    const printed = (x) => spectrumToLab(printSpectrum(prof.fromLab(x, 0)), 0, 2);
+    let centre = [...target], step = [...MODES.lab.step0], round;
+    for (round = 1; round <= 5; round++) {
+      const res = analyseRound({ mode: 'lab', centre, step, patches: designPatches('lab', centre, step, 'compact').map((p) => ({ ...p, lab: printed(p.x) })) }, target);
+      step = nextStep('lab', step, res.correction);
+      centre = res.x;
+      if (res.centreDE < 0.5) break;
+    }
+    const fin = deltaE2000(target, printed(centre));
+    check(`compact design: ${cp.length} patches per colour, converges to ΔE00 ${fin.toFixed(2)} in ${Math.min(round, 5)} rounds`, cp.length === 8 && cp.filter((p) => p.offset.every((v) => v === 0)).length === 2 && fin < 1);
+  }
+
+  // layout: several colours on small custom media flow onto several pages – every patch once, on the page, no overlaps
+  {
+    const groups = [0, 1, 2].map((g) => ({ label: `Colour ${g + 1}`, target: [50, g * 10, -g * 10], kFixed: 0,
+      patches: designPatches('lab', [50, g * 10, -g * 10], [5, 8, 8]).map((p) => ({ ...p, n: g * 16 + p.n })) }));
+    const lay = sheetLayout({ mode: 'lab', groups, round: 2, media: [150, 120], patchMm: 15 });
+    const boxes = lay.pages.flatMap((pg, i) => pg.boxes.map((b) => ({ ...b, page: i })));
+    const inside = boxes.every((b) => b.x >= 0 && b.y >= 0 && b.x + b.size <= lay.W && b.y + b.size <= lay.H);
+    const overlap = boxes.some((a, i) => boxes.some((b, j) => j > i && a.page === b.page && a.x < b.x + b.size && b.x < a.x + a.size && a.y < b.y + b.size && b.y < a.y + a.size));
+    const ns = boxes.map((b) => b.patch.n).sort((a, b) => a - b).join();
+    check(`layout: 3 colours × 16 patches on 150 × 120 mm with 15 mm patches -> ${lay.pages.length} pages, every patch placed once, inside the page, no overlaps`,
+      lay.pages.length > 1 && boxes.length === 48 && ns === Array.from({ length: 48 }, (_, i) => i + 1).join() && inside && !overlap);
+    const multi = new TextDecoder('latin1').decode(buildSheetPdf({ mode: 'lab', groups, round: 2, media: [150, 120], patchMm: 15 }));
+    check('multi-page PDF: one page object per layout page, all patches drawn', multi.includes(`/Count ${lay.pages.length} >>`) &&
+      (multi.match(/\/Type \/Page /g) || []).length === lay.pages.length && (multi.match(/ sc\n/g) || []).length === 48);
+    let small = '';
+    try { sheetLayout({ mode: 'lab', groups, media: [40, 40], patchMm: 30 }); } catch (e) { small = e.message; }
+    check('layout: media too small for the patch size is reported', /too small for 30 mm patches/.test(small), small);
+  }
+
+  // Edge Print .epcc: byte-identical to a collection exported by Edge Print (the user's "MoreData" test collection)
+  {
+    const want = 'fffe4500700073006f006e0045006400670065005000720069006e0074000d000a003200300030000d000a0030000d000a004d006f007200650044006100740061000d000a0034000d000a0030002c0032002c00480069002c0030002c0033002c00340032003b0030003b00360039000d000a0030002c0033002c0068006f0077002c0030002c0033002c00360039003b00340032003b0030000d000a0030002c0033002c006100720065002c0030002c0033002c00350030003b00360037003b00360037000d000a0030002c0033002c0079006f0075002c0030002c0033002c00380030003b00320032003b00330033000d000a00';
+    const ep = RIP_EXPORTS.epcc.build({ library: 'MoreData', colours: [{ name: 'Hi', lab: [42, 0, 69] }, { name: 'how', lab: [69, 42, 0] }, { name: 'are', lab: [50, 67, 67] }, { name: 'you', lab: [80, 22, 33] }] });
+    const epHex = [...ep].map((v) => v.toString(16).padStart(2, '0')).join('');
+    check('Edge Print .epcc export is identical to a collection exported by Edge Print', epHex === want, epHex);
+    const txt = 'EpsonEdgePrint\r\n200\r\n0\r\nMix\r\n3\r\n0,8,Red, Hot,0,3,45.5;60.1;30\r\n0,12,Subli Orange,1,4,15.4;54.5;71.1;11.8\r\n0,4,-0.5,0,3,10;-0.5;0\r\n';
+    const bytes = new Uint8Array(2 + txt.length * 2);
+    bytes[0] = 0xff; bytes[1] = 0xfe;
+    for (let i = 0; i < txt.length; i++) bytes[2 + 2 * i] = txt.charCodeAt(i);
+    const lib = readLibrary(bytes, 'mix.epcc');
+    check('Edge Print import: L*a*b* entries (names may contain commas), CMYK entries skipped', lib.format === 'epcc' && lib.library === 'Mix' &&
+      lib.colours.map((c) => c.name).join('|') === 'Red, Hot|-0.5' && lib.colours[0].lab.join() === '45.5,60.1,30' && lib.skipped.join() === 'Subli Orange', JSON.stringify(lib));
+    const rt = readLibrary(RIP_EXPORTS.epcc.build({ library: 'House', colours: [{ name: 'Brand Red', lab: [45.62, 60.44, -30.38] }] }), 'x.epcc');
+    check('Edge Print export reads back (one decimal)', rt.library === 'House' && rt.colours[0].name === 'Brand Red' && rt.colours[0].lab.join() === '45.6,60.4,-30.4', JSON.stringify(rt));
+  }
 
   // readings: mean + spread
   const avg = averageReadings([[50, 10, 10], [52, 10, 10], [51, 13, 7]]);
@@ -241,7 +312,7 @@ async function matchCheck() {
 
   // PNG sheet: valid chunks, sRGB + 300 dpi, exact patch colours
   const rgbPatches = designPatches('rgb', [200, 60, 40], [14, 14, 14]);
-  const png = await buildSheetPng({ mode: 'rgb', patches: rgbPatches, target: [55, 40, 50], round: 1 });
+  const [{ png }] = await buildSheetPng({ mode: 'rgb', patches: rgbPatches, target: [55, 40, 50], round: 1, patchMm: 30 });
   const chunks = [];
   const pdv = new DataView(png.buffer, png.byteOffset, png.byteLength);
   for (let i = 8; i < png.length;) { const len = pdv.getUint32(i); chunks.push({ type: String.fromCharCode(...png.subarray(i + 4, i + 8)), data: png.subarray(i + 8, i + 8 + len) }); i += 12 + len; }
@@ -254,11 +325,14 @@ async function matchCheck() {
   const cv = document.createElement('canvas'); cv.width = bmp.naturalWidth; cv.height = bmp.naturalHeight;
   const g2 = cv.getContext('2d'); g2.drawImage(bmp, 0, 0);
   // patch #1 centre: same geometry as the sheet (15 mm margin, 4 columns, 30 mm patches)
-  const k300 = 300 / 72, mm = 72 / 25.4, cell = (595.28 - 30 * mm) / 4, size = Math.min(30 * mm, cell - 6 * mm);
-  const px = g2.getImageData(Math.round((15 * mm + (cell - size) / 2 + size / 2) * k300), Math.round((15 * mm + 32 + 13 + 11 + 11 + 18 + size / 2) * k300), 1, 1).data;
+  // centre of patch #1, from the same layout the PNG was drawn from
+  const k300 = 300 / 72;
+  const lay1 = sheetLayout({ mode: 'rgb', patches: rgbPatches, target: [55, 40, 50], round: 1, patchMm: 30 });
+  const b1 = lay1.pages[0].boxes[0];
+  const px = g2.getImageData(Math.round((b1.x + b1.size / 2) * k300), Math.round((lay1.H - b1.y - b1.size / 2) * k300), 1, 1).data;
   check('PNG sheet: A4 at 300 dpi, sRGB-tagged, chunks valid', png[1] === 0x50 && chunks[0].type === 'IHDR' && chunks[1].type === 'sRGB' && physOk && bmp.naturalWidth === 2480 && bmp.naturalHeight === 3508 && !chunks.some((c) => c.type === 'iCCP'), chunks.map((c) => c.type).join(','));
   check('PNG sheet: patch pixels carry the exact RGB values', px[0] === rgbPatches[0].x[0] && px[1] === rgbPatches[0].x[1] && px[2] === rgbPatches[0].x[2], `${[...px]} vs ${rgbPatches[0].x}`);
-  check('Lab sheet uses a D50 Lab colour space on Letter paper', /\/Lab << \/WhitePoint \[0\.9642 1 0\.8249\]/.test(labPdf) && (labPdf.match(/ sc\n/g) || []).length === 16 && /MediaBox \[0 0 612 792\]/.test(labPdf));
+  check('Lab sheet uses a D50 Lab colour space on Letter paper', /\/Lab << \/WhitePoint \[0\.9642 1 0\.8249\]/.test(labPdf) && (labPdf.match(/ sc\n/g) || []).length === 16 && /MediaBox \[0 0 612\.00 792\.00\]/.test(labPdf));
 }
 
 // ---- 4. end-to-end session against the simulator
