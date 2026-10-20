@@ -370,38 +370,56 @@ function sheetPreview({ W, H, pages }, r) {
   }
   // a strip: the whole sheet small (with a frame marking the close-up), and a readable close-up below
   const label = 'text-[11px] text-slate-500';
-  return `<figure class="mt-3 space-y-1.5">
+  // the figure and the close-up stretch to fill the card's free height (at least 110 px); the drawing's width follows
+  // its height through aspect-ratio, so a taller close-up stays to scale
+  return `<figure class="mt-3 flex-1 flex flex-col gap-1.5">
     <div class="${label}">Whole sheet · ${notes}</div>
     <div id="mPreviewOverview" class="relative w-full cursor-pointer overflow-hidden rounded-sm bg-white ring-1 ring-black/10" style="aspect-ratio:${W.toFixed(1)}/${H.toFixed(1)}" title="Click to show this part in the close-up">${drawing}
       <div id="mPreviewWindow" class="pointer-events-none absolute inset-y-0 rounded-sm bg-indigo-500/10 ring-2 ring-indigo-500"></div></div>
     <div class="${label} pt-1">Close-up – scroll sideways, or click the whole sheet above</div>
-    <div id="mPreviewZoom" class="overflow-x-auto pb-1"><div class="relative rounded-sm bg-white ring-1 ring-black/10" style="height:110px;width:${Math.round((110 * W) / H)}px">${drawing}</div></div>
+    <div id="mPreviewZoom" class="relative flex-1 min-h-[124px] overflow-x-auto"><div class="absolute inset-y-0 left-0 rounded-sm bg-white ring-1 ring-black/10" style="aspect-ratio:${W.toFixed(1)}/${H.toFixed(1)}">${drawing}</div></div>
   </figure>`;
 }
 
 /**
  * Wide-sheet preview: keep the frame on the whole sheet in step with the close-up's scroll position, let a click on the
  * whole sheet move the close-up there, and start the close-up at the first patch (or where the user left it).
+ * The position is kept as a fraction of the sheet, because the close-up grows with the card (its width follows its
+ * height) after it is first drawn, and when the window is resized.
  */
-let previewScroll = { key: null, left: 0 };
+let previewScroll = { key: null, frac: 0 };
+let previewResize = null;
 function wirePreview(key, firstPatch) {
+  previewResize?.disconnect();
   const zoom = $('mPreviewZoom'), frame = $('mPreviewWindow'), overview = $('mPreviewOverview');
   if (!zoom) return;
-  const sync = () => {
+  if (previewScroll.key !== key) previewScroll = { key, frac: Math.max(0, firstPatch - 0.01) };
+  const showFrame = () => {
     frame.style.left = `${(zoom.scrollLeft / zoom.scrollWidth) * 100}%`;
     frame.style.width = `${(zoom.clientWidth / zoom.scrollWidth) * 100}%`;
-    previewScroll = { key, left: zoom.scrollLeft };
   };
-  zoom.onscroll = sync;
-  // Print match is rendered while still hidden at start-up: a hidden close-up has no size, so position it only once
-  // it is shown (renderMatch runs again when the view opens)
-  if (!zoom.clientWidth) return;
+  // Our own positioning also fires a scroll event – possibly clamped while the close-up is still narrow – which must not
+  // overwrite the remembered position; only the user's scrolling does.
+  let placing = false;
+  const place = () => {
+    const want = Math.min(previewScroll.frac * zoom.scrollWidth, zoom.scrollWidth - zoom.clientWidth);
+    placing = Math.abs(zoom.scrollLeft - want) >= 1; // no scroll event fires when nothing moves
+    zoom.scrollLeft = want;
+    showFrame();
+  };
+  // only a visible close-up has a size: Print match is drawn while still hidden at start-up
+  zoom.onscroll = () => {
+    if (!zoom.clientWidth) return;
+    if (placing) placing = false; else previewScroll.frac = zoom.scrollLeft / zoom.scrollWidth;
+    showFrame();
+  };
   overview.onclick = (e) => {
     const box = overview.getBoundingClientRect();
     zoom.scrollLeft = ((e.clientX - box.left) / box.width) * zoom.scrollWidth - zoom.clientWidth / 2;
   };
-  zoom.scrollLeft = previewScroll.key === key ? previewScroll.left : firstPatch * zoom.scrollWidth - 8;
-  sync();
+  previewResize = new ResizeObserver(() => { if (zoom.clientWidth) place(); });
+  previewResize.observe(zoom);
+  if (zoom.clientWidth) place();
 }
 
 /** Card 3: the selected colour's patches – measured ones in their measured colour, the next one outlined. */
