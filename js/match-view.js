@@ -393,6 +393,9 @@ function wirePreview(key, firstPatch) {
     previewScroll = { key, left: zoom.scrollLeft };
   };
   zoom.onscroll = sync;
+  // Print match is rendered while still hidden at start-up: a hidden close-up has no size, so position it only once
+  // it is shown (renderMatch runs again when the view opens)
+  if (!zoom.clientWidth) return;
   overview.onclick = (e) => {
     const box = overview.getBoundingClientRect();
     zoom.scrollLeft = ((e.clientX - box.left) / box.width) * zoom.scrollWidth - zoom.clientWidth / 2;

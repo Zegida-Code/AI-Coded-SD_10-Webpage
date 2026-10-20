@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <link rel="stylesheet" href="css/app.css?v=2026-10-19.817bef6-192314">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-19.d3a96b6-192740">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -363,30 +363,30 @@
 
         <!-- 2. sheet and 3. scan: side by side on wide screens -->
         <div class="grid gap-4 xl:grid-cols-2">
-          <div class="card space-y-3 min-w-0">
+          <div class="card min-w-0 flex flex-col gap-3">
             <div class="flex flex-wrap items-center justify-between gap-2">
               <h3 class="font-semibold"><span class="text-indigo-500">2.</span> Test sheet <span id="mRoundLabel" class="text-sm font-normal text-slate-500"></span></h3>
               <button id="btnMatchSheet" class="btn btn-primary" disabled>Create sheet</button>
             </div>
             <div id="mSheetInfo" class="text-sm text-slate-500">Set a reference colour first.</div>
-            <div id="mSheetActions" class="hidden flex flex-wrap items-center gap-2">
+            <div id="mSheetActions" class="hidden mt-auto flex flex-wrap items-center gap-2">
               <button id="btnMatchPdf" class="btn btn-primary">Download PDF</button>
               <button id="btnMatchRipSheet" class="btn btn-ghost hidden">Sheet library</button>
               <button id="btnMatchRestart" class="ml-auto px-1 py-2 text-sm text-rose-600 hover:underline dark:text-rose-400" title="Discard this colour's sheets and measurements (its reference is kept)">Start over</button>
             </div>
           </div>
 
-          <div class="card space-y-3 min-w-0">
+          <div class="card min-w-0 flex flex-col gap-3">
             <div class="flex flex-wrap items-center justify-between gap-2">
               <h3 class="font-semibold"><span class="text-indigo-500">3.</span> Scan the patches</h3>
               <span id="mProgress" class="text-xs text-slate-500"></span>
             </div>
             <div id="mPatchGrid"></div>
-            <div class="flex flex-wrap items-center gap-2">
+            <p class="text-xs text-slate-500">You can also press the button on the SD-10. Tap a patch to re-measure it.</p>
+            <div class="mt-auto flex flex-wrap items-center gap-2">
               <button id="btnMatchMeasure" class="btn btn-primary w-full sm:w-auto px-6 py-3 sm:py-2.5" disabled>Measure patch</button>
               <button id="btnMatchAnalyse" class="btn btn-ghost" disabled>Calculate now</button>
             </div>
-            <p class="text-xs text-slate-500">You can also press the button on the SD-10. Tap a patch to re-measure it.</p>
           </div>
         </div>
 
@@ -435,23 +435,23 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-19.817bef6-192314",
-      "./js/transport.js": "./js/transport.js?v=2026-10-19.817bef6-192314",
-      "./js/mock.js": "./js/mock.js?v=2026-10-19.817bef6-192314",
-      "./js/session.js": "./js/session.js?v=2026-10-19.817bef6-192314",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-19.817bef6-192314",
-      "./js/color.js": "./js/color.js?v=2026-10-19.817bef6-192314",
-      "./js/weights.js": "./js/weights.js?v=2026-10-19.817bef6-192314",
-      "./js/storage.js": "./js/storage.js?v=2026-10-19.817bef6-192314",
-      "./js/icc.js": "./js/icc.js?v=2026-10-19.817bef6-192314",
-      "./js/match.js": "./js/match.js?v=2026-10-19.817bef6-192314",
-      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-19.817bef6-192314",
-      "./js/ui.js": "./js/ui.js?v=2026-10-19.817bef6-192314",
-      "./js/match-view.js": "./js/match-view.js?v=2026-10-19.817bef6-192314",
-      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-19.817bef6-192314"
+      "./js/app.js": "./js/app.js?v=2026-10-19.d3a96b6-192740",
+      "./js/transport.js": "./js/transport.js?v=2026-10-19.d3a96b6-192740",
+      "./js/mock.js": "./js/mock.js?v=2026-10-19.d3a96b6-192740",
+      "./js/session.js": "./js/session.js?v=2026-10-19.d3a96b6-192740",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-19.d3a96b6-192740",
+      "./js/color.js": "./js/color.js?v=2026-10-19.d3a96b6-192740",
+      "./js/weights.js": "./js/weights.js?v=2026-10-19.d3a96b6-192740",
+      "./js/storage.js": "./js/storage.js?v=2026-10-19.d3a96b6-192740",
+      "./js/icc.js": "./js/icc.js?v=2026-10-19.d3a96b6-192740",
+      "./js/match.js": "./js/match.js?v=2026-10-19.d3a96b6-192740",
+      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-19.d3a96b6-192740",
+      "./js/ui.js": "./js/ui.js?v=2026-10-19.d3a96b6-192740",
+      "./js/match-view.js": "./js/match-view.js?v=2026-10-19.d3a96b6-192740",
+      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-19.d3a96b6-192740"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-19.817bef6-192314"></script>
+  <script type="module" src="js/app.js?v=2026-10-19.d3a96b6-192740"></script>
 </body>
 </html>
