@@ -277,7 +277,7 @@ export function sheetLayout(opts) {
   const rowH = size + labelH;
   const headH = 14;
   const footerPt = 6.5, footerH = 12;
-  const colsIn = (width) => Math.floor((width + gap) / (size + gap));
+  const colsIn = (width) => Math.floor((width + gap) / (size + gap) + 1e-9); // tolerance: a row sized to fit exactly must fit
 
   const chars = (pt, width) => Math.max(10, Math.floor(width / (pt * 0.5))); // Helvetica averages ~0.5 em per character
   const fit = (str, pt, width) => (str.length > chars(pt, width) ? str.slice(0, chars(pt, width) - 3) + '...' : str);
@@ -290,30 +290,55 @@ export function sheetLayout(opts) {
     if (line) lines.push(line);
     return lines;
   };
-  /** The sheet's text for a column `width` wide: [{ pt, str, bold, lead }]; lead = height the line takes. */
+  const createdText = created.toISOString().slice(0, 16).replace('T', ' ');
+  const notes = `${NOTES[mode]} Print at 100% / actual size. Let the ink dry - transferred or cured prints: process like production, then scan.`;
+  const headingText = (g, cont) => {
+    const lab = g.target ? `target L* ${g.target[0].toFixed(2)}  a* ${g.target[1].toFixed(2)}  b* ${g.target[2].toFixed(2)} (D50/2 deg)` : '';
+    return `${g.label ? g.label + (cont ? ' (continued)' : '') + ' - ' : ''}${lab}`;
+  };
+  /** The text above the patches (normal layout): [{ pt, str, bold, lead }]; lead = height the line takes. */
   const headerLines = (firstPage, width) => {
     if (!firstPage) return [{ pt: 9, str: fit(`${title} - sheet ${round} (continued)`, 9, width), bold: true, lead: 18 }];
     const titlePt = Math.max(10, Math.min(16, width / 20));
-    const info = `Sheet ${round}   ${created.toISOString().slice(0, 16).replace('T', ' ')}   ${patchMm} mm patches - scan them in number order`;
-    const notes = `${NOTES[mode]} Print at 100% / actual size. Let the ink dry - transferred or cured prints: process like production, then scan.`;
     return [
       { pt: titlePt, str: fit(title, titlePt, width), bold: true, lead: titlePt + 9 },
-      ...wrap(info, 8, width).map((str) => ({ pt: 8, str, lead: 11 })),
+      ...wrap(`Sheet ${round}   ${createdText}   ${patchMm} mm patches - scan them in number order`, 8, width).map((str) => ({ pt: 8, str, lead: 11 })),
       ...wrap(notes, 7, width).map((str) => ({ pt: 7, str, lead: 9 })),
     ];
   };
+  /**
+   * The compact text of the side column: a smaller title, the sheet line carrying the page number (no separate
+   * footer), the colour and its target when the sheet holds one colour, then the notes (first page only).
+   */
+  const sideLines = (pageNo, width) => {
+    const first = pageNo === 1;
+    return [
+      { pt: 11, str: fit(first ? title : `${title} - sheet ${round} (continued)`, 11, width), bold: true, lead: 11 + 8 }, // hangs from the top: its size + a gap
+      ...wrap(`Sheet ${round}   ${createdText}   ${patchMm} mm patches - scan them in number order   page ${pageNo} of ${PAGES} - sd-10.com`, 7.5, width)
+        .map((str) => ({ pt: 7.5, str, lead: 10 })),
+      ...(single ? wrap(headingText(groups[0], !first), 8.5, width).map((str) => ({ pt: 8.5, str, bold: true, lead: 12 })) : []),
+      ...(first ? wrap(notes, 7, width).map((str) => ({ pt: 7, str, lead: 9 })) : []),
+    ];
+  };
   const blockHeight = (lines) => lines.reduce((s, l) => s + l.lead, 0) + 6;
+  const PAGES = '\u0001'; // page count, filled in once the layout is done
 
   // Side column when the media is wide and short, still leaves room for 4+ patches per row, and the text fits.
-  const sideW = SIDE_MM * PT, sideGap = 6 * PT;
-  const side = W > 1.5 * H && colsIn(usableW - sideW - sideGap) >= 4 &&
-    blockHeight(headerLines(true, sideW)) + footerH <= H - 2 * margin;
+  // It takes the width that the longest colour's single row of patches leaves free (at least SIDE_MM), so the text
+  // needs few lines and the sheet can be as short as one row of patches.
+  const single = groups.length === 1;
+  const sideGap = 6 * PT;
+  const longest = Math.max(...groups.map((g) => g.patches.length));
+  const sideW = Math.max(SIDE_MM * PT, usableW - sideGap - (longest * (size + gap) - gap));
+  const side = W > 1.5 * H && colsIn(usableW - sideW - sideGap) >= 4 && blockHeight(sideLines(1, sideW)) <= H - 2 * margin;
   const textW = side ? sideW : usableW;
   const areaX = side ? margin + sideW + sideGap : margin;
   const areaW = side ? usableW - sideW - sideGap : usableW;
   const cols = colsIn(areaW);
-  const bottom = side ? margin : margin + footerH; // the footer sits in the side column, or below the patches
-  if (cols < 1 || H - margin - bottom - (side ? 0 : 60) < headH + rowH) throw new Error(`The media is too small for ${patchMm} mm patches – choose smaller patches or larger media.`);
+  const bottom = side ? margin : margin + footerH; // the side column carries the page number, else a footer line
+  const headInArea = !(side && single); // a single colour's heading is in the side column
+  const groupHeadH = headInArea ? headH : 0;
+  if (cols < 1 || H - margin - bottom - (side ? 0 : 60) < groupHeadH + rowH) throw new Error(`The media is too small for ${patchMm} mm patches – choose smaller patches or larger media.`);
 
   const pages = [];
   let page, y;
@@ -322,21 +347,21 @@ export function sheetLayout(opts) {
     page = { texts: [], boxes: [] };
     pages.push(page);
     let ty = H - margin;
-    headerLines(pages.length === 1, textW).forEach((l, i) => {
+    (side ? sideLines(pages.length, textW) : headerLines(pages.length === 1, textW)).forEach((l, i) => {
       t(margin, i === 0 ? ty - l.pt : ty, l.pt, l.str, l.bold); // the first line hangs from the top edge
       ty -= l.lead;
     });
     y = side ? H - margin : ty - 6;
   };
   const heading = (g, cont) => {
-    const lab = g.target ? `target L* ${g.target[0].toFixed(2)}  a* ${g.target[1].toFixed(2)}  b* ${g.target[2].toFixed(2)} (D50/2 deg)` : '';
-    t(areaX, y - 9, 8.5, fit(`${g.label ? g.label + (cont ? ' (continued)' : '') + ' - ' : ''}${lab}`, 8.5, areaW), true);
+    if (!headInArea) return;
+    t(areaX, y - 9, 8.5, fit(headingText(g, cont), 8.5, areaW), true);
     y -= headH;
   };
 
   newPage();
   for (const g of groups) {
-    if (y - headH - rowH < bottom) newPage();
+    if (y - groupHeadH - rowH < bottom) newPage();
     heading(g, false);
     let col = cols, rowTop = y;
     for (const p of g.patches) {
@@ -355,11 +380,12 @@ export function sheetLayout(opts) {
     }
     y -= 6;
   }
-  pages.forEach((pg, i) => {
+  for (const [i, pg] of pages.entries()) {
+    if (side) { for (const tx of pg.texts) tx.str = tx.str.replace(PAGES, String(pages.length)); continue; }
     const long = `Generated by SD-10 Web Console (sd-10.com) - Print match - page ${i + 1} of ${pages.length}`;
-    const short = `SD-10 Web Console (sd-10.com) - page ${i + 1} of ${pages.length}`; // keeps the page count in a narrow column
+    const short = `SD-10 Web Console (sd-10.com) - page ${i + 1} of ${pages.length}`; // keeps the page count on narrow media
     pg.texts.push({ x: margin, y: margin + 1, size: footerPt, bold: false, str: fit(long.length <= chars(footerPt, textW) ? long : short, footerPt, textW) });
-  });
+  }
   return { W, H, side, pages };
 }
 

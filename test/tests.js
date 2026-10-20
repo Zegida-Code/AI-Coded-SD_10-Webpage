@@ -302,6 +302,12 @@ async function matchCheck() {
     const fitsAt = (hh) => { try { return sheetLayout({ ...opts, media: [700, hh] }).pages.length === 1; } catch { return false; } };
     check(`shortest one-page height at 700 mm wide: ${h} mm (fits, 1 mm less does not)`, h <= 80 && fitsAt(h) && !fitsAt(h - 1));
     check('portrait A4 keeps the text above the patches', !sheetLayout({ ...opts, media: [210, 297] }).side && minSheetHeight({ ...opts, media: [5, 5] }) === null);
+    // the side column widens into the free width, so the sheet is about one row of patches tall
+    const compact = { ...g, patches: designPatches('spot', g.target, [5, 8, 8], 'compact').map((p) => ({ ...p, name: patchSpotName('K3P9', 1, p.n) })) };
+    const h8 = minSheetHeight({ ...opts, groups: [compact], patchMm: 10 }), h16 = minSheetHeight({ ...opts, patchMm: 10 });
+    const lay41 = sheetLayout({ ...opts, media: [700, h] });
+    check(`thin strips: 20 mm patches need ${h} mm, 10 mm patches ${h16} mm; 8 patches never need more than 16 (${h8} mm); page number in the side text`,
+      h <= 45 && h16 <= 32 && h8 <= h16 && lay41.pages[0].texts.some((tx) => /page 1 of 1/.test(tx.str)) && !lay41.pages[0].texts.some((tx) => tx.str.includes('\u0001')));
   }
 
   // Edge Print .epcc: byte-identical to a collection exported by Edge Print (the user's "MoreData" test collection)
