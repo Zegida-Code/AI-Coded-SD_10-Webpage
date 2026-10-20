@@ -49,13 +49,14 @@ The demo ([sd-10.com/?demo](https://sd-10.com/?demo)) runs in every modern brows
 **Print match** (in the header, or [sd-10.com/#match](https://sd-10.com/#match)) finds the values to put in your
 artwork or RIP so that your printer reproduces a reference colour. It works in rounds: print a test sheet, scan it,
 and the app works out how your printer responds and which values should hit the colour – then a finer sheet confirms
-it. It needs a computer or tablet (768 px or wider); phones only show the Console.
+it. It needs a computer or tablet (768 px or wider); phones only show the Console. On wide screens the colour list and
+settings sit in a column at the left, next to the selected colour's workflow.
 
 ### 1. Reference colours
 
 Scan the colour you want to match (or use the last measurement, or type in L\*a\*b\*) and give it the name it has in
 your artwork. **+ Add colour** lets you work on several colours at once. Each colour has its own sheets, scan
-position and result, and everything below works on the colour **selected in the list** – so you can scan one
+position and result, and the reference, sheet, scan and result cards work on the colour **selected in the list** – so you can scan one
 colour's sheet while another is still printing or curing, and switching colours never disturbs the others.
 
 ### 2. Test sheet

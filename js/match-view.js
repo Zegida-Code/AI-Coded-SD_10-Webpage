@@ -112,7 +112,7 @@ async function updateGamut() {
 }
 function gamutHtml(c) {
   if (!c.target) return '';
-  if (!match.printerProfile) return '<span class="text-slate-500">Add your printer / media ICC profile below to check whether this colour is printable.</span>';
+  if (!match.printerProfile) return '<span class="text-slate-500">Add your printer / media ICC profile under Settings to check whether this colour is printable.</span>';
   const g = gamutFor(c);
   if (!g) return '<span class="text-slate-500">Checking the printer gamut…</span>';
   if (g.error) return `<span class="text-rose-600">Gamut check failed: ${escapeHtml(g.error)}</span>`;
@@ -269,11 +269,12 @@ function renderMatch() {
   $('mColourCount').textContent = match.colours.length > 1 ? `(${match.colours.length})` : '';
   $('mColourList').innerHTML = match.colours.map((x, i) => `<li data-colour="${i}" class="flex items-center gap-2 rounded-lg px-2 py-1.5 ring-1 ${i === match.active ? 'ring-2 ring-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30' : 'ring-slate-200 dark:ring-slate-800'}">
       <button type="button" data-colour-act="select" class="flex flex-1 min-w-0 items-center gap-2 text-left">
-        <span class="h-6 w-6 flex-none rounded ring-1 ring-black/10 ${x.target ? '' : 'bg-slate-200 dark:bg-slate-700'}" ${x.target ? `style="background:${displayHex(x.target)}"` : ''}></span>
-        <span class="font-medium truncate">${escapeHtml(colourLabel(x))}</span>
-        <span class="text-xs font-mono text-slate-500 hidden sm:inline">${x.target ? x.target.map((v) => v.toFixed(1)).join(' / ') : ''}</span>
-        ${gamutClass(gamutFor(x)) === 'outside' ? '<span class="chip bg-rose-600 text-white !px-1.5 !py-0 text-[10px]" title="Outside the printer gamut">OUT OF GAMUT</span>' : ''}
-        <span class="ml-auto text-xs ${x.accepted ? 'text-emerald-600' : 'text-slate-500'} whitespace-nowrap">${colourStatus(x)}</span></button>
+        <span class="h-8 w-8 flex-none rounded ring-1 ring-black/10 ${x.target ? '' : 'bg-slate-200 dark:bg-slate-700'}" ${x.target ? `style="background:${displayHex(x.target)}"` : ''}></span>
+        <span class="min-w-0 flex-1">
+          <span class="flex items-center gap-2"><span class="font-medium truncate">${escapeHtml(colourLabel(x))}</span>
+            ${gamutClass(gamutFor(x)) === 'outside' ? '<span class="chip bg-rose-600 text-white !px-1.5 !py-0 text-[10px]" title="Outside the printer gamut">OUT OF GAMUT</span>' : ''}</span>
+          <span class="block text-xs ${x.accepted ? 'text-emerald-600' : 'text-slate-500'}">${x.target ? `<span class="font-mono">${x.target.map((v) => v.toFixed(1)).join(' / ')}</span> · ` : ''}${colourStatus(x)}</span>
+        </span></button>
       ${match.colours.length > 1 ? '<button type="button" data-colour-act="remove" class="text-xs text-rose-600 hover:underline px-1" title="Remove this colour">remove</button>' : ''}</li>`).join('');
   // editor for the selected colour
   for (const [id, i] of [['mL', 0], ['mA', 1], ['mB', 2]]) if (document.activeElement !== $(id)) $(id).value = t ? t[i].toFixed(2) : '';
@@ -352,7 +353,8 @@ function renderPatchGrid(c) {
   const r = latest(c);
   if (!r) { $('mPatchGrid').innerHTML = '<p class="text-sm text-slate-500">No sheet yet.</p>'; $('mProgress').textContent = ''; return; }
   const next = nextPatchIndex(c, r);
-  $('mPatchGrid').innerHTML = `<div class="grid grid-cols-4 sm:grid-cols-8 gap-2">${r.patches.map((p, i) => {
+  // 8 per row in a full-width scan card, 4 when it sits beside the sheet card (xl)
+  $('mPatchGrid').innerHTML = `<div class="grid grid-cols-4 sm:grid-cols-8 xl:grid-cols-4 gap-2">${r.patches.map((p, i) => {
     const done = !!p.lab;
     const bg = done ? displayHex(p.lab) : patchPreviewHex(r.mode, p.x, r.kFixed);
     const dE = done && c.target ? DE().fn(c.target, p.lab) : null;
