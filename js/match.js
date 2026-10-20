@@ -390,12 +390,15 @@ export function sheetLayout(opts) {
 }
 
 /**
- * Shortest media height (whole mm) that holds the sheet on one page at the width of opts.media, or null if it does
- * not fit even 5 m tall (e.g. patches wider than the media).
+ * Shortest media height (whole mm) at the width of opts.media that holds the sheet on one page – or, with
+ * onePage: false, that can be laid out at all (one row of patches plus the sheet's text; more pages allowed).
+ * null if it does not fit even 5 m tall (e.g. patches wider than the media).
  */
-export function minSheetHeight(opts) {
+export function minSheetHeight(opts, { onePage = true } = {}) {
   const [wMm] = opts.media ?? MEDIA[opts.paper] ?? MEDIA.a4;
-  const fits = (hMm) => { try { return sheetLayout({ ...opts, media: [wMm, hMm] }).pages.length === 1; } catch { return false; } };
+  const fits = (hMm) => {
+    try { const layout = sheetLayout({ ...opts, media: [wMm, hMm] }); return !onePage || layout.pages.length === 1; } catch { return false; }
+  };
   let lo = 20, hi = 5000;
   if (!fits(hi)) return null;
   while (lo < hi) { const mid = Math.floor((lo + hi) / 2); if (fits(mid)) hi = mid; else lo = mid + 1; }

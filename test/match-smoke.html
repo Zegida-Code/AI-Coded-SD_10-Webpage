@@ -45,6 +45,14 @@
       const switched = $('mPaper').value === 'custom';
       $('mMediaW').dispatchEvent(new Event('change'));
       log(letterOk && switched && /at 700 mm wide/.test($('mCustomHint').textContent), `a preset fills in its size; editing it switches to custom (${$('mCustomHint').textContent})`);
+      // the height box cannot go below one row of patches plus the sheet's text
+      $('mMediaH').value = '10'; $('mMediaH').dispatchEvent(new Event('change'));
+      const minH = +$('mMediaH').min;
+      log(minH > 20 && +$('mMediaH').value === minH && /Height raised to/.test($('toast').textContent) && /Minimum height \d+ mm/.test($('mCustomHint').textContent),
+        `height box minimum follows the patches and text (${minH} mm at 700 mm wide)`);
+      setSel('mPatchMm', '30');
+      log(+$('mMediaH').value > minH && /Height raised to \d+ mm \(was \d+ mm\)/.test($('toast').textContent), `larger patches raise the height automatically and say so (${$('mMediaH').value} mm)`);
+      setSel('mPatchMm', '20');
       // save a size under a name, pick it again from the list, remove it
       $('mMediaW').value = '700'; $('mMediaW').dispatchEvent(new Event('change'));
       $('mMediaH').value = '80'; $('mMediaH').dispatchEvent(new Event('change'));
@@ -123,36 +131,50 @@
       $('demoButton').click();
       log(await until(() => $('mProgress').textContent.startsWith('1 /')), 'SD-10 button measures the next patch');
 
-      // ---- several colours on one sheet: compact 8-patch design, custom media, one PDF per colour, accept one
+      // ---- several colours in progress at once: each has its own sheet; scanning only affects the selected colour
       await until(() => !state_busy());
       setSel('mMode', 'lab'); setSel('mDesign', 'compact'); setSel('mPaper', 'custom'); setSel('mPatchMm', '15');
       $('mMediaW').value = '150'; $('mMediaW').dispatchEvent(new Event('change'));
       $('mMediaH').value = '200'; $('mMediaH').dispatchEvent(new Event('change'));
+      const label = () => $('mRoundLabel').textContent;
+      await until(() => !$('btnMatchSheet').disabled);
+      $('btnMatchSheet').click(); // colour 1 (selected)
+      await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 8 && /Colour 1 – sheet 1/.test(label()));
+      for (let i = 0; i < 3; i++) {
+        await until(() => !$('btnMatchMeasure').disabled);
+        $('btnMatchMeasure').click();
+        await until(() => $('mProgress').textContent.startsWith(`${i + 1} /`));
+      }
       $('btnColourAdd').click();
       $('mSpotName').value = 'Second'; $('mSpotName').dispatchEvent(new Event('change'));
       const t2 = spectrumToLab(printSpectrum([60, 10, 20, 0]), 0, 2);
       [['mL', 0], ['mA', 1], ['mB', 2]].forEach(([id, i]) => { $(id).value = t2[i].toFixed(2); });
       $('mB').dispatchEvent(new Event('change'));
-      log(d.querySelectorAll('#mColourList li').length === 2 && !$('mCustomWrap').classList.contains('hidden'), 'a second colour can be added; custom media size shown');
+      log(d.querySelectorAll('#mColourList li').length === 2 && /No sheet yet/.test($('mPatchGrid').textContent) && /for Second/.test($('mSheetInfo').textContent) && $('mResultCard').classList.contains('hidden'),
+        'a new colour starts with its own empty sheet, scan and result');
       await until(() => !$('btnMatchSheet').disabled);
       $('btnMatchSheet').click();
-      await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 16 && /sheet 1/.test($('mRoundLabel').textContent));
+      await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 8 && /Second – sheet 1/.test(label()));
       const nFiles = files.length;
       $('btnMatchPdf').click();
       const colourPdfs = files.slice(nFiles).filter((f) => f.name.endsWith('.pdf'));
       const pdf1 = colourPdfs[0] ? await readFile(colourPdfs[0]) : '';
-      log(colourPdfs.length === 2 && /MediaBox \[0 0 425\.20 566\.93\]/.test(pdf1) && colourPdfs[1].name === 'Second - sheet 1.pdf', `2 colours × 8 patches, one PDF per colour on 150 × 200 mm (${colourPdfs.map((f) => f.name).join(', ')})`);
-      for (let i = 0; i < 16; i++) {
+      log(colourPdfs.length === 1 && colourPdfs[0].name === 'Second - sheet 1.pdf' && /MediaBox \[0 0 425\.20 566\.93\]/.test(pdf1), `the PDF is the selected colour's sheet (${colourPdfs.map((f) => f.name).join(', ')}, 150 × 200 mm)`);
+      for (let i = 0; i < 8; i++) {
         await until(() => !$('btnMatchMeasure').disabled);
         $('btnMatchMeasure').click();
         await until(() => $('mProgress').textContent.startsWith(`${i + 1} /`));
       }
-      await until(() => d.querySelectorAll('#mResult [data-res]').length === 2);
-      log(d.querySelectorAll('#mResult [data-res]').length === 2, 'each colour gets its own result');
-      d.querySelector('#mResult [data-res] [data-res-act=accept]').click();
-      $('btnMatchRefine').click();
-      await until(() => /sheet 2/.test($('mRoundLabel').textContent));
-      log(d.querySelectorAll('#mPatchGrid [data-patch]').length === 8 && /Second/.test($('mSheetInfo').textContent) && /accepted/.test($('mColourList').textContent), 'an accepted colour is left off the next sheet');
+      await until(() => !$('mResultCard').classList.contains('hidden'));
+      const firstRow = d.querySelectorAll('#mColourList li')[0].textContent;
+      log(/Second/.test($('mResult').textContent) && d.querySelectorAll('#mResult [data-res]').length === 1 && /3\/8 scanned/.test(firstRow),
+        `scanning Second left Colour 1 where it was (${firstRow.replace(/\s+/g, ' ').trim()})`);
+      d.querySelectorAll('#mColourList [data-colour-act=select]')[0].click();
+      log($('mProgress').textContent.startsWith('3 / 8') && /#4/.test($('btnMatchMeasure').textContent) && /Colour 1 – sheet 1/.test(label()) && $('mResultCard').classList.contains('hidden'),
+        `selecting Colour 1 brings back its sheet and scan position (${$('btnMatchMeasure').textContent})`);
+      d.querySelectorAll('#mColourList [data-colour-act=select]')[1].click();
+      d.querySelector('#mResult [data-res-act=accept]').click();
+      log($('btnMatchRefine').disabled && /accepted/.test($('mColourList').textContent), 'an accepted colour gets no further sheets');
       d.querySelectorAll('#mColourList [data-colour-act=remove]')[1].click();
       setSel('mDesign', 'full'); setSel('mPaper', 'a4'); setSel('mPatchMm', '20');
 

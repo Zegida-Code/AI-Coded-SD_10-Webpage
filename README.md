@@ -40,10 +40,11 @@ document so your printer reproduces reference colours. It needs a computer or ta
 with downloaded sheets and your RIP software, so phones only show the Console.
 
 1. **Reference colours** – scan the colour to match (or use the last measurement, or type L\*a\*b\*) and give it the
-   name it has in your artwork. **+ Add colour** matches several colours at once: they share every test sheet, and each
-   colour keeps its own model and rounds.
-2. **Test sheet** – pick the sheet type that matches how the colour reaches your printer and download it. Each colour
-   gets its own file (named after the colour and sheet), with 16 patches around a first estimate – or 8 with
+   name it has in your artwork. **+ Add colour** matches several colours at once: each colour has its own sheets,
+   scan position and result, and everything below works on the colour selected in the list – so you can scan one
+   colour's sheet while another is still printing or curing, and switching colours never affects the others.
+2. **Test sheet** – pick the sheet type that matches how the colour reaches your printer and download it: the
+   selected colour's sheet (named after the colour and sheet), with 16 patches around a first estimate – or 8 with
    **Patches per colour: 8** to save media.
 
    | Sheet type | For | You get |
@@ -56,7 +57,8 @@ with downloaded sheets and your RIP software, so phones only show the Console.
    **Media** is a custom width × height in mm (the default), A4, Letter, A3 or Tabloid – a preset fills in its size, and
    editing the size makes it custom. **Save** keeps the current size under a name in this browser (listed under *Your
    sizes*, ✕ removes it); the size last used is remembered. On wide, short media the sheet's text moves beside the
-   patches, and the app shows the shortest height that fits each colour on one page. **Patch size** is 10–30 mm. From 20 mm the
+   patches. The height can't go below one row of patches plus the sheet's text (the app shows that minimum, and the
+   height that fits each colour on one page). **Patch size** is 10–30 mm. From 20 mm the
    values (and spot names) are printed under each patch, smaller patches only carry their number. Patches that do not
    fit on one page continue on further pages. Patches must cover the SD-10's whole measuring area – if readings of
    one patch jump around, use larger patches.
@@ -65,10 +67,10 @@ with downloaded sheets and your RIP software, so phones only show the Console.
    transferred, cured or finished (pressing, curing, laminating …), process the sheet the same way and scan the finished
    product. On textured or uneven surfaces set **Readings per patch** to 3 or more: each patch is then the average of
    several readings taken at different spots (a **!** marks patches whose readings disagree by more than 1.5 ΔE00).
-4. **Results** – for each colour, the app models how your printer responds around it and calculates the values that
-   should print closest to the reference, with the predicted ΔE00. **Make next sheet** prints a finer sheet centred on
-   those answers; its centre patches verify them. A colour reports **Done** once its values print within your
-   tolerance – **Accept** it to leave it off the next sheets.
+4. **Result** – for the selected colour, the app models how your printer responds around it and calculates the values
+   that should print closest to the reference, with the predicted ΔE00. **Make next sheet** prints a finer sheet for
+   that colour, centred on the answer; its centre patches verify it. A colour reports **Done** once its values print
+   within your tolerance – **Accept** it to stop making sheets for it.
 
 **Colour difference:** matches are judged with **ΔE00** (graphic arts, the default), or for textiles with **ΔE00 2:1:1**
 or **ΔE CMC 2:1**, which judge lightness differences more leniently, as people do on fabric. The solver then also aims
@@ -139,10 +141,10 @@ Open these pages in Chrome (on the live site, e.g. [sd-10.com/test/](https://sd-
 
 | Page | Checks |
 |---|---|
-| [`test/index.html`](https://sd-10.com/test/index.html) | 95 checks: command frames vs. the app's own (emulated) code, Lab and CMYK vs. the native libraries, ΔE2000 reference data, ICC v4 parsing, print-match model fitting/convergence for all four sheet types, PDF/PNG sheet structure, CxF3 structure, Adobe Color Book bytes, Edge Print .epcc vs. a real Edge Print export, ΔE CMC / ΔE00 2:1:1 vs. colour-science, metamerism, ICC AToB vs. LittleCMS and the gamut check, compact design, multi-page layout, library import (CxF incl. spectra, ACB, .epcc, .spot), VersaWorks .spot output vs. a real VersaWorks export, a full session against the simulator |
+| [`test/index.html`](https://sd-10.com/test/index.html) | 99 checks: command frames vs. the app's own (emulated) code, Lab and CMYK vs. the native libraries, ΔE2000 reference data, ICC v4 parsing, print-match model fitting/convergence for all four sheet types, PDF/PNG sheet structure, CxF3 structure, Adobe Color Book bytes, Edge Print .epcc vs. a real Edge Print export, ΔE CMC / ΔE00 2:1:1 vs. colour-science, metamerism, ICC AToB vs. LittleCMS and the gamut check, compact design, multi-page layout, library import (CxF incl. spectra, ACB, .epcc, .spot), VersaWorks .spot output vs. a real VersaWorks export, a full session against the simulator |
 | [`test/ui-smoke.html`](https://sd-10.com/test/ui-smoke.html) | 34 checks driving the real UI against the simulator (calibrate, measure, compare, line scan, history sync, palettes, settings, custom ICC) |
 | [`test/mobile-check.html`](https://sd-10.com/test/mobile-check.html) | Layout at 375 px wide (no sideways scrolling) plus the compare/reference flows |
-| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 44 checks for Print match against the simulated device and printer: rounds to within tolerance, textile ΔE, metamerism and printer-profile gamut checks, several colours on custom media (one PDF per colour, accepting a colour), spot colour sheets with averaged readings, a spot library (add, import, type in) exported as CxF3 / Adobe Color Book / VersaWorks, RGB/PNG sheets |
+| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 49 checks for Print match against the simulated device and printer: rounds to within tolerance, textile ΔE, metamerism and printer-profile gamut checks, several colours in progress at once (each with its own sheet and scan, accepting a colour), custom media and height limits, spot colour sheets with averaged readings, a spot library (add, import, type in) exported as CxF3 / Adobe Color Book / VersaWorks, RGB/PNG sheets |
 
 ## Project layout
 
