@@ -250,12 +250,17 @@ const NOTES = {
   rgb: 'Patch values are sRGB (0-255). Use the same software, colour settings, substrate and pre-treatment as the final job.',
 };
 
+/** Width of the text column on wide, short media, where the sheet's text sits beside the patches instead of above. */
+const SIDE_MM = 80;
+
 /**
  * Sheet layout in PDF points (origin bottom-left), shared by the PDF and the PNG.
  * opts: { mode, groups: [{ label, target, patches, kFixed }], round (sheet number), media: [w, h] mm | paper: key,
  *         patchMm, created, title }  – or a single colour as { patches, target, kFixed }.
  * Colours follow each other; each starts on a new row under a heading with its target, and the patches flow onto
- * further pages when the media is full. Returns { W, H, pages: [{ texts, boxes }] }.
+ * further pages when the media is full. On wide, short media (wider than 1.5 × its height) the title, notes and footer
+ * go into a column at the left and the patches use the full height beside it.
+ * Returns { W, H, side (true when the text is in the side column), pages: [{ texts, boxes }] }.
  */
 export function sheetLayout(opts) {
   const { mode, round = 1, created = new Date(), title = 'SD-10 print match', patchMm = 25 } = opts;
@@ -270,22 +275,45 @@ export function sheetLayout(opts) {
   const gap = detailed ? Math.max(4 * PT, 24 * PT - size) : 3 * PT;
   const labelH = detailed ? (mode === 'spot' ? 30 : 23) : 12;
   const rowH = size + labelH;
-  const cols = Math.floor((usableW + gap) / (size + gap));
-  const bottom = margin + 12; // room for the footer
   const headH = 14;
-  if (cols < 1 || H - margin - bottom - 60 < headH + rowH) throw new Error(`The media is too small for ${patchMm} mm patches – choose smaller patches or larger media.`);
+  const footerPt = 6.5, footerH = 12;
+  const colsIn = (width) => Math.floor((width + gap) / (size + gap));
 
-  const chars = (pt) => Math.max(10, Math.floor(usableW / (pt * 0.5))); // Helvetica averages ~0.5 em per character
-  const fit = (str, pt) => (str.length > chars(pt) ? str.slice(0, chars(pt) - 3) + '...' : str);
-  const wrap = (str, pt) => {
+  const chars = (pt, width) => Math.max(10, Math.floor(width / (pt * 0.5))); // Helvetica averages ~0.5 em per character
+  const fit = (str, pt, width) => (str.length > chars(pt, width) ? str.slice(0, chars(pt, width) - 3) + '...' : str);
+  const wrap = (str, pt, width) => {
     const lines = [];
     let line = '';
     for (const word of str.split(' ')) {
-      if (line && (line + ' ' + word).length > chars(pt)) { lines.push(line); line = word; } else line = line ? line + ' ' + word : word;
+      if (line && (line + ' ' + word).length > chars(pt, width)) { lines.push(line); line = word; } else line = line ? line + ' ' + word : word;
     }
     if (line) lines.push(line);
     return lines;
   };
+  /** The sheet's text for a column `width` wide: [{ pt, str, bold, lead }]; lead = height the line takes. */
+  const headerLines = (firstPage, width) => {
+    if (!firstPage) return [{ pt: 9, str: fit(`${title} - sheet ${round} (continued)`, 9, width), bold: true, lead: 18 }];
+    const titlePt = Math.max(10, Math.min(16, width / 20));
+    const info = `Sheet ${round}   ${created.toISOString().slice(0, 16).replace('T', ' ')}   ${patchMm} mm patches - scan them in number order`;
+    const notes = `${NOTES[mode]} Print at 100% / actual size. Let the ink dry - transferred or cured prints: process like production, then scan.`;
+    return [
+      { pt: titlePt, str: fit(title, titlePt, width), bold: true, lead: titlePt + 9 },
+      ...wrap(info, 8, width).map((str) => ({ pt: 8, str, lead: 11 })),
+      ...wrap(notes, 7, width).map((str) => ({ pt: 7, str, lead: 9 })),
+    ];
+  };
+  const blockHeight = (lines) => lines.reduce((s, l) => s + l.lead, 0) + 6;
+
+  // Side column when the media is wide and short, still leaves room for 4+ patches per row, and the text fits.
+  const sideW = SIDE_MM * PT, sideGap = 6 * PT;
+  const side = W > 1.5 * H && colsIn(usableW - sideW - sideGap) >= 4 &&
+    blockHeight(headerLines(true, sideW)) + footerH <= H - 2 * margin;
+  const textW = side ? sideW : usableW;
+  const areaX = side ? margin + sideW + sideGap : margin;
+  const areaW = side ? usableW - sideW - sideGap : usableW;
+  const cols = colsIn(areaW);
+  const bottom = side ? margin : margin + footerH; // the footer sits in the side column, or below the patches
+  if (cols < 1 || H - margin - bottom - (side ? 0 : 60) < headH + rowH) throw new Error(`The media is too small for ${patchMm} mm patches – choose smaller patches or larger media.`);
 
   const pages = [];
   let page, y;
@@ -293,24 +321,16 @@ export function sheetLayout(opts) {
   const newPage = () => {
     page = { texts: [], boxes: [] };
     pages.push(page);
-    y = H - margin;
-    const titlePt = Math.max(10, Math.min(16, usableW / 20));
-    if (pages.length === 1) {
-      t(margin, y - titlePt, titlePt, fit(title, titlePt), true);
-      y -= titlePt + 9;
-      t(margin, y, 8, fit(`Sheet ${round}   ${created.toISOString().slice(0, 16).replace('T', ' ')}   ${patchMm} mm patches - scan them in number order`, 8));
-      y -= 11;
-      const notes = `${NOTES[mode]} Print at 100% / actual size. Let the ink dry - transferred or cured prints: process like production, then scan.`;
-      for (const line of wrap(notes, 7)) { t(margin, y, 7, line); y -= 9; }
-    } else {
-      t(margin, y - 9, 9, fit(`${title} - sheet ${round} (continued)`, 9), true);
-      y -= 18;
-    }
-    y -= 6;
+    let ty = H - margin;
+    headerLines(pages.length === 1, textW).forEach((l, i) => {
+      t(margin, i === 0 ? ty - l.pt : ty, l.pt, l.str, l.bold); // the first line hangs from the top edge
+      ty -= l.lead;
+    });
+    y = side ? H - margin : ty - 6;
   };
   const heading = (g, cont) => {
     const lab = g.target ? `target L* ${g.target[0].toFixed(2)}  a* ${g.target[1].toFixed(2)}  b* ${g.target[2].toFixed(2)} (D50/2 deg)` : '';
-    t(margin, y - 9, 8.5, fit(`${g.label ? g.label + (cont ? ' (continued)' : '') + ' - ' : ''}${lab}`, 8.5), true);
+    t(areaX, y - 9, 8.5, fit(`${g.label ? g.label + (cont ? ' (continued)' : '') + ' - ' : ''}${lab}`, 8.5, areaW), true);
     y -= headH;
   };
 
@@ -324,7 +344,7 @@ export function sheetLayout(opts) {
         if (y - rowH < bottom) { newPage(); heading(g, true); }
         rowTop = y; y -= rowH; col = 0;
       }
-      const x = margin + col * (size + gap);
+      const x = areaX + col * (size + gap);
       page.boxes.push({ x, y: rowTop - size, size, patch: p, kFixed: g.kFixed ?? 0 });
       if (detailed) {
         t(x, rowTop - size - 10, 8, `#${p.n}${p.offset.every((v) => v === 0) ? ' (centre)' : ''}`, true);
@@ -335,9 +355,25 @@ export function sheetLayout(opts) {
     }
     y -= 6;
   }
-  pages.forEach((pg, i) => pg.texts.push({ x: margin, y: margin + 1, size: 6.5, bold: false,
-    str: fit(`Generated by SD-10 Web Console (sd-10.com) - Print match - page ${i + 1} of ${pages.length}`, 6.5) }));
-  return { W, H, pages };
+  pages.forEach((pg, i) => {
+    const long = `Generated by SD-10 Web Console (sd-10.com) - Print match - page ${i + 1} of ${pages.length}`;
+    const short = `SD-10 Web Console (sd-10.com) - page ${i + 1} of ${pages.length}`; // keeps the page count in a narrow column
+    pg.texts.push({ x: margin, y: margin + 1, size: footerPt, bold: false, str: fit(long.length <= chars(footerPt, textW) ? long : short, footerPt, textW) });
+  });
+  return { W, H, side, pages };
+}
+
+/**
+ * Shortest media height (whole mm) that holds the sheet on one page at the width of opts.media, or null if it does
+ * not fit even 5 m tall (e.g. patches wider than the media).
+ */
+export function minSheetHeight(opts) {
+  const [wMm] = opts.media ?? MEDIA[opts.paper] ?? MEDIA.a4;
+  const fits = (hMm) => { try { return sheetLayout({ ...opts, media: [wMm, hMm] }).pages.length === 1; } catch { return false; } };
+  let lo = 20, hi = 5000;
+  if (!fits(hi)) return null;
+  while (lo < hi) { const mid = Math.floor((lo + hi) / 2); if (fits(mid)) hi = mid; else lo = mid + 1; }
+  return lo;
 }
 
 function pdfText(s) {

@@ -8,7 +8,7 @@ import { deltaE2000, labD50ToSrgb, meanSpectrum, rgbHex, spectrumToLab, srgbToLa
 import { CUSTOM_PREFIX, PRINTER_PREFIX, loadProfile, printerProfiles } from './icc.js';
 import {
   DESIGNS, DE_FORMULAS, MEDIA, MODES, analyseRound, averageReadings, buildSheetPdf, buildSheetPng, designPatches, metamerism,
-  nextStep, patchSpotName, sheetLayout,
+  minSheetHeight, nextStep, patchSpotName, sheetLayout,
 } from './match.js';
 import { RIP_EXPORTS, readLibrary } from './rip-export.js';
 import { printSpectrum } from './printer-sim.js';
@@ -179,6 +179,17 @@ export function matchControls(busyLabel) {
   $('btnMatchTarget').textContent = `Measure reference${c.refReads.length ? reading(c.refReads.length) : ''}`;
 }
 
+/** Custom media: the shortest height that holds one colour's sheet on a single page at the chosen width. */
+function customHeightHint() {
+  const per = DESIGNS[match.design] ?? 16;
+  // the current sheet, or a stand-in colour with the chosen number of patches before there is one
+  const groups = sheetGroups().length ? sheetGroups() : [{ label: 'Colour 1', target: [50, 0, 0], kFixed: 0,
+    patches: Array.from({ length: per }, (_, i) => ({ n: i + 1, offset: [0, 0, 0], x: [0, 0, 0], name: 'SD10-XXXX-R1-01' })) }];
+  const heights = groups.map((g) => minSheetHeight({ mode: match.mode, groups: [g], round: Math.max(match.sheet, 1), media: [match.mediaW, 0], patchMm: match.patchMm }));
+  if (heights.some((h) => h == null)) return `${match.patchMm} mm patches do not fit on ${match.mediaW} mm wide media.`;
+  return `Shortest height that fits each colour on one page at ${match.mediaW} mm wide: ${Math.max(...heights)} mm.`;
+}
+
 function colourStatus(c) {
   if (!c.target) return 'no reference yet';
   if (c.accepted) return 'accepted';
@@ -216,6 +227,7 @@ function renderMatch() {
   $('mCustomWrap').classList.toggle('hidden', match.media !== 'custom');
   if (document.activeElement !== $('mMediaW')) $('mMediaW').value = match.mediaW;
   if (document.activeElement !== $('mMediaH')) $('mMediaH').value = match.mediaH;
+  $('mCustomHint').textContent = match.media === 'custom' ? customHeightHint() : '';
   $('mRipFormatWrap').classList.toggle('hidden', !isLabMode(match.mode));
   if (!RIP_EXPORTS[match.ripFormat]) match.ripFormat = 'cxf';
   $('mRipFormat').value = match.ripFormat;
@@ -730,7 +742,7 @@ export function initMatch(app) {
     match.mode = $('mMode').value; resetMatching(); saveMatch(); renderMatch();
   };
   $('mPaper').onchange = () => { match.media = $('mPaper').value; saveMatch(); renderMatch(); };
-  for (const [id, key, lo, hi] of [['mMediaW', 'mediaW', 50, 3000], ['mMediaH', 'mediaH', 50, 10000]]) {
+  for (const [id, key, lo, hi] of [['mMediaW', 'mediaW', 50, 3000], ['mMediaH', 'mediaH', 20, 10000]]) {
     $(id).onchange = () => { match[key] = Math.min(Math.max(Math.round(+$(id).value) || match[key], lo), hi); saveMatch(); renderMatch(); };
   }
   $('mPatchMm').onchange = () => { match.patchMm = +$('mPatchMm').value; saveMatch(); renderMatch(); };

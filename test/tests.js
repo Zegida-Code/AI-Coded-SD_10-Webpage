@@ -121,7 +121,7 @@ async function iccV4Check() {
 
 // ---- 3d. Print match: model fitting, convergence with a simulated printer, PDF sheet
 async function matchCheck() {
-  const { designPatches, fitModel, analyseRound, nextStep, trustRadius, buildSheetPdf, buildSheetPng, sheetLayout, averageReadings, patchSpotName, MODES, DE_FORMULAS, metamerism } = await import('../js/match.js');
+  const { designPatches, fitModel, analyseRound, nextStep, trustRadius, buildSheetPdf, buildSheetPng, sheetLayout, minSheetHeight, averageReadings, patchSpotName, MODES, DE_FORMULAS, metamerism } = await import('../js/match.js');
   const { deltaECMC } = await import('../js/color.js');
   const { RIP_EXPORTS, readLibrary } = await import('../js/rip-export.js');
   const { printSpectrum } = await import('../js/printer-sim.js');
@@ -284,6 +284,24 @@ async function matchCheck() {
     let small = '';
     try { sheetLayout({ mode: 'lab', groups, media: [40, 40], patchMm: 30 }); } catch (e) { small = e.message; }
     check('layout: media too small for the patch size is reported', /too small for 30 mm patches/.test(small), small);
+  }
+
+  // wide, short media: the text moves into a column beside the patches, so a 700 mm wide sheet needs little height
+  {
+    const g = { label: 'Purple', target: [26.4, 29.1, -31.9], kFixed: 0,
+      patches: designPatches('spot', [26.4, 29.1, -31.9], [5, 8, 8]).map((p) => ({ ...p, name: patchSpotName('K3P9', 1, p.n) })) };
+    const opts = { mode: 'spot', groups: [g], round: 1, media: [700, 80], patchMm: 20 };
+    const lay = sheetLayout(opts);
+    const mm = 72 / 25.4, margin = 5 * mm;
+    const boxes = lay.pages[0].boxes, texts = lay.pages[0].texts;
+    const textRight = Math.max(...texts.filter((t) => t.x === margin).map((t) => t.x + t.str.length * t.size * 0.5));
+    const inside = boxes.every((b) => b.y >= margin - 1e-6 && b.y + b.size <= lay.H - margin + 1e-6 && b.x + b.size <= lay.W - margin + 1e-6);
+    check(`700 × 80 mm: text in a side column, all 16 patches on one page beside it (text ends at ${(textRight / mm).toFixed(0)} mm, patches start at ${(Math.min(...boxes.map((b) => b.x)) / mm).toFixed(0)} mm)`,
+      lay.side && lay.pages.length === 1 && boxes.length === 16 && inside && textRight <= Math.min(...boxes.map((b) => b.x)));
+    const h = minSheetHeight(opts);
+    const fitsAt = (hh) => { try { return sheetLayout({ ...opts, media: [700, hh] }).pages.length === 1; } catch { return false; } };
+    check(`shortest one-page height at 700 mm wide: ${h} mm (fits, 1 mm less does not)`, h <= 80 && fitsAt(h) && !fitsAt(h - 1));
+    check('portrait A4 keeps the text above the patches', !sheetLayout({ ...opts, media: [210, 297] }).side && minSheetHeight({ ...opts, media: [5, 5] }) === null);
   }
 
   // Edge Print .epcc: byte-identical to a collection exported by Edge Print (the user's "MoreData" test collection)

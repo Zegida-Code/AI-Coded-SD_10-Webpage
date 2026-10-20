@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <link rel="stylesheet" href="css/app.css?v=2026-10-19.b3044a0-174801">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-19.45c7ea7-181702">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -307,7 +307,8 @@
           <select id="mPaper" class="input"><option value="a4">A4</option><option value="letter">Letter</option><option value="a3">A3</option><option value="tabloid">Tabloid</option><option value="custom">Custom size…</option></select></div>
         <div id="mCustomWrap" class="grid grid-cols-2 gap-2">
           <div><label class="label" for="mMediaW">Width (mm)</label><input id="mMediaW" class="input" type="number" min="50" max="3000" step="1"></div>
-          <div><label class="label" for="mMediaH">Height (mm)</label><input id="mMediaH" class="input" type="number" min="50" max="10000" step="1"></div>
+          <div><label class="label" for="mMediaH">Height (mm)</label><input id="mMediaH" class="input" type="number" min="20" max="10000" step="1"></div>
+          <p id="mCustomHint" class="col-span-2 text-xs text-slate-500"></p>
         </div>
         <div><label class="label" for="mPatchMm">Patch size</label>
           <select id="mPatchMm" class="input"><option value="10">10 mm</option><option value="12">12 mm</option><option value="15">15 mm</option><option value="20">20 mm</option><option value="25">25 mm</option><option value="30">30 mm</option></select></div>
@@ -404,23 +405,23 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-19.b3044a0-174801",
-      "./js/transport.js": "./js/transport.js?v=2026-10-19.b3044a0-174801",
-      "./js/mock.js": "./js/mock.js?v=2026-10-19.b3044a0-174801",
-      "./js/session.js": "./js/session.js?v=2026-10-19.b3044a0-174801",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-19.b3044a0-174801",
-      "./js/color.js": "./js/color.js?v=2026-10-19.b3044a0-174801",
-      "./js/weights.js": "./js/weights.js?v=2026-10-19.b3044a0-174801",
-      "./js/storage.js": "./js/storage.js?v=2026-10-19.b3044a0-174801",
-      "./js/icc.js": "./js/icc.js?v=2026-10-19.b3044a0-174801",
-      "./js/match.js": "./js/match.js?v=2026-10-19.b3044a0-174801",
-      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-19.b3044a0-174801",
-      "./js/ui.js": "./js/ui.js?v=2026-10-19.b3044a0-174801",
-      "./js/match-view.js": "./js/match-view.js?v=2026-10-19.b3044a0-174801",
-      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-19.b3044a0-174801"
+      "./js/app.js": "./js/app.js?v=2026-10-19.45c7ea7-181702",
+      "./js/transport.js": "./js/transport.js?v=2026-10-19.45c7ea7-181702",
+      "./js/mock.js": "./js/mock.js?v=2026-10-19.45c7ea7-181702",
+      "./js/session.js": "./js/session.js?v=2026-10-19.45c7ea7-181702",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-19.45c7ea7-181702",
+      "./js/color.js": "./js/color.js?v=2026-10-19.45c7ea7-181702",
+      "./js/weights.js": "./js/weights.js?v=2026-10-19.45c7ea7-181702",
+      "./js/storage.js": "./js/storage.js?v=2026-10-19.45c7ea7-181702",
+      "./js/icc.js": "./js/icc.js?v=2026-10-19.45c7ea7-181702",
+      "./js/match.js": "./js/match.js?v=2026-10-19.45c7ea7-181702",
+      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-19.45c7ea7-181702",
+      "./js/ui.js": "./js/ui.js?v=2026-10-19.45c7ea7-181702",
+      "./js/match-view.js": "./js/match-view.js?v=2026-10-19.45c7ea7-181702",
+      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-19.45c7ea7-181702"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-19.b3044a0-174801"></script>
+  <script type="module" src="js/app.js?v=2026-10-19.45c7ea7-181702"></script>
 </body>
 </html>
