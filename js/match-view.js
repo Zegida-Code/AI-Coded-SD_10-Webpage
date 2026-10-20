@@ -2,7 +2,7 @@
 // test sheets (PDF / PNG), scanning the printed patches, per-colour results with metamerism and gamut checks, and the
 // spot colour library. The maths is in match.js and the library file formats in rip-export.js; this is the UI.
 // It shares the Console's device session: app.js hands over its state and helpers once, through initMatch().
-import { $, DEMO, NEEDS_CALIBRATION, displayHex, downloadFile, escapeHtml, onFilePicked, round2, safeFileName, toast } from './ui.js';
+import { $, DEMO, NEEDS_CALIBRATION, displayHex, downloadFile, escapeHtml, onFilePicked, readFlag, round2, safeFileName, toast, writeFlag } from './ui.js';
 import { METHOD } from './protocol.js';
 import { deltaE2000, labD50ToSrgb, meanSpectrum, rgbHex, spectrumToLab, srgbToLabD50 } from './color.js';
 import { CUSTOM_PREFIX, PRINTER_PREFIX, loadProfile, printerProfiles } from './icc.js';
@@ -310,7 +310,7 @@ function renderMatch() {
   const fmtLabel = ` (${RIP_EXPORTS[match.ripFormat].label})`;
   $('btnMatchRipSheet').textContent = `Sheet library${fmtLabel}`;
   $('btnLibDownload').textContent = `Download library${fmtLabel}`;
-  $('mModeHelp').innerHTML = modeHelp(match.mode);
+  $('mModeHelp').innerHTML = `<b>${escapeHtml($('mMode').selectedOptions[0]?.textContent ?? 'Sheet type')}:</b> ${modeHelp(match.mode)}`;
   $('mPrintTips').innerHTML = printTips(match.mode);
 
   renderSheet(c);
@@ -334,9 +334,10 @@ function renderSheet(c) {
     $('mSheetInfo').textContent = `Creates a sheet of ${DESIGNS[match.design] ?? 16} ${MODE_NAME[match.mode]} patches for ${colourLabel(c)}, around a first estimate of its reference.`;
     return;
   }
-  let pages;
+  let pages, layout = null;
   try {
-    const n = sheetLayout({ mode: match.mode, groups: [sheetGroup(c, r)], round: r.round, media: mediaMm(), patchMm: match.patchMm }).pages.length;
+    layout = sheetLayout({ mode: match.mode, groups: [sheetGroup(c, r)], round: r.round, media: mediaMm(), patchMm: match.patchMm });
+    const n = layout.pages.length;
     pages = ` · ${n} page${n > 1 ? 's' : ''} of ${mediaName()} with ${match.patchMm} mm patches`;
   } catch (e) { pages = ` · <span class="text-rose-600">${escapeHtml(e.message)}</span>`; }
   const vals = formatValues(r.mode, r.centre, r.kFixed).map(([k, v]) => `${k} ${v}`).join('  ');
@@ -345,7 +346,22 @@ function renderSheet(c) {
     ? `<p class="text-xs mt-1">Spot names <span class="font-mono">${escapeHtml(r.patches[0].name ?? '')}</span> … <span class="font-mono">${escapeHtml(r.patches[r.patches.length - 1].name ?? '')}</span>.</p>`
     : '';
   $('mSheetInfo').innerHTML = `${r.patches.length} patches${pages}. Download, print and scan the patches below.
-    <p class="mt-1 text-xs">Round ${r.round}: centre <span class="font-mono">${vals}</span> · steps ${steps}</p>${names}`;
+    <p class="mt-1 text-xs">Round ${r.round}: centre <span class="font-mono">${vals}</span> · steps ${steps}</p>${names}` +
+    (layout ? sheetPreview(layout, r) : '');
+}
+
+/**
+ * A small to-scale drawing of the sheet's first page, from the same layout as the PDF: patches in their print colours
+ * on the media's real proportions, text as grey lines. At most 200 px tall, so wide strips and tall sheets both fit.
+ */
+function sheetPreview({ W, H, pages }, r) {
+  const pct = (v, of) => `${((v / of) * 100).toFixed(3)}%`;
+  const page = pages[0];
+  const lines = page.texts.map((t) => `<div class="absolute rounded-full bg-slate-300" style="left:${pct(t.x, W)};top:${pct(H - t.y - t.size * 0.7, H)};width:${pct(Math.min(t.str.length * t.size * 0.5, W - t.x), W)};height:${pct(t.size * 0.55, H)}"></div>`).join('');
+  const boxes = page.boxes.map((b) => `<div class="absolute ring-1 ring-black/20" style="left:${pct(b.x, W)};top:${pct(H - b.y - b.size, H)};width:${pct(b.size, W)};height:${pct(b.size, H)};background:${patchPreviewHex(r.mode, b.patch.x, b.kFixed)}"></div>`).join('');
+  return `<figure class="mt-3">
+    <div class="relative mx-auto overflow-hidden rounded-sm bg-white shadow ring-1 ring-black/10" style="aspect-ratio:${W.toFixed(1)}/${H.toFixed(1)};max-width:min(100%, ${Math.round((200 * W) / H)}px)">${lines}${boxes}</div>
+    <figcaption class="mt-1 text-center text-[11px] text-slate-500">Preview${pages.length > 1 ? ` – page 1 of ${pages.length}` : ''} · ${escapeHtml(mediaName())}</figcaption></figure>`;
 }
 
 /** Card 3: the selected colour's patches – measured ones in their measured colour, the next one outlined. */
@@ -805,6 +821,8 @@ export function initMatch(app) {
     if (match.colours.some((c) => c.rounds.length) && !confirm('Changing the sheet type starts every colour over. Continue?')) { $('mMode').value = match.mode; return; }
     match.mode = $('mMode').value; resetMatching(); saveMatch(); renderMatch();
   };
+  $('mTipsBox').open = !readFlag('sd10.tipsClosed');
+  $('mTipsBox').ontoggle = () => writeFlag('sd10.tipsClosed', !$('mTipsBox').open);
   // A preset or saved size fills in the width and height; editing either box makes the size custom.
   renderMediaOptions();
   $('mPaper').onchange = () => {

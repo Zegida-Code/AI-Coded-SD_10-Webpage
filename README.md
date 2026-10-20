@@ -50,7 +50,8 @@ The demo ([sd-10.com/?demo](https://sd-10.com/?demo)) runs in every modern brows
 artwork or RIP so that your printer reproduces a reference colour. It works in rounds: print a test sheet, scan it,
 and the app works out how your printer responds and which values should hit the colour – then a finer sheet confirms
 it. It needs a computer or tablet (768 px or wider); phones only show the Console. On wide screens the colour list and
-settings sit in a column at the left, next to the selected colour's workflow.
+settings (with tips on sheet types and printing) sit in a column at the left, next to the selected colour's
+workflow.
 
 ### 1. Reference colours
 
@@ -70,7 +71,8 @@ Pick the sheet type that matches how colour reaches your printer, then **Create 
 | **CMYK numbers** | Documents that send CMYK values to the printer | A PDF with CMYK patches (K stays fixed; the first estimate comes from the CMYK profile chosen in the Console) |
 | **RGB image (raster workflows)** | Software that only accepts images | A 300 dpi sRGB PNG; the result is an RGB / hex value for your artwork |
 
-Each sheet has **16 patches** around the current estimate, or **8** (*Patches per colour*) to save media and scanning.
+Each sheet has **16 patches** around the current estimate, or **8** (*Patches* in Settings) to save media and
+scanning. A to-scale preview shows how the sheet sits on your media before you download it.
 
 **Media and patch size**
 
