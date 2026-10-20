@@ -53,7 +53,10 @@ with downloaded sheets and your RIP software, so phones only show the Console.
    | **CMYK numbers** | documents that send CMYK to the printer (K is kept fixed; first estimate from the selected CMYK profile) | PDF with CMYK patches |
    | **RGB image (raster workflows)** | software that only accepts raster images | sRGB PNG (300 dpi); the result is an RGB / hex value for your artwork |
 
-   **Media** is A4, Letter, A3, Tabloid or a custom width × height in mm, and **Patch size** is 10–30 mm. From 20 mm the
+   **Media** is a custom width × height in mm (the default), A4, Letter, A3 or Tabloid – a preset fills in its size, and
+   editing the size makes it custom. **Save** keeps the current size under a name in this browser (listed under *Your
+   sizes*, ✕ removes it); the size last used is remembered. On wide, short media the sheet's text moves beside the
+   patches, and the app shows the shortest height that fits each colour on one page. **Patch size** is 10–30 mm. From 20 mm the
    values (and spot names) are printed under each patch, smaller patches only carry their number. Patches that do not
    fit on one page continue on further pages. Patches must cover the SD-10's whole measuring area – if readings of
    one patch jump around, use larger patches.

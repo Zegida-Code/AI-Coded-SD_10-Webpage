@@ -18,7 +18,8 @@ import { printSpectrum } from './printer-sim.js';
 let state, task, settingsFromUI, updateControls, doCalibrate;
 
 // Persisted job (localStorage 'sd10.match'):
-//   settings: mode, media ('custom' | a preset 'a4' …), mediaW/mediaH (mm – the size in use, also for presets), patchMm,
+//   settings: mode, media ('custom' | a preset 'a4' … | 'size:<name>' for a saved size), mediaW/mediaH (mm – the size
+//             in use, also for presets), patchMm,
 //             design ('full' | 'compact'), mf, tol, reads, ripFormat
 //   formula (DE_FORMULAS key), printerProfile (name of a stored printer profile for the gamut check, '' = none)
 //   colours: [{ id, name, target, targetSpectrum, refReads, refSpectra, accepted,
@@ -44,10 +45,28 @@ const match = (() => {
   }
   const out = { mode: 'spot', media: 'custom', mediaW: 210, mediaH: 297, patchMm: 20, design: 'full', mf: 1, tol: 1, reads: 1,
     formula: 'de00', printerProfile: '', ripFormat: 'cxf', jobId: null, colours: [], active: 0, sheet: 0, next: null, ...m };
-  if (MEDIA[out.media]) [out.mediaW, out.mediaH] = MEDIA[out.media]; // a preset's size is shown in the width / height boxes
   if (!out.colours.length) out.colours = [newColour()];
   return out;
 })();
+// Media sizes the user saved: [{ name, w, h }] (mm) – kept in this browser, independent of the current job.
+const SIZES_KEY = 'sd10.mediaSizes';
+const savedSizes = (() => {
+  try { return JSON.parse(localStorage.getItem(SIZES_KEY)) || []; } catch { return []; }
+})();
+const saveSizes = () => { try { localStorage.setItem(SIZES_KEY, JSON.stringify(savedSizes)); } catch { /* ignore */ } };
+const SIZE_PREFIX = 'size:';
+const PRESET_NAMES = { a4: 'A4', letter: 'Letter', a3: 'A3', tabloid: 'Tabloid' };
+/** Width × height (mm) of a preset or saved size key, or null for 'custom' / a size that no longer exists. */
+function mediaSizeOf(key) {
+  if (MEDIA[key]) return MEDIA[key];
+  const s = key.startsWith(SIZE_PREFIX) && savedSizes.find((x) => x.name === key.slice(SIZE_PREFIX.length));
+  return s ? [s.w, s.h] : null;
+}
+// the boxes show the size in use: a preset's or saved size's own; a deleted saved size becomes custom
+if (match.media !== 'custom') {
+  const size = mediaSizeOf(match.media);
+  if (size) [match.mediaW, match.mediaH] = size; else match.media = 'custom';
+}
 // Spot library: { name, colours: [{ name, lab, target, predictedDeltaE, mf, time }] } – independent of the current job.
 const LIB_KEY = 'sd10.spotLibrary';
 const spotLib = (() => {
@@ -111,7 +130,38 @@ function nextIndex(all = sheetPatches()) {
   return k >= 0 ? k : Math.max(0, all.findIndex((e) => !e.p.lab));
 }
 const mediaMm = () => [match.mediaW, match.mediaH];
-const mediaName = () => (match.media === 'custom' ? `${match.mediaW} × ${match.mediaH} mm` : { a4: 'A4', letter: 'Letter', a3: 'A3', tabloid: 'Tabloid' }[match.media] ?? 'A4');
+const mediaName = () => PRESET_NAMES[match.media] ?? (match.media.startsWith(SIZE_PREFIX) ? match.media.slice(SIZE_PREFIX.length) : `${match.mediaW} × ${match.mediaH} mm`);
+
+/** The Media list: Custom size, the presets, then the user's saved sizes. */
+function renderMediaOptions() {
+  const opt = (v, t) => `<option value="${escapeHtml(v)}">${escapeHtml(t)}</option>`;
+  $('mPaper').innerHTML = opt('custom', 'Custom size') + Object.entries(PRESET_NAMES).map(([k, n]) => opt(k, n)).join('') +
+    (savedSizes.length ? `<optgroup label="Your sizes">${savedSizes.map((s) => opt(SIZE_PREFIX + s.name, `${s.name} (${s.w} × ${s.h} mm)`)).join('')}</optgroup>` : '');
+}
+
+/** Save the width and height in the boxes under a name (replacing a saved size of the same name after asking). */
+function saveMediaSize() {
+  const w = match.mediaW, h = match.mediaH;
+  const name = (prompt('Name for this media size:', `${w} × ${h} mm`) ?? '').trim().slice(0, 40);
+  if (!name) return;
+  const i = savedSizes.findIndex((s) => s.name === name);
+  if (i >= 0 && !confirm(`Replace the saved size “${name}” (${savedSizes[i].w} × ${savedSizes[i].h} mm) with ${w} × ${h} mm?`)) return;
+  if (i >= 0) savedSizes[i] = { name, w, h }; else savedSizes.push({ name, w, h });
+  saveSizes();
+  match.media = SIZE_PREFIX + name;
+  renderMediaOptions(); saveMatch(); renderMatch();
+  toast(`Media size “${name}” saved`, 'ok');
+}
+
+function removeMediaSize() {
+  if (!match.media.startsWith(SIZE_PREFIX)) return;
+  const name = match.media.slice(SIZE_PREFIX.length);
+  if (!confirm(`Remove the saved media size “${name}”? (The width and height stay as they are.)`)) return;
+  savedSizes.splice(savedSizes.findIndex((s) => s.name === name), 1);
+  saveSizes();
+  match.media = 'custom';
+  renderMediaOptions(); saveMatch(); renderMatch();
+}
 
 // Print match is a desktop / tablet workflow (PDFs, spot libraries, RIP software): phones only get the Console.
 const WIDE = window.matchMedia('(min-width: 768px)');
@@ -226,6 +276,7 @@ function renderMatch() {
   // settings
   $('mMode').value = match.mode; $('mPaper').value = match.media; $('matchMf').value = match.mf; $('mTol').value = match.tol;
   $('mReads').value = match.reads; $('mPatchMm').value = match.patchMm; $('mDesign').value = match.design;
+  $('btnMediaRemove').classList.toggle('hidden', !match.media.startsWith(SIZE_PREFIX));
   if (document.activeElement !== $('mMediaW')) $('mMediaW').value = match.mediaW;
   if (document.activeElement !== $('mMediaH')) $('mMediaH').value = match.mediaH;
   $('mCustomHint').textContent = customHeightHint();
@@ -742,12 +793,16 @@ export function initMatch(app) {
     if (match.sheet && !confirm('Changing the sheet type starts the matching over. Continue?')) { $('mMode').value = match.mode; return; }
     match.mode = $('mMode').value; resetMatching(); saveMatch(); renderMatch();
   };
-  // A preset fills in the width and height; editing either box makes the size custom.
+  // A preset or saved size fills in the width and height; editing either box makes the size custom.
+  renderMediaOptions();
   $('mPaper').onchange = () => {
     match.media = $('mPaper').value;
-    if (MEDIA[match.media]) [match.mediaW, match.mediaH] = MEDIA[match.media];
+    const size = mediaSizeOf(match.media);
+    if (size) [match.mediaW, match.mediaH] = size;
     saveMatch(); renderMatch();
   };
+  $('btnMediaSave').onclick = saveMediaSize;
+  $('btnMediaRemove').onclick = removeMediaSize;
   for (const [id, key, lo, hi] of [['mMediaW', 'mediaW', 50, 3000], ['mMediaH', 'mediaH', 20, 10000]]) {
     $(id).oninput = () => { $('mPaper').value = 'custom'; };
     $(id).onchange = () => {

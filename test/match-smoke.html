@@ -45,7 +45,20 @@
       const switched = $('mPaper').value === 'custom';
       $('mMediaW').dispatchEvent(new Event('change'));
       log(letterOk && switched && /at 700 mm wide/.test($('mCustomHint').textContent), `a preset fills in its size; editing it switches to custom (${$('mCustomHint').textContent})`);
+      // save a size under a name, pick it again from the list, remove it
+      $('mMediaW').value = '700'; $('mMediaW').dispatchEvent(new Event('change'));
+      $('mMediaH').value = '80'; $('mMediaH').dispatchEvent(new Event('change'));
+      w.prompt = () => 'Vinyl strip';
+      $('btnMediaSave').click();
+      const savedOk = $('mPaper').value === 'size:Vinyl strip' && /Vinyl strip \(700 × 80 mm\)/.test($('mPaper').textContent) &&
+        JSON.parse(w.localStorage.getItem('sd10.mediaSizes'))[0].h === 80 && !$('btnMediaRemove').classList.contains('hidden');
+      setSel('mPaper', 'a4');
+      setSel('mPaper', 'size:Vinyl strip');
+      const reselect = $('mMediaW').value === '700' && $('mMediaH').value === '80' && JSON.parse(w.localStorage.getItem('sd10.match')).media === 'size:Vinyl strip';
+      $('btnMediaRemove').click();
+      log(savedOk && reselect && $('mPaper').value === 'custom' && !/Vinyl strip/.test($('mPaper').textContent), 'a media size can be saved by name, chosen again (and is remembered), and removed');
       $('mMediaW').value = '210'; $('mMediaW').dispatchEvent(new Event('change'));
+      $('mMediaH').value = '297'; $('mMediaH').dispatchEvent(new Event('change'));
       const ids = [...d.querySelectorAll('[id]')].map((e) => e.id);
       log(ids.length === new Set(ids).size && $('matchMf').value === '1', 'element ids are unique; match M-factor shows the job default (M1)');
       setSel('mMode', 'cmyk');

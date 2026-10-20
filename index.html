@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <link rel="stylesheet" href="css/app.css?v=2026-10-19.5ee7037-182921">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-19.0966e5b-183237">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -304,7 +304,11 @@
             <option value="rgb">RGB image (raster workflows)</option>
           </select></div>
         <div><label class="label" for="mPaper">Media</label>
-          <select id="mPaper" class="input"><option value="custom">Custom size</option><option value="a4">A4</option><option value="letter">Letter</option><option value="a3">A3</option><option value="tabloid">Tabloid</option></select></div>
+          <div class="flex gap-2">
+            <select id="mPaper" class="input min-w-0"><option value="custom">Custom size</option></select>
+            <button id="btnMediaSave" type="button" class="btn btn-ghost" title="Save the width and height under a name">Save</button>
+            <button id="btnMediaRemove" type="button" class="btn btn-ghost hidden" title="Remove this saved size">✕</button>
+          </div></div>
         <div id="mCustomWrap" class="grid grid-cols-2 gap-2">
           <div><label class="label" for="mMediaW">Width (mm)</label><input id="mMediaW" class="input" type="number" min="50" max="3000" step="0.1"></div>
           <div><label class="label" for="mMediaH">Height (mm)</label><input id="mMediaH" class="input" type="number" min="20" max="10000" step="0.1"></div>
@@ -405,23 +409,23 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-19.5ee7037-182921",
-      "./js/transport.js": "./js/transport.js?v=2026-10-19.5ee7037-182921",
-      "./js/mock.js": "./js/mock.js?v=2026-10-19.5ee7037-182921",
-      "./js/session.js": "./js/session.js?v=2026-10-19.5ee7037-182921",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-19.5ee7037-182921",
-      "./js/color.js": "./js/color.js?v=2026-10-19.5ee7037-182921",
-      "./js/weights.js": "./js/weights.js?v=2026-10-19.5ee7037-182921",
-      "./js/storage.js": "./js/storage.js?v=2026-10-19.5ee7037-182921",
-      "./js/icc.js": "./js/icc.js?v=2026-10-19.5ee7037-182921",
-      "./js/match.js": "./js/match.js?v=2026-10-19.5ee7037-182921",
-      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-19.5ee7037-182921",
-      "./js/ui.js": "./js/ui.js?v=2026-10-19.5ee7037-182921",
-      "./js/match-view.js": "./js/match-view.js?v=2026-10-19.5ee7037-182921",
-      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-19.5ee7037-182921"
+      "./js/app.js": "./js/app.js?v=2026-10-19.0966e5b-183237",
+      "./js/transport.js": "./js/transport.js?v=2026-10-19.0966e5b-183237",
+      "./js/mock.js": "./js/mock.js?v=2026-10-19.0966e5b-183237",
+      "./js/session.js": "./js/session.js?v=2026-10-19.0966e5b-183237",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-19.0966e5b-183237",
+      "./js/color.js": "./js/color.js?v=2026-10-19.0966e5b-183237",
+      "./js/weights.js": "./js/weights.js?v=2026-10-19.0966e5b-183237",
+      "./js/storage.js": "./js/storage.js?v=2026-10-19.0966e5b-183237",
+      "./js/icc.js": "./js/icc.js?v=2026-10-19.0966e5b-183237",
+      "./js/match.js": "./js/match.js?v=2026-10-19.0966e5b-183237",
+      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-19.0966e5b-183237",
+      "./js/ui.js": "./js/ui.js?v=2026-10-19.0966e5b-183237",
+      "./js/match-view.js": "./js/match-view.js?v=2026-10-19.0966e5b-183237",
+      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-19.0966e5b-183237"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-19.5ee7037-182921"></script>
+  <script type="module" src="js/app.js?v=2026-10-19.0966e5b-183237"></script>
 </body>
 </html>
