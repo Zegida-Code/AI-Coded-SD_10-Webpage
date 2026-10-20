@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <link rel="stylesheet" href="css/app.css?v=2026-10-19.5659673-191011">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-19.8cdb1cc-191828">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -369,10 +369,10 @@
               <button id="btnMatchSheet" class="btn btn-primary" disabled>Create sheet</button>
             </div>
             <div id="mSheetInfo" class="text-sm text-slate-500">Set a reference colour first.</div>
-            <div id="mSheetActions" class="hidden flex flex-wrap gap-2">
+            <div id="mSheetActions" class="hidden flex flex-wrap items-center gap-2">
               <button id="btnMatchPdf" class="btn btn-primary">Download PDF</button>
-              <button id="btnMatchRipSheet" class="btn btn-ghost hidden" title="Spot colour library with this sheet's patch colours – import it into the RIP before printing">Sheet library</button>
-              <button id="btnMatchRestart" class="btn btn-danger">Start over</button>
+              <button id="btnMatchRipSheet" class="btn btn-ghost hidden">Sheet library</button>
+              <button id="btnMatchRestart" class="ml-auto px-1 py-2 text-sm text-rose-600 hover:underline dark:text-rose-400" title="Discard this colour's sheets and measurements (its reference is kept)">Start over</button>
             </div>
           </div>
 
@@ -435,23 +435,23 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-19.5659673-191011",
-      "./js/transport.js": "./js/transport.js?v=2026-10-19.5659673-191011",
-      "./js/mock.js": "./js/mock.js?v=2026-10-19.5659673-191011",
-      "./js/session.js": "./js/session.js?v=2026-10-19.5659673-191011",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-19.5659673-191011",
-      "./js/color.js": "./js/color.js?v=2026-10-19.5659673-191011",
-      "./js/weights.js": "./js/weights.js?v=2026-10-19.5659673-191011",
-      "./js/storage.js": "./js/storage.js?v=2026-10-19.5659673-191011",
-      "./js/icc.js": "./js/icc.js?v=2026-10-19.5659673-191011",
-      "./js/match.js": "./js/match.js?v=2026-10-19.5659673-191011",
-      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-19.5659673-191011",
-      "./js/ui.js": "./js/ui.js?v=2026-10-19.5659673-191011",
-      "./js/match-view.js": "./js/match-view.js?v=2026-10-19.5659673-191011",
-      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-19.5659673-191011"
+      "./js/app.js": "./js/app.js?v=2026-10-19.8cdb1cc-191828",
+      "./js/transport.js": "./js/transport.js?v=2026-10-19.8cdb1cc-191828",
+      "./js/mock.js": "./js/mock.js?v=2026-10-19.8cdb1cc-191828",
+      "./js/session.js": "./js/session.js?v=2026-10-19.8cdb1cc-191828",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-19.8cdb1cc-191828",
+      "./js/color.js": "./js/color.js?v=2026-10-19.8cdb1cc-191828",
+      "./js/weights.js": "./js/weights.js?v=2026-10-19.8cdb1cc-191828",
+      "./js/storage.js": "./js/storage.js?v=2026-10-19.8cdb1cc-191828",
+      "./js/icc.js": "./js/icc.js?v=2026-10-19.8cdb1cc-191828",
+      "./js/match.js": "./js/match.js?v=2026-10-19.8cdb1cc-191828",
+      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-19.8cdb1cc-191828",
+      "./js/ui.js": "./js/ui.js?v=2026-10-19.8cdb1cc-191828",
+      "./js/match-view.js": "./js/match-view.js?v=2026-10-19.8cdb1cc-191828",
+      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-19.8cdb1cc-191828"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-19.5659673-191011"></script>
+  <script type="module" src="js/app.js?v=2026-10-19.8cdb1cc-191828"></script>
 </body>
 </html>

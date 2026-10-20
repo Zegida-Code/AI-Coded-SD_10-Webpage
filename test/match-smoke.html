@@ -185,7 +185,7 @@
       $('btnMatchTarget').click();
       await until(() => /Reference colour measured/.test($('toast').textContent) && !state_busy());
       setSel('mReads', '3');
-      log($('mRipFormat').value === 'cxf' && /CxF3/.test($('btnMatchRipSheet').textContent), 'CxF3 is the default spot library format');
+      log($('mRipFormat').value === 'cxf' && /CxF3 format/.test($('btnMatchRipSheet').title), 'CxF3 is the default spot library format');
       setSel('mRipFormat', 'versaworks');
       $('mSpotName').value = 'Brand Red'; $('mSpotName').dispatchEvent(new Event('change'));
       await until(() => !$('btnMatchSheet').disabled);
@@ -229,7 +229,11 @@
       const cxfText = cxfFile ? await readFile(cxfFile) : '';
       log(/<Object ObjectType="Standard" Name="Brand Red" Id="c1">/.test(cxfText) && /<Object ObjectType="Standard" Name="Brand Blue" Id="c2">/.test(cxfText) && /<Description>House colours/.test(cxfText), 'CxF3 library file named after the library, both colours inside');
       setSel('mRipFormat', 'acb');
+      // a colour that 8-bit storage visibly rounds (a* 10.5 -> 11), so the note shows whatever the simulated results are
+      $('libNewName').value = 'Rounding'; $('libNewL').value = '50.2'; $('libNewA').value = '10.5'; $('libNewB').value = '-10.5';
+      $('btnLibAdd').click();
       log(/stores L\* in steps of 0\.4/.test($('mLibNote').textContent) && /Adobe Color Book/.test($('btnLibDownload').textContent), 'Adobe Color Book: library shows the 8-bit rounding');
+      d.querySelector('#mLibList tr[data-lib="2"] [data-lib-act=del]').click();
       $('btnLibDownload').click();
       const acbFile = files.find((f) => f.name === 'House colours.acb');
       const acbBytes = acbFile ? new Uint8Array(await (await fetch(acbFile.href)).arrayBuffer()) : new Uint8Array();
