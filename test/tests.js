@@ -121,7 +121,8 @@ async function iccV4Check() {
 
 // ---- 3d. Print match: model fitting, convergence with a simulated printer, PDF sheet
 async function matchCheck() {
-  const { designPatches, fitModel, analyseRound, nextStep, trustRadius, buildSheetPdf, buildSheetPng, sheetLayout, averageReadings, patchSpotName, MODES } = await import('../js/match.js');
+  const { designPatches, fitModel, analyseRound, nextStep, trustRadius, buildSheetPdf, buildSheetPng, sheetLayout, averageReadings, patchSpotName, MODES, DE_FORMULAS, metamerism } = await import('../js/match.js');
+  const { deltaECMC } = await import('../js/color.js');
   const { RIP_EXPORTS, readLibrary } = await import('../js/rip-export.js');
   const { printSpectrum } = await import('../js/printer-sim.js');
   const { loadProfile } = await import('../js/icc.js');
@@ -300,6 +301,73 @@ async function matchCheck() {
       lib.colours.map((c) => c.name).join('|') === 'Red, Hot|-0.5' && lib.colours[0].lab.join() === '45.5,60.1,30' && lib.skipped.join() === 'Subli Orange', JSON.stringify(lib));
     const rt = readLibrary(RIP_EXPORTS.epcc.build({ library: 'House', colours: [{ name: 'Brand Red', lab: [45.62, 60.44, -30.38] }] }), 'x.epcc');
     check('Edge Print export reads back (one decimal)', rt.library === 'House' && rt.colours[0].name === 'Brand Red' && rt.colours[0].lab.join() === '45.6,60.4,-30.4', JSON.stringify(rt));
+  }
+
+  // textile colour differences vs. colour-science 0.4 (CMC l:c 2:1 and CIEDE2000 with kL = 2)
+  {
+    const ref = [
+      [[50, 2.6772, -79.7751], [50, 0, -82.7485], 1.738736, 2.042460],
+      [[60.2574, -34.0099, 36.2677], [60.4626, -34.1751, 39.4387], 1.420486, 1.254819],
+      [[45, 60, 30], [48, 55, 25], 3.084312, 2.595942],
+      [[30, 5, -40], [33, 8, -35], 3.899590, 4.640150],
+      [[85, -10, 70], [80, -6, 75], 3.358596, 3.277158],
+    ];
+    const worst = Math.max(...ref.map(([a, b, cmc, de]) => Math.max(Math.abs(DE_FORMULAS.cmc21.fn(a, b) - cmc), Math.abs(DE_FORMULAS.de00t.fn(a, b) - de))));
+    check(`ΔE CMC 2:1 and ΔE00 2:1:1 match colour-science (5 pairs, max |Δ| ${worst.toExponential(1)})`, worst < 1e-4);
+    check('textile formulas forgive lightness: a pure ΔL counts half', Math.abs(DE_FORMULAS.de00t.fn([50, 10, 10], [52, 10, 10]) * 2 - DE_FORMULAS.de00.fn([50, 10, 10], [52, 10, 10])) < 1e-9 &&
+      Math.abs(deltaECMC([50, 10, 10], [52, 10, 10], 2, 1) * 2 - deltaECMC([50, 10, 10], [52, 10, 10], 1, 1)) < 1e-9);
+    // matching with a textile formula converges too (solver weights lightness by half)
+    const target = spectrumToLab(printSpectrum([18, 62, 74, 6]), 0, 2);
+    const printed = (x) => spectrumToLab(printSpectrum(prof.fromLab(x, 0)), 0, 2);
+    let centre = [...target], step = [...MODES.lab.step0], res;
+    for (let round = 1; round <= 5; round++) {
+      res = analyseRound({ mode: 'lab', centre, step, patches: designPatches('lab', centre, step).map((p) => ({ ...p, lab: printed(p.x) })) }, target, 'cmc21');
+      step = nextStep('lab', step, res.correction);
+      centre = res.x;
+      if (res.centreDE < 0.5) break;
+    }
+    const fin = DE_FORMULAS.cmc21.fn(target, printed(centre));
+    check(`print match with ΔE CMC 2:1 converges (${fin.toFixed(2)})`, fin < 1);
+  }
+
+  // metamerism: identical spectra never drift; a different spectral shape with the same D50 colour does
+  {
+    const base = Array.from({ length: 31 }, (_, i) => 0.25 + 0.4 * Math.exp(-(((400 + 10 * i - 610) / 50) ** 2)));
+    const same = metamerism(base, base);
+    const other = base.map((v, i) => v * (1 + 0.25 * Math.sin(i / 2.5))); // spiky variant
+    const m = metamerism(base, other);
+    const keys = m.lights.map((l) => l.key).join();
+    const d50 = DE_FORMULAS.de00.fn(spectrumToLab(base, 0, 2), spectrumToLab(other, 0, 2));
+    check(`metamerism check: identical spectra 0 under every light; a different spectrum drifts (worst ${m.worst.key} ${m.worst.mi.toFixed(2)})`,
+      same.worst.mi < 1e-9 && same.d50 < 1e-9 && keys === 'D65,A,F11,F2' && Math.abs(m.d50 - d50) < 1e-9 && m.worst.mi > 0.3);
+  }
+
+  // ICC: AToB (device -> Lab) vs. LittleCMS 2 (Pillow ImageCms, relative colorimetric, 8-bit Lab), and the gamut check
+  {
+    const lcms = {
+      EpsonWideCMYK_Ver2: [[[0, 0, 0, 0], [255, 128, 128]], [[255, 0, 0, 0], [147, 74, 57]], [[0, 255, 0, 0], [123, 235, 122]], [[0, 0, 255, 0], [245, 118, 254]],
+        [[0, 0, 0, 255], [34, 130, 130]], [[128, 64, 32, 16], [169, 122, 109]], [[200, 180, 40, 60], [79, 138, 95]]],
+      USWebCoatedSWOP: [[[0, 0, 0, 0], [255, 128, 128]], [[255, 0, 0, 0], [162, 87, 80]], [[0, 255, 0, 0], [138, 204, 121]], [[0, 0, 255, 0], [242, 122, 218]],
+        [[0, 0, 0, 255], [57, 129, 128]], [[128, 64, 32, 16], [164, 121, 110]], [[200, 180, 40, 60], [94, 134, 102]]],
+    };
+    let worst = 0, detail = '';
+    for (const [name, rows] of Object.entries(lcms)) {
+      const p = await loadProfile(name);
+      for (const [dev, lab8] of rows) {
+        const got = p.toLab(dev.map((v) => v / 255), 2);
+        const want = [lab8[0] / 2.55, lab8[1] - 128, lab8[2] - 128];
+        const d = Math.hypot(got[0] - want[0], got[1] - want[1], got[2] - want[2]);
+        if (d > worst) { worst = d; detail = `${name} ${dev}: ${got.map((v) => v.toFixed(1))} vs ${want.map((v) => v.toFixed(1))}`; }
+      }
+    }
+    check(`ICC AToB (CMYK -> Lab, 4-D interpolation) matches LittleCMS (14 colours, max ΔE76 ${worst.toFixed(2)})`, worst < 2, detail);
+    const swop = await loadProfile('USWebCoatedSWOP');
+    const inG = swop.gamut([60, 10, 20]);
+    const outG = swop.gamut([50, 90, -100]);
+    check(`gamut check: an in-gamut colour round-trips (ΔE00 ${inG.dE.toFixed(2)}), a vivid purple is far outside SWOP (ΔE00 ${outG.dE.toFixed(1)}, closest L ${outG.closest.map((v) => v.toFixed(0)).join('/')})`,
+      inG.dE < 1.5 && outG.dE > 10 && outG.closest[1] < 90 && outG.closest[0] > 0);
+    swop.validatePrinter();
+    check('printer profile validation accepts an output profile', true);
   }
 
   // readings: mean + spread

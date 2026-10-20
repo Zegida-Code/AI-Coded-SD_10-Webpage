@@ -8,8 +8,8 @@ import {
 } from './protocol.js';
 import { deltaE, deltaE2000, describeSpectrum, meanSpectrum, medianLab, spectrumToLab, wavelengthColor, labToLch, labD50ToSrgb, rgbHex, srgbToLabD50 } from './color.js';
 import { history as historyStore, prefs as prefStore } from './storage.js';
-import { CMYK_PROFILES, CUSTOM_PREFIX, customProfiles, loadProfile } from './icc.js';
-import { DESIGNS, MEDIA, MODES, analyseRound, averageReadings, buildSheetPdf, buildSheetPng, designPatches, nextStep, patchSpotName, sheetLayout } from './match.js';
+import { CMYK_PROFILES, CUSTOM_PREFIX, PRINTER_PREFIX, customProfiles, loadProfile, printerProfiles } from './icc.js';
+import { DESIGNS, DE_FORMULAS, MEDIA, MODES, analyseRound, averageReadings, buildSheetPdf, buildSheetPng, designPatches, metamerism, nextStep, patchSpotName, sheetLayout } from './match.js';
 import { RIP_EXPORTS, readLibrary } from './rip-export.js';
 import { printSpectrum } from './printer-sim.js';
 
@@ -339,6 +339,7 @@ function showResult({ spectrum, lab, strip, item }) {
   if (lab) { d.lab = lab; d.lch = labToLch(lab); }
   state.last = { spectrum, lab: d.lab, d, strip, itemId: item?.id ?? null };
   state.lastLabD50 = spectrumToLab(spectrum, 0, 2); // newest colour on screen, for "Use last measurement" in Print match
+  state.lastSpectrum = spectrum;
   $('resultArea').classList.remove('hidden');
   $('swatch').style.background = d.hex;
   $('swatch').title = d.hex;
@@ -638,13 +639,15 @@ function setMode(mode) {
 // ================================================================== Print match view
 // Persisted job (localStorage 'sd10.match'):
 //   settings: mode, media ('a4' … | 'custom'), mediaW/mediaH (mm), patchMm, design ('full' | 'compact'), mf, tol, reads, ripFormat
-//   colours: [{ id, name, target, refReads, accepted,
-//               rounds: [{ round, sheet, mode, centre, step, kFixed, design, patches: [{ n, offset, x, name?, reads, lab, spread }], result }] }]
+//   formula (DE_FORMULAS key), printerProfile (name of a stored printer profile for the gamut check, '' = none)
+//   colours: [{ id, name, target, targetSpectrum, refReads, refSpectra, accepted,
+//               rounds: [{ round, sheet, mode, centre, step, kFixed, design,
+//                          patches: [{ n, offset, x, name?, reads, spectra, lab, spread, spectrum }], result }] }]
 //   active (index of the colour being edited), sheet (number of the current sheet), jobId, next ({ c: colour id, i: patch index })
 // Every sheet holds the latest round of each colour still being matched; each colour keeps its own model and rounds.
 const MATCH_KEY = 'sd10.match';
 const newId = () => (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2));
-const newColour = () => ({ id: newId(), name: '', target: null, refReads: [], accepted: false, rounds: [] });
+const newColour = () => ({ id: newId(), name: '', target: null, targetSpectrum: null, refReads: [], refSpectra: [], accepted: false, rounds: [] });
 const match = (() => {
   let m = {};
   try { m = JSON.parse(localStorage.getItem(MATCH_KEY)) || {}; } catch { /* ignore */ }
@@ -659,7 +662,7 @@ const match = (() => {
     for (const k of ['target', 'rounds', 'spotName', 'refReads', 'paper']) delete m[k];
   }
   const out = { mode: 'spot', media: 'a4', mediaW: 210, mediaH: 297, patchMm: 20, design: 'full', mf: 1, tol: 1, reads: 1,
-    ripFormat: 'cxf', jobId: null, colours: [], active: 0, sheet: 0, next: null, ...m };
+    formula: 'de00', printerProfile: '', ripFormat: 'cxf', jobId: null, colours: [], active: 0, sheet: 0, next: null, ...m };
   if (!out.colours.length) out.colours = [newColour()];
   return out;
 })();
@@ -675,6 +678,44 @@ const saveMatch = () => { try { localStorage.setItem(MATCH_KEY, JSON.stringify(m
 const fmt1 = (v) => (Math.round(v * 10) / 10).toFixed(1);
 
 const activeColour = () => match.colours[match.active] ?? match.colours[0];
+/** The colour difference formula chosen for judging matches: { label, name, fn(ref, sample), lWeight }. */
+const DE = () => DE_FORMULAS[match.formula] ?? DE_FORMULAS.de00;
+const roundSpectrum = (s) => s.map((v) => Math.round(v * 1e5) / 1e5);
+
+// ---- gamut check against the printer profile (computed asynchronously, cached per profile and reference)
+const gamutCache = new Map();
+let gamutBusy = false;
+const gamutKey = (c) => `${match.printerProfile}|${c.target.join()}`;
+const gamutFor = (c) => (match.printerProfile && c.target ? gamutCache.get(gamutKey(c)) ?? null : null);
+/** 'inside' (profile round trip ≤ 1.5), 'edge' (≤ 3) or 'outside'. */
+const gamutClass = (g) => (!g || g.error ? null : g.dE <= 1.5 ? 'inside' : g.dE <= 3 ? 'edge' : 'outside');
+async function updateGamut() {
+  if (!match.printerProfile || gamutBusy) return;
+  const need = match.colours.filter((c) => c.target && !gamutCache.has(gamutKey(c)));
+  if (!need.length) return;
+  gamutBusy = true;
+  try {
+    const profile = await loadProfile(PRINTER_PREFIX + match.printerProfile);
+    for (const c of need) gamutCache.set(gamutKey(c), profile.gamut(c.target));
+  } catch (e) {
+    for (const c of need) gamutCache.set(gamutKey(c), { error: e.message });
+  }
+  gamutBusy = false;
+  renderMatch();
+}
+function gamutHtml(c) {
+  if (!c.target) return '';
+  if (!match.printerProfile) return '<span class="text-slate-500">Add your printer / media ICC profile below to check whether this colour is printable.</span>';
+  const g = gamutFor(c);
+  if (!g) return '<span class="text-slate-500">Checking the printer gamut…</span>';
+  if (g.error) return `<span class="text-rose-600">Gamut check failed: ${escapeHtml(g.error)}</span>`;
+  const closest = `<span class="font-mono">L ${fmt1(g.closest[0])} a ${fmt1(g.closest[1])} b ${fmt1(g.closest[2])}</span>`;
+  return {
+    inside: `<span class="text-emerald-600">Inside the printer gamut</span> <span class="text-slate-500">(profile round trip ΔE00 ${g.dE.toFixed(2)})</span>`,
+    edge: `<span class="text-amber-600">At the edge of the printer gamut – the closest printable colour is ${closest}, ΔE00 ${g.dE.toFixed(2)} away.</span>`,
+    outside: `<span class="text-rose-600"><b>Outside the printer gamut.</b> The closest printable colour is ${closest}, ΔE00 ${g.dE.toFixed(2)} away – no amount of matching gets much closer with this printer, ink and media.</span>`,
+  }[gamutClass(g)];
+}
 const latest = (c) => c.rounds[c.rounds.length - 1] ?? null;
 const colourLabel = (c) => c.name || `Colour ${match.colours.indexOf(c) + 1}`;
 /** Colours on the current sheet, each with its round on that sheet. */
@@ -762,7 +803,7 @@ function colourStatus(c) {
   if (c.accepted) return 'accepted';
   const r = latest(c);
   if (!r) return match.sheet ? 'joins the next sheet' : 'ready';
-  if (r.result) return `round ${r.round} · predicted ΔE00 ${r.result.predictedDeltaE.toFixed(2)}`;
+  if (r.result) return `round ${r.round} · predicted ${DE().label} ${r.result.predictedDeltaE.toFixed(2)}`;
   return r.sheet === match.sheet ? `round ${r.round} · scanning` : `round ${r.round}`;
 }
 
@@ -776,6 +817,7 @@ function renderMatch() {
         <span class="h-6 w-6 flex-none rounded ring-1 ring-black/10 ${x.target ? '' : 'bg-slate-200 dark:bg-slate-700'}" ${x.target ? `style="background:${displayHex(x.target)}"` : ''}></span>
         <span class="font-medium truncate">${escapeHtml(colourLabel(x))}</span>
         <span class="text-xs font-mono text-slate-500 hidden sm:inline">${x.target ? x.target.map((v) => v.toFixed(1)).join(' / ') : ''}</span>
+        ${gamutClass(gamutFor(x)) === 'outside' ? '<span class="chip bg-rose-600 text-white !px-1.5 !py-0 text-[10px]" title="Outside the printer gamut">OUT OF GAMUT</span>' : ''}
         <span class="ml-auto text-xs ${x.accepted ? 'text-emerald-600' : 'text-slate-500'} whitespace-nowrap">${colourStatus(x)}</span></button>
       ${match.colours.length > 1 ? '<button type="button" data-colour-act="remove" class="text-xs text-rose-600 hover:underline px-1" title="Remove this colour">remove</button>' : ''}</li>`).join('');
   // editor for the selected colour
@@ -783,6 +825,10 @@ function renderMatch() {
   if (document.activeElement !== $('mSpotName')) $('mSpotName').value = c.name;
   $('mTargetSwatch').style.background = t ? displayHex(t) : '';
   $('mStatusTarget').textContent = c.refReads.length ? `– reading ${c.refReads.length}/${match.reads}, measure another spot` : t ? `– ${displayHex(t)}` : '– not set';
+  $('mGamut').innerHTML = gamutHtml(c);
+  $('matchFormula').value = match.formula in DE_FORMULAS ? match.formula : 'de00';
+  $('mPrinterProfile').value = match.printerProfile;
+  $('btnPrinterIccRemove').classList.toggle('hidden', !match.printerProfile);
   // settings
   $('mMode').value = match.mode; $('mPaper').value = match.media; $('matchMf').value = match.mf; $('mTol').value = match.tol;
   $('mReads').value = match.reads; $('mPatchMm').value = match.patchMm; $('mDesign').value = match.design;
@@ -838,7 +884,7 @@ function renderMatch() {
         const idx = k++;
         const done = !!p.lab;
         const bg = done ? displayHex(p.lab) : patchPreviewHex(r.mode, p.x, r.kFixed);
-        const dE = done && x.target ? deltaE2000(x.target, p.lab) : null;
+        const dE = done && x.target ? DE().fn(x.target, p.lab) : null;
         const partial = !done && p.reads?.length ? `${p.reads.length}/${match.reads}` : '';
         const uneven = done && p.spread > 1.5; // readings disagree – textured / uneven print
         const title = `Patch #${p.n} · ${colourLabel(x)}${p.name ? ' · ' + p.name : ''}${done && p.spread != null && p.reads?.length > 1 ? ` · ${p.reads.length} readings, spread ΔE00 ${p.spread.toFixed(2)}` : ''}${done ? ' – tap to re-measure' : ''}`;
@@ -852,6 +898,29 @@ function renderMatch() {
   renderMatchResult();
   renderLibrary();
   updateControls();
+  updateGamut();
+}
+
+/** How the best printed patch holds up under other lights, from the measured spectra. */
+function metamerismHtml(c, r) {
+  const res = r.result;
+  const p = r.patches.find((q) => q.n === res.best.n);
+  if (!c.targetSpectrum || !p?.spectrum) {
+    return `<p class="text-xs text-slate-500">Metamerism check: ${!c.targetSpectrum ? 'measure the reference with the SD-10 (a typed-in reference has no spectrum)' : 'measure the patches again'} to see how this match holds up under other lights.</p>`;
+  }
+  const m = metamerism(c.targetSpectrum, p.spectrum, match.formula);
+  const limit = Math.max(1, match.tol);
+  const bad = m.worst.mi > limit;
+  const rows = m.lights.map((l) => `<tr class="border-t border-slate-200 dark:border-slate-800"><td class="py-1">${l.name}</td>
+    <td class="text-right font-mono tabular-nums">${l.dE.toFixed(2)}</td><td class="text-right font-mono tabular-nums ${l.mi > limit ? 'text-rose-600 font-semibold' : ''}">${l.mi.toFixed(2)}</td></tr>`).join('');
+  return `<details class="text-xs" ${bad ? 'open' : ''}><summary class="cursor-pointer ${bad ? 'text-rose-600 font-medium' : 'text-slate-500'}">Metamerism check (best patch #${p.n} vs reference) – ${bad
+    ? `the match changes under other lights: up to ${DE().label} ${m.worst.mi.toFixed(2)} under ${m.worst.key}`
+    : `holds up under other lights (metamerism ≤ ${m.worst.mi.toFixed(2)})`}</summary>
+    <table class="w-full mt-2"><thead class="text-slate-500"><tr><th class="text-left font-normal">Light</th><th class="text-right font-normal">${DE().label}</th><th class="text-right font-normal">Metamerism index</th></tr></thead><tbody>
+    <tr><td class="py-1">Viewing booth D50 (the match)</td><td class="text-right font-mono tabular-nums">${m.d50.toFixed(2)}</td><td class="text-right">–</td></tr>${rows}</tbody></table>
+    <p class="mt-1 text-slate-500">The metamerism index is how far the two colours drift apart under that light once the D50 difference is taken out. ${bad
+      ? 'The ink and the reference reflect light differently across the spectrum, so a match under every light may not be possible with these inks – check the colour under the light the product will be seen in, and match for that light if it matters most.'
+      : 'Values up to about 1 are hard to see.'}${m.d50 > 3 ? ' The patch is still far from the reference under D50, so treat this as a first indication – it becomes reliable as the match gets close.' : ''}</p></details>`;
 }
 
 /** One colour's result block. */
@@ -869,7 +938,7 @@ function resultBlock(c) {
       <h4 class="font-semibold">${escapeHtml(colourLabel(c))}</h4><span class="text-xs text-slate-500">round ${r.round}</span>
       ${c.accepted ? '<span class="chip bg-emerald-600 text-white">ACCEPTED</span>' : ''}
     </div>
-    ${verified ? `<div class="rounded-lg bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200 p-3 text-sm"><b>Done.</b> The previous round's values (<span class="font-mono">${prevVals}</span>) printed within tolerance – centre patch ΔE00 ${res.centreDE.toFixed(2)}. Use those, or the refined values below.</div>` : ''}
+    ${verified ? `<div class="rounded-lg bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200 p-3 text-sm"><b>Done.</b> The previous round's values (<span class="font-mono">${prevVals}</span>) printed within tolerance – centre patch ${DE().label} ${res.centreDE.toFixed(2)}. Use those, or the refined values below.</div>` : ''}
     <p class="text-sm text-slate-500">${{
     spot: `Enter these L*a*b* values for the named colour${c.name ? ` <b>${escapeHtml(c.name)}</b>` : ''} in the RIP’s spot colour library:`,
     lab: 'Use these L*a*b* values for the colour in your document:',
@@ -879,26 +948,28 @@ function resultBlock(c) {
     <div class="grid ${isLabMode(r.mode) ? 'grid-cols-3' : 'grid-cols-4'} gap-2">${cells}</div>
     <div class="flex flex-wrap items-center gap-2 text-sm">
       <span class="rounded-md px-2 py-0.5 text-xs font-bold text-white ${within ? 'bg-emerald-600' : 'bg-amber-500'}">${within ? 'EXPECTED MATCH' : 'NEEDS ANOTHER ROUND'}</span>
-      <span>predicted ΔE00 <b class="tabular-nums">${res.predictedDeltaE.toFixed(2)}</b>${res.extrapolated ? ' (rough estimate)' : ''} (tolerance ${match.tol})</span>
+      <span>predicted ${DE().label} <b class="tabular-nums">${res.predictedDeltaE.toFixed(2)}</b>${res.extrapolated ? ' (rough estimate)' : ''} (tolerance ${match.tol})</span>
     </div>
     ${res.source === 'best-patch' ? `<p class="text-xs text-amber-600">No values are predicted to print closer than the best patch you measured (#${res.best.n}), so these are its values.</p>` : ''}
     ${res.extrapolated ? '<p class="text-xs text-amber-600">The answer lies outside this sheet’s patch range, so the prediction is only a rough estimate. The next sheet is centred on it and will confirm.</p>' : ''}
     ${res.trustLimited ? '<p class="text-xs text-amber-600">This round moves as far as the sheet’s measurements can be trusted; the next sheet continues in that direction.</p>' : ''}
-    ${res.gamutLimited && res.predictedDeltaE > match.tol ? `<p class="text-xs text-rose-600"><b>The reference looks outside what this printer and media can reproduce.</b> Nothing within reach is predicted closer than ΔE00 ${res.predictedDeltaE.toFixed(2)} – more rounds will not get much closer. Use these values as the closest match, or check the media, ink limits and colour settings.</p>` : ''}
+    ${res.gamutLimited && res.predictedDeltaE > match.tol ? `<p class="text-xs text-rose-600"><b>The reference looks outside what this printer and media can reproduce.</b> Nothing within reach is predicted closer than ${DE().label} ${res.predictedDeltaE.toFixed(2)} – more rounds will not get much closer. Use these values as the closest match, or check the media, ink limits and colour settings.</p>` : ''}
+    ${gamutClass(gamutFor(c)) === 'outside' || gamutClass(gamutFor(c)) === 'edge' ? `<p class="text-xs">${gamutHtml(c)}</p>` : ''}
     ${res.clamped ? '<p class="text-xs text-amber-600">Some values reached their limit – the reference may be outside the colours this printer and paper can produce. These are the closest reachable values.</p>' : ''}
     <dl class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-      <div><dt class="text-slate-500">Centre patch</dt><dd class="font-mono">ΔE00 ${res.centreDE != null ? res.centreDE.toFixed(2) : '–'}</dd></div>
-      <div><dt class="text-slate-500">Best patch</dt><dd class="font-mono">#${res.best.n} · ΔE00 ${res.best.dE.toFixed(2)}</dd></div>
+      <div><dt class="text-slate-500">Centre patch</dt><dd class="font-mono">${DE().label} ${res.centreDE != null ? res.centreDE.toFixed(2) : '–'}</dd></div>
+      <div><dt class="text-slate-500">Best patch</dt><dd class="font-mono">#${res.best.n} · ${DE().label} ${res.best.dE.toFixed(2)}</dd></div>
       <div><dt class="text-slate-500">Model fit (rms)</dt><dd class="font-mono">${res.rms.toFixed(2)} ΔE</dd></div>
-      <div><dt class="text-slate-500">Repeatability</dt><dd class="font-mono">${res.repeatability != null ? 'ΔE00 ' + res.repeatability.toFixed(2) : '–'}</dd></div>
+      <div><dt class="text-slate-500">Repeatability</dt><dd class="font-mono">${res.repeatability != null ? DE().label + ' ' + res.repeatability.toFixed(2) : '–'}</dd></div>
     </dl>
+    ${metamerismHtml(c, r)}
     <div class="flex flex-wrap gap-2">
       <button type="button" data-res-act="accept" class="btn ${c.accepted ? 'btn-primary' : 'btn-ghost'}" title="Accepted colours are left off the next sheets">${c.accepted ? 'Accepted ✓' : 'Accept – no more rounds'}</button>
       <button type="button" data-res-act="copy" class="btn btn-ghost">Copy values</button>
       ${isLabMode(r.mode) ? '<button type="button" data-res-act="add" class="btn btn-ghost" title="Add the matched colour to your spot library under its name">Add to spot library</button>' : ''}
     </div>
     <details class="text-xs"><summary class="cursor-pointer text-slate-500">Rounds</summary>
-      <table class="w-full mt-2"><thead class="text-slate-500"><tr><th class="text-left">Round</th><th class="text-left">Sheet centre</th><th class="text-left">Centre ΔE00</th><th class="text-left">Predicted ΔE00</th></tr></thead><tbody>
+      <table class="w-full mt-2"><thead class="text-slate-500"><tr><th class="text-left">Round</th><th class="text-left">Sheet centre</th><th class="text-left">Centre ${DE().label}</th><th class="text-left">Predicted ${DE().label}</th></tr></thead><tbody>
       ${c.rounds.map((rr) => `<tr class="border-t border-slate-200 dark:border-slate-800"><td class="py-1">${rr.round}</td><td class="font-mono">${formatValues(rr.mode, rr.centre, rr.kFixed).map(([k, v]) => `${k}${v}`).join(' ')}</td><td class="font-mono">${rr.result?.centreDE != null ? rr.result.centreDE.toFixed(2) : '–'}</td><td class="font-mono">${rr.result ? rr.result.predictedDeltaE.toFixed(2) : '–'}</td></tr>`).join('')}
       </tbody></table></details>
   </section>`;
@@ -1018,14 +1089,19 @@ async function measureLabD50() {
   const [rec] = await state.session.measure({ method: METHOD.SPOT, saveResult: false, mFactor: match.mf, lightSource: 0, viewingAngle: 2 });
   const lab = spectrumToLab(rec.spectrum, 0, 2);
   state.lastLabD50 = lab;
+  state.lastSpectrum = rec.spectrum;
   return { lab, spectrum: rec.spectrum };
 }
 
-/** Set a colour's reference; with measurements already made for it, asks first and starts that colour over. */
-function setColourTarget(c, lab) {
+/**
+ * Set a colour's reference (spectrum: its measured reflectance, for the metamerism check – none when typed in);
+ * with measurements already made for it, asks first and starts that colour over.
+ */
+function setColourTarget(c, lab, spectrum = null) {
   if (c.rounds.some((r) => r.patches.some((p) => p.lab)) && !confirm(`Changing the reference of ${colourLabel(c)} starts its matching over. Continue?`)) { renderMatch(); return false; }
   c.target = lab.map((v) => Math.round(v * 100) / 100);
-  c.rounds = []; c.accepted = false; c.refReads = [];
+  c.targetSpectrum = spectrum ? roundSpectrum(spectrum) : null;
+  c.rounds = []; c.accepted = false; c.refReads = []; c.refSpectra = [];
   saveMatch(); renderMatch();
   return true;
 }
@@ -1036,14 +1112,16 @@ function measureMatchTarget() {
     const m = await measureLabD50();
     if (!m) return;
     c.refReads = [...c.refReads, m.lab];
+    c.refSpectra = [...(c.refSpectra ?? []), roundSpectrum(m.spectrum)];
     if (c.refReads.length < match.reads) {
       saveMatch(); renderMatch();
       toast(`Reading ${c.refReads.length}/${match.reads} – move the SD-10 to another spot on the reference and measure again.`);
       return;
     }
     const { lab, spread } = averageReadings(c.refReads);
-    c.refReads = [];
-    if (setColourTarget(c, lab)) toast(`Reference colour measured${match.reads > 1 ? ` – mean of ${match.reads} readings, spread ΔE00 ${spread.toFixed(2)}` : ''}`, 'ok');
+    const spectrum = meanSpectrum(c.refSpectra);
+    c.refReads = []; c.refSpectra = [];
+    if (setColourTarget(c, lab, spectrum)) toast(`Reference colour measured${match.reads > 1 ? ` – mean of ${match.reads} readings, spread ΔE00 ${spread.toFixed(2)}` : ''}`, 'ok');
     else saveMatch();
   });
 }
@@ -1169,8 +1247,9 @@ function measurePatch() {
     let m;
     try { m = await measureLabD50(); } finally { state.transport?.setSpectrumOverride?.(null); }
     if (!m) return;
-    if (p.lab) { p.lab = null; p.reads = []; p.spread = null; } // measuring a finished patch again starts it over
+    if (p.lab) { p.lab = null; p.reads = []; p.spectra = []; p.spread = null; p.spectrum = null; } // measuring a finished patch again starts it over
     p.reads = [...(p.reads ?? []), m.lab];
+    p.spectra = [...(p.spectra ?? []), roundSpectrum(m.spectrum)];
     r.result = null;
     if (p.reads.length < match.reads) {
       saveMatch(); renderMatch();
@@ -1178,6 +1257,8 @@ function measurePatch() {
       return;
     }
     Object.assign(p, averageReadings(p.reads));
+    p.spectrum = roundSpectrum(meanSpectrum(p.spectra));
+    delete p.spectra; // the mean is enough – keeps the saved job small
     const after = all.findIndex((e, j) => j > k && !e.p.lab);
     const any = all.findIndex((e) => !e.p.lab);
     const nx = all[after >= 0 ? after : any >= 0 ? any : k];
@@ -1191,7 +1272,7 @@ function measurePatch() {
 
 function analyseColour(c, r = latest(c)) {
   try {
-    const a = analyseRound(r, c.target);
+    const a = analyseRound(r, c.target, match.formula);
     r.result = { x: a.x, predicted: a.predicted, predictedDeltaE: a.predictedDeltaE, clamped: a.clamped, correction: a.correction, extrapolated: a.extrapolated,
       source: a.source, trustLimited: a.trustLimited, gamutLimited: a.gamutLimited,
       best: { n: a.best.n, dE: a.best.dE }, centreDE: a.centreDE, repeatability: a.repeatability, rms: a.model.rms };
@@ -1214,8 +1295,15 @@ function copyMatchValues(c) {
   const r = latest(c);
   if (!r?.result) return;
   const text = `${colourLabel(c)} – ${{ spot: 'L*a*b*', lab: 'L*a*b*', cmyk: 'CMYK', rgb: 'sRGB' }[r.mode]}: ` + formatValues(r.mode, r.result.x, r.kFixed).map(([k, v]) => `${k} ${v}`).join(', ') +
-    ` (predicted ΔE00 ${r.result.predictedDeltaE.toFixed(2)} to reference L*a*b* ${c.target.map((v) => v.toFixed(2)).join(' / ')})`;
+    ` (predicted ${DE().label} ${r.result.predictedDeltaE.toFixed(2)} to reference L*a*b* ${c.target.map((v) => v.toFixed(2)).join(' / ')})`;
   navigator.clipboard?.writeText(text).then(() => toast('Values copied', 'ok'), () => toast('Clipboard not available', 'error'));
+}
+
+async function refreshPrinterProfiles() {
+  const names = await printerProfiles.list();
+  if (match.printerProfile && !names.includes(match.printerProfile)) match.printerProfile = '';
+  $('mPrinterProfile').innerHTML = '<option value="">None</option>' + names.map((n) => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+  $('mPrinterProfile').value = match.printerProfile;
 }
 
 function resetMatching() {
@@ -1228,7 +1316,7 @@ function initMatch() {
   $('btnMatchTarget').onclick = measureMatchTarget;
   $('btnMatchUseLast').onclick = () => {
     const lab = state.lastLabD50 ?? (state.last && spectrumToLab(state.last.spectrum, 0, 2));
-    if (lab) setColourTarget(activeColour(), lab);
+    if (lab) setColourTarget(activeColour(), lab, state.lastSpectrum ?? state.last?.spectrum ?? null);
   };
   for (const id of ['mL', 'mA', 'mB']) {
     $(id).addEventListener('change', () => {
@@ -1292,6 +1380,35 @@ function initMatch() {
     $('libNewName').focus();
   };
   $('mTol').onchange = () => { match.tol = Math.min(Math.max(+$('mTol').value || 1, 0.1), 20); saveMatch(); renderMatch(); };
+  $('matchFormula').onchange = () => {
+    match.formula = $('matchFormula').value;
+    // re-judge every result with the new formula (the measurements stay)
+    for (const c of match.colours) { const r = latest(c); if (r?.result) analyseColour(c, r); }
+    saveMatch(); renderMatch();
+  };
+  $('mPrinterProfile').onchange = () => { match.printerProfile = $('mPrinterProfile').value; saveMatch(); renderMatch(); };
+  $('btnPrinterIcc').onclick = () => $('printerIccFile').click();
+  $('printerIccFile').onchange = async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    if (f.size > 30 * 1024 * 1024) { toast('That file is too large to be a printer profile.', 'error'); return; }
+    try {
+      const r = await printerProfiles.add(f);
+      match.printerProfile = r.name;
+      await refreshPrinterProfiles();
+      saveMatch(); renderMatch();
+      toast(`Printer profile “${r.name}” added (${r.channels} ink channels)${r.saved ? '' : ' – for this session only (browser storage is unavailable)'}`, 'ok');
+    } catch (err) { toast(`Could not use ${f.name}: ${err.message}`, 'error'); }
+  };
+  $('btnPrinterIccRemove').onclick = async () => {
+    if (!match.printerProfile || !confirm(`Remove the printer profile “${match.printerProfile}” from this browser?`)) return;
+    await printerProfiles.remove(match.printerProfile).catch(() => {});
+    match.printerProfile = '';
+    await refreshPrinterProfiles();
+    saveMatch(); renderMatch();
+  };
+  refreshPrinterProfiles().then(() => { if (state.view === 'match') renderMatch(); });
   $('btnMatchSheet').onclick = startFirstSheet;
   $('btnMatchPdf').onclick = downloadSheet;
   $('btnMatchRestart').onclick = () => { if (confirm('Discard all sheets and measurements (the reference colours are kept)?')) { resetMatching(); saveMatch(); renderMatch(); } };

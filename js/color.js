@@ -50,7 +50,11 @@ export function deltaE94(ref, smp, textile = false) {
   return Math.sqrt((dL / kL) ** 2 + (dC / SC) ** 2 + dH2 / (SH * SH));
 }
 
-export function deltaE2000(lab1, lab2) {
+/**
+ * CIE ΔE00. kL/kC/kH are the parametric factors: 1:1:1 for graphic arts, kL = 2 (2:1:1) for textiles, where
+ * lightness differences are judged more leniently.
+ */
+export function deltaE2000(lab1, lab2, kL = 1, kC = 1, kH = 1) {
   const [L1, a1, b1] = lab1, [L2, a2, b2] = lab2;
   const rad = Math.PI / 180;
   const C1 = Math.hypot(a1, b1), C2 = Math.hypot(a2, b2);
@@ -76,10 +80,27 @@ export function deltaE2000(lab1, lab2) {
   const T = 1 - 0.17 * Math.cos((hbp - 30) * rad) + 0.24 * Math.cos(2 * hbp * rad) + 0.32 * Math.cos((3 * hbp + 6) * rad) - 0.2 * Math.cos((4 * hbp - 63) * rad);
   const dTheta = 30 * Math.exp(-(((hbp - 275) / 25) ** 2));
   const RC = 2 * Math.sqrt(Cbp ** 7 / (Cbp ** 7 + 25 ** 7));
-  const SL = 1 + (0.015 * (Lbp - 50) ** 2) / Math.sqrt(20 + (Lbp - 50) ** 2);
-  const SC = 1 + 0.045 * Cbp, SH = 1 + 0.015 * Cbp * T;
+  const SL = kL * (1 + (0.015 * (Lbp - 50) ** 2) / Math.sqrt(20 + (Lbp - 50) ** 2));
+  const SC = kC * (1 + 0.045 * Cbp), SH = kH * (1 + 0.015 * Cbp * T);
   const RT = -Math.sin(2 * dTheta * rad) * RC;
   return Math.sqrt((dLp / SL) ** 2 + (dCp / SC) ** 2 + (dHp / SH) ** 2 + RT * (dCp / SC) * (dHp / SH));
+}
+
+/** CMC l:c (BS 6923 / ISO 105-J03) – the textile industry's colour difference; 2:1 for acceptability. Not symmetric: ref first. */
+export function deltaECMC(ref, smp, l = 2, c = 1) {
+  const [L1, a1, b1] = ref, [L2, a2, b2] = smp;
+  const C1 = Math.hypot(a1, b1), C2 = Math.hypot(a2, b2);
+  const dL = L1 - L2, dC = C1 - C2;
+  const dH2 = Math.max((a1 - a2) ** 2 + (b1 - b2) ** 2 - dC * dC, 0);
+  let h1 = (Math.atan2(b1, a1) * 180) / Math.PI;
+  if (h1 < 0) h1 += 360;
+  const rad = Math.PI / 180;
+  const SL = L1 < 16 ? 0.511 : (0.040975 * L1) / (1 + 0.01765 * L1);
+  const SC = (0.0638 * C1) / (1 + 0.0131 * C1) + 0.638;
+  const F = Math.sqrt(C1 ** 4 / (C1 ** 4 + 1900));
+  const T = h1 >= 164 && h1 <= 345 ? 0.56 + Math.abs(0.2 * Math.cos((h1 + 168) * rad)) : 0.36 + Math.abs(0.4 * Math.cos((h1 + 35) * rad));
+  const SH = SC * (F * T + 1 - F);
+  return Math.sqrt((dL / (l * SL)) ** 2 + (dC / (c * SC)) ** 2 + dH2 / (SH * SH));
 }
 
 /** formula: 0 ΔE00, 1 ΔE94 graphic arts, 2 ΔE94 textile, 3 ΔE76 (EPSPM_COLORDIFFFORMULA). */

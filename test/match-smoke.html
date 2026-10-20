@@ -138,6 +138,9 @@
       // ---- spot colour sheet, 3 readings per patch, VersaWorks libraries
       await until(() => !state_busy());
       setSel('mMode', 'spot');
+      // measured reference (the simulator's sample): its spectrum enables the metamerism check
+      $('btnMatchTarget').click();
+      await until(() => /Reference colour measured/.test($('toast').textContent) && !state_busy());
       setSel('mReads', '3');
       log($('mRipFormat').value === 'cxf' && /CxF3/.test($('btnMatchRipSheet').textContent), 'CxF3 is the default spot library format');
       setSel('mRipFormat', 'versaworks');
@@ -160,6 +163,10 @@
       $('btnMatchAnalyse').click();
       await until(() => !$('mResultCard').classList.contains('hidden'));
       log(/named colour Brand Red/.test($('mResult').textContent) && d.querySelector('#mResult [data-res-act=add]'), 'spot result names the colour and offers Add to spot library');
+      log(/Metamerism check \(best patch #\d+ vs reference\)/.test($('mResult').textContent) && /Tri-band shop light/.test($('mResult').textContent), `metamerism check compares the best patch with the measured reference under other lights (${($('mResult').textContent.match(/Metamerism check.{0,120}/) || [''])[0]})`);
+      setSel('matchFormula', 'cmc21');
+      log(/predicted ΔE CMC 2:1/.test($('mResult').textContent) && /Centre patch\s*ΔE CMC 2:1/.test($('mResult').textContent), 'switching to ΔE CMC 2:1 re-judges the result');
+      setSel('matchFormula', 'de00');
       const libRows = () => [...d.querySelectorAll('#mLibList tr[data-lib]')].map((tr) => tr.querySelector('.font-medium').textContent);
       d.querySelector('#mResult [data-res-act=add]').click();
       $('mSpotName').value = 'Brand Blue'; $('mSpotName').dispatchEvent(new Event('change'));
@@ -218,6 +225,22 @@
       const pngBytes = pngFile ? new Uint8Array(await (await fetch(pngFile.href)).arrayBuffer()) : new Uint8Array();
       log(pngBytes[1] === 0x50 && pngBytes.length > 100000, `PNG sheet downloaded (${pngFile?.name}, ${pngBytes.length} bytes)`);
       setSel('mReads', '1');
+
+      // ---- printer profile: gamut check
+      const iccBuf = await (await fetch('../icc/USWebCoatedSWOP.icc')).arrayBuffer();
+      const dt2 = new w.DataTransfer();
+      dt2.items.add(new w.File([iccBuf], 'press.icc', { type: 'application/vnd.iccprofile' }));
+      $('printerIccFile').files = dt2.files;
+      $('printerIccFile').dispatchEvent(new w.Event('change'));
+      await until(() => $('mPrinterProfile').value !== '');
+      [['mL', 50], ['mA', 90], ['mB', -100]].forEach(([id, v]) => { $(id).value = String(v); });
+      $('mB').dispatchEvent(new Event('change'));
+      await until(() => /Outside the printer gamut/.test($('mGamut').textContent));
+      log(/Outside the printer gamut/.test($('mGamut').textContent) && /OUT OF GAMUT/.test($('mColourList').textContent), `printer profile flags an unprintable reference (${$('mGamut').textContent.slice(0, 90)}…)`);
+      [['mL', 60], ['mA', 10], ['mB', 20]].forEach(([id, v]) => { $(id).value = String(v); });
+      $('mB').dispatchEvent(new Event('change'));
+      await until(() => /Inside the printer gamut/.test($('mGamut').textContent));
+      log(/Inside the printer gamut/.test($('mGamut').textContent), 'a printable reference is reported inside the gamut');
 
       // switching views keeps the connection
       d.querySelector('[data-view=console]').click();

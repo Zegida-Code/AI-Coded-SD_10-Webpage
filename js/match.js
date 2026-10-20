@@ -7,7 +7,18 @@
 //   3. Fit an affine model  y ≈ m0 + J·(x − x0)  by least squares (J is 3×3).
 //   4. Solve  J·Δx = T − m0  (bounded to the valid input range, damped if J is ill-conditioned).
 //   5. The answer x* = x0 + Δx is the centre of the next, finer sheet; its centre patch verifies it.
-import { deltaE2000 } from './color.js';
+import { deltaE2000, deltaECMC, spectrumToLab } from './color.js';
+
+/**
+ * Colour difference used to judge a match. lWeight scales lightness in the solver's least squares, so the
+ * textile formulas (which forgive lightness differences) also aim for hue and chroma first.
+ */
+export const DE_FORMULAS = {
+  de00: { label: 'ΔE00', name: 'ΔE00 (graphic arts)', fn: (r, s) => deltaE2000(r, s), lWeight: 1 },
+  de00t: { label: 'ΔE00 2:1:1', name: 'ΔE00 2:1:1 (textiles)', fn: (r, s) => deltaE2000(r, s, 2), lWeight: 0.5 },
+  cmc21: { label: 'ΔE CMC 2:1', name: 'ΔE CMC 2:1 (textiles)', fn: (r, s) => deltaECMC(r, s, 2, 1), lWeight: 0.5 },
+};
+const formulaOf = (key) => DE_FORMULAS[key] ?? DE_FORMULAS.de00;
 
 const LAB = { axes: ['L*', 'a*', 'b*'], min: [0, -127, -127], max: [100, 127, 127], step0: [5, 8, 8], minStep: [1, 1.5, 1.5], maxStep: [10, 16, 16], decimals: 2 };
 // spot: L*a*b* patches written as named spot colours (Separation, Lab alternate) – for RIPs with a named-colour
@@ -106,7 +117,7 @@ export function predict(model, x0, x) {
  * Inputs x within [lo, hi] (default: the mode's range) whose predicted Lab is closest to `target` (least squares in
  * Lab). Uses an active-set loop: axes that would leave the box are pinned to the bound and the rest re-solved.
  */
-export function solveForTarget(mode, model, x0, target, { lo = MODES[mode].min, hi = MODES[mode].max } = {}) {
+export function solveForTarget(mode, model, x0, target, { lo = MODES[mode].min, hi = MODES[mode].max, weights = [1, 1, 1], dE = deltaE2000 } = {}) {
   const { min, max } = MODES[mode];
   const pinned = new Map();
   let x = [...x0];
@@ -114,9 +125,9 @@ export function solveForTarget(mode, model, x0, target, { lo = MODES[mode].min, 
     const free = [0, 1, 2].filter((k) => !pinned.has(k));
     // residual after pinned axes
     const base = x0.map((v, k) => (pinned.has(k) ? pinned.get(k) : v));
-    const r = target.map((t, i) => t - predict(model, x0, base)[i]);
-    // least squares on free axes: (Jfᵀ Jf + λI) d = Jfᵀ r
-    const Jf = model.J.map((row) => free.map((k) => row[k]));
+    const r = target.map((t, i) => (t - predict(model, x0, base)[i]) * weights[i]);
+    // weighted least squares on free axes: (Jfᵀ Jf + λI) d = Jfᵀ r  (rows of J and r scaled by the Lab weights)
+    const Jf = model.J.map((row, i) => free.map((k) => row[k] * weights[i]));
     const JtJ = matMul(matT(Jf), Jf);
     const lambda = 1e-3 * Math.max(...JtJ.map((row, i) => row[i]), 1e-9);
     const A = JtJ.map((row, i) => row.map((v, j) => v + (i === j ? lambda : 0)));
@@ -130,7 +141,7 @@ export function solveForTarget(mode, model, x0, target, { lo = MODES[mode].min, 
   }
   x = x.map((v, k) => roundTo(Math.min(Math.max(v, lo[k]), hi[k]), MODES[mode].decimals));
   const predicted = predict(model, x0, x);
-  return { x, predicted, predictedDeltaE: deltaE2000(target, predicted), clamped: x.some((v, k) => v <= min[k] || v >= max[k]) };
+  return { x, predicted, predictedDeltaE: dE(target, predicted), clamped: x.some((v, k) => v <= min[k] || v >= max[k]) };
 }
 
 /**
@@ -155,19 +166,20 @@ export const trustRadius = (mode, step) => step.map((s, k) => Math.max(TRUST_STE
  * responds, and an unbounded solve would jump to the ends of the range), and it is never predicted worse than the
  * best patch actually measured – then that patch is recommended instead (source 'best-patch').
  */
-export function analyseRound(round, target) {
+export function analyseRound(round, target, formula = 'de00') {
   const { min, max } = MODES[round.mode];
+  const { fn: dE, lWeight } = formulaOf(formula);
   const model = fitModel(round.patches, round.centre);
   const R = trustRadius(round.mode, round.step);
   const lo = round.centre.map((c, k) => Math.max(min[k], c - R[k]));
   const hi = round.centre.map((c, k) => Math.min(max[k], c + R[k]));
-  const sol = solveForTarget(round.mode, model, round.centre, target, { lo, hi });
+  const sol = solveForTarget(round.mode, model, round.centre, target, { lo, hi, weights: [lWeight, 1, 1], dE });
   const measured = round.patches.filter((p) => p.lab);
-  const scored = measured.map((p) => ({ ...p, dE: deltaE2000(target, p.lab) }));
+  const scored = measured.map((p) => ({ ...p, dE: dE(target, p.lab) }));
   const best = scored.reduce((a, b) => (b.dE < a.dE ? b : a));
   const centres = scored.filter((p) => p.offset.every((v) => v === 0));
   const centreDE = centres.length ? centres.reduce((s, p) => s + p.dE, 0) / centres.length : null;
-  const repeat = centres.length === 2 ? deltaE2000(centres[0].lab, centres[1].lab) : null;
+  const repeat = centres.length === 2 ? dE(centres[0].lab, centres[1].lab) : null;
   // the solve stopped at the edge of the trusted box (not at the mode's own limits): it wants to go further
   const trustLimited = sol.x.some((v, k) => (lo[k] > min[k] && v <= lo[k] + 1e-6) || (hi[k] < max[k] && v >= hi[k] - 1e-6));
   let rec = { ...sol, source: 'model' };
@@ -183,6 +195,31 @@ export function analyseRound(round, target) {
   return { model, ...rec, best, centreDE, repeatability: repeat, correction, extrapolated, trustLimited: trustLimited && rec.source === 'model', gamutLimited };
 }
 
+
+// ---------------------------------------------------------------- metamerism
+/** Lights a print is checked under besides D50 (illuminant ids as in the SD-10 weighting tables). */
+export const CHECK_LIGHTS = [
+  { key: 'D65', id: 1, name: 'Daylight (D65)' },
+  { key: 'A', id: 2, name: 'Warm / incandescent light (A)' },
+  { key: 'F11', id: 27, name: 'Tri-band shop light (F11, LED-like)' },
+  { key: 'F2', id: 18, name: 'Cool white fluorescent (F2)' },
+];
+
+/**
+ * How a match made under D50 holds up under other lights (2° observer), from the measured spectra.
+ * For each light: dE = the difference you would see under it; mi = the metamerism index (CIE 15, additive correction:
+ * the D50 difference is removed first), i.e. how much the two colours drift apart because their spectra differ.
+ */
+export function metamerism(refSpectrum, smpSpectrum, formula = 'de00') {
+  const { fn: dE } = formulaOf(formula);
+  const r0 = spectrumToLab(refSpectrum, 0, 2), s0 = spectrumToLab(smpSpectrum, 0, 2);
+  const corr = r0.map((v, i) => v - s0[i]);
+  const lights = CHECK_LIGHTS.map((l) => {
+    const r = spectrumToLab(refSpectrum, l.id, 2), s = spectrumToLab(smpSpectrum, l.id, 2);
+    return { ...l, dE: dE(r, s), mi: dE(r, s.map((v, i) => v + corr[i])) };
+  });
+  return { d50: dE(r0, s0), lights, worst: lights.reduce((a, b) => (b.mi > a.mi ? b : a)) };
+}
 
 // ---------------------------------------------------------------- several readings per patch
 /** Mean Lab of several readings and their spread (largest ΔE00 of a reading from the mean). */

@@ -67,6 +67,21 @@ with downloaded sheets and your RIP software, so phones only show the Console.
    those answers; its centre patches verify them. A colour reports **Done** once its values print within your
    tolerance – **Accept** it to leave it off the next sheets.
 
+**Colour difference:** matches are judged with **ΔE00** (graphic arts, the default), or for textiles with **ΔE00 2:1:1**
+or **ΔE CMC 2:1**, which judge lightness differences more leniently, as people do on fabric. The solver then also aims
+for hue and chroma first. Changing the formula re-judges existing results without new measurements.
+
+**Metamerism check:** when the reference was measured with the SD-10 (not typed in), each result compares the best
+printed patch with the reference under daylight (D65), warm / incandescent light (A), tri-band shop lighting (F11,
+LED-like) and cool white fluorescent (F2) – the difference you would see, and the metamerism index (how far they drift
+apart once the D50 difference is taken out). A large index means the ink and the reference reflect light differently,
+so the colours match under one light but not another; check the colour under the light the product will be seen in.
+
+**Printer profile (gamut check):** add the ICC output profile your RIP uses for the printer, ink and media (**+ .icc**;
+CMYK or multi-ink profiles). Each reference is then checked against it: inside the gamut, at its edge, or outside – with
+the closest printable colour and how far it is. An out-of-gamut colour cannot be matched closer than that, whatever the
+rounds. The profile is kept in this browser and only used for this check.
+
 Each round's move is limited to the range the sheet's measurements can be trusted for, and the app never recommends
 values predicted to print worse than a patch you already measured. If a reference is outside what the printer and
 media can reproduce, it says so and gives the closest values instead of chasing it. With the simulated printer in the
@@ -121,10 +136,10 @@ Open these pages in Chrome (on the live site, e.g. [sd-10.com/test/](https://sd-
 
 | Page | Checks |
 |---|---|
-| [`test/index.html`](https://sd-10.com/test/index.html) | 88 checks: command frames vs. the app's own (emulated) code, Lab and CMYK vs. the native libraries, ΔE2000 reference data, ICC v4 parsing, print-match model fitting/convergence for all four sheet types, PDF/PNG sheet structure, CxF3 structure, Adobe Color Book bytes, Edge Print .epcc vs. a real Edge Print export, compact design, multi-page layout, library import (CxF incl. spectra, ACB, .epcc, .spot), VersaWorks .spot output vs. a real VersaWorks export, a full session against the simulator |
+| [`test/index.html`](https://sd-10.com/test/index.html) | 95 checks: command frames vs. the app's own (emulated) code, Lab and CMYK vs. the native libraries, ΔE2000 reference data, ICC v4 parsing, print-match model fitting/convergence for all four sheet types, PDF/PNG sheet structure, CxF3 structure, Adobe Color Book bytes, Edge Print .epcc vs. a real Edge Print export, ΔE CMC / ΔE00 2:1:1 vs. colour-science, metamerism, ICC AToB vs. LittleCMS and the gamut check, compact design, multi-page layout, library import (CxF incl. spectra, ACB, .epcc, .spot), VersaWorks .spot output vs. a real VersaWorks export, a full session against the simulator |
 | [`test/ui-smoke.html`](https://sd-10.com/test/ui-smoke.html) | 34 checks driving the real UI against the simulator (calibrate, measure, compare, line scan, history sync, palettes, settings, custom ICC) |
 | [`test/mobile-check.html`](https://sd-10.com/test/mobile-check.html) | Layout at 375 px wide (no sideways scrolling) plus the compare/reference flows |
-| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 40 checks for Print match against the simulated device and printer: rounds to within tolerance, several colours on custom media (one PDF per colour, accepting a colour), spot colour sheets with averaged readings, a spot library (add, import, type in) exported as CxF3 / Adobe Color Book / VersaWorks, RGB/PNG sheets |
+| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 44 checks for Print match against the simulated device and printer: rounds to within tolerance, textile ΔE, metamerism and printer-profile gamut checks, several colours on custom media (one PDF per colour, accepting a colour), spot colour sheets with averaged readings, a spot library (add, import, type in) exported as CxF3 / Adobe Color Book / VersaWorks, RGB/PNG sheets |
 
 ## Project layout
 
@@ -136,7 +151,7 @@ js/session.js       SD-10 session: byte routing, command queue + FF/FE acks, han
 js/protocol.js      command builders and reply parsers
 js/transport.js     Web Bluetooth GATT transport
 js/mock.js          simulated SD-10 (demo mode and tests)
-js/color.js         spectrum → Lab, ΔE (76/94/2000), sRGB, LRV
+js/color.js         spectrum → Lab, ΔE (76/94/2000/CMC), sRGB, LRV
 js/weights.js       CIE weighting tables from the app (12 illuminants × 2 observers)
 js/match.js         Print match: patch design, printer-response model, solver, PDF / PNG sheets
 js/rip-export.js    spot colour library files for RIPs (CxF3, Adobe Color Book, Edge Print, VersaWorks): export and import

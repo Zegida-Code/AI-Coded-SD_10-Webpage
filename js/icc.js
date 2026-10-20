@@ -7,6 +7,7 @@
 //   * 16-bit device values are scaled to percent as v*100/65280 (65535 -> 100), like the app.
 
 const INTENT_TAG = { 0: 'B2A0', 1: 'B2A2', 2: 'B2A1', 3: 'B2A1' }; // perceptual, saturation, relative, absolute
+const INTENT_A2B = { 0: 'A2B0', 1: 'A2B2', 2: 'A2B1', 3: 'A2B1' };
 const D50 = [0.9642, 1.0, 0.8249];
 
 export class IccError extends Error {}
@@ -70,19 +71,21 @@ export class IccProfile {
 
   lut(tagName) {
     let name = tagName;
-    if (!this.tags[name]) name = ['B2A0', 'B2A1', 'B2A2'].find((t) => this.tags[t]); // fall back like most CMMs
+    const family = tagName.startsWith('A2B') ? ['A2B0', 'A2B1', 'A2B2'] : ['B2A0', 'B2A1', 'B2A2'];
+    if (!this.tags[name]) name = family.find((t) => this.tags[t]); // fall back like most CMMs
     if (!name) throw new IccError(`profile has no ${tagName} tag`);
     if (this._luts[name]) return this._luts[name];
     const t = this.tags[name];
     let lut;
-    if (t.type === 'mft2' || t.type === 'mft1') lut = this._legacyLut(t);
+    if (t.type === 'mft2' || t.type === 'mft1') lut = this._legacyLut(t, name.startsWith('B2A'));
     else if (t.type === 'mBA ') lut = this._lutBtoA(t);
+    else if (t.type === 'mAB ') lut = this._lutAtoB(t);
     else throw new IccError(`Unsupported table type "${t.type}" for ${name}`);
     this._luts[name] = lut;
     return lut;
   }
 
-  _legacyLut(t) {
+  _legacyLut(t, pcsInput = true) {
     const dv = this.dv, o = t.offset, is16 = t.type === 'mft2';
     const inCh = dv.getUint8(o + 8), outCh = dv.getUint8(o + 9), g = dv.getUint8(o + 10);
     const matrix = Array.from({ length: 9 }, (_, i) => dv.getInt32(o + 12 + 4 * i) / 65536);
@@ -103,7 +106,7 @@ export class IccProfile {
       legacyPcs: true,
       stages: [
         // the matrix only applies to XYZ PCS input
-        this.pcs === 'XYZ' && !identity ? (x) => mat3(matrix, x) : null,
+        pcsInput && this.pcs === 'XYZ' && !identity ? (x) => mat3(matrix, x) : null,
         (x) => x.map((v, i) => sampleTable(inTables[i], v)),
         'clut',
         (y) => y.map((v, i) => sampleTable(outTables[i], v)),
@@ -135,6 +138,33 @@ export class IccProfile {
     }
     if (offA) { const A = curves(offA, outCh); stages.push((y) => y.map((v, i) => A[i](v))); }
     return { kind: 'lutBtoA', inCh, outCh, grids, clut, legacyPcs: false, stages };
+  }
+
+  /** v4 lutAtoB ('mAB '): A curves -> CLUT -> M curves -> matrix -> B curves (device -> PCS). */
+  _lutAtoB(t) {
+    const dv = this.dv, o = t.offset;
+    const inCh = dv.getUint8(o + 8), outCh = dv.getUint8(o + 9);
+    const [offB, offMat, offM, offClut, offA] = [12, 16, 20, 24, 28].map((k) => dv.getUint32(o + k));
+    const curves = (off, n) => { let p = o + off; return Array.from({ length: n }, () => { const c = this._curve(p); p += c.bytes; return c.fn; }); };
+    const stages = [];
+    if (offA) { const A = curves(offA, inCh); stages.push((x) => x.map((v, i) => A[i](v))); }
+    let clut = null, grids = null;
+    if (offClut) {
+      const c = o + offClut;
+      grids = Array.from({ length: inCh }, (_, i) => dv.getUint8(c + i));
+      const prec = dv.getUint8(c + 16);
+      const count = grids.reduce((a, b) => a * b, 1) * outCh;
+      clut = new Float64Array(count);
+      for (let i = 0; i < count; i++) clut[i] = prec === 1 ? dv.getUint8(c + 20 + i) / 255 : dv.getUint16(c + 20 + 2 * i) / 65535;
+      stages.push('clut');
+    }
+    if (offM) { const M = curves(offM, outCh); stages.push((x) => x.map((v, i) => M[i](v))); }
+    if (offMat && outCh === 3) {
+      const m = Array.from({ length: 12 }, (_, i) => dv.getInt32(o + offMat + 4 * i) / 65536);
+      stages.push((x) => [0, 1, 2].map((r) => m[3 * r] * x[0] + m[3 * r + 1] * x[1] + m[3 * r + 2] * x[2] + m[9 + r]));
+    }
+    if (offB) { const B = curves(offB, outCh); stages.push((x) => x.map((v, i) => B[i](v))); }
+    return { kind: 'lutAtoB', inCh, outCh, grids, clut, legacyPcs: false, stages };
   }
 
   /** Parse a 'curv' or 'para' element at byte p. Returns { fn, bytes } (bytes padded to 4). */
@@ -169,7 +199,15 @@ export class IccProfile {
   }
 
   /** Lab (D50, as the app passes it) -> device values in percent (CMYK: 4 values 0..100). */
-  fromLab([L, a, b], intent = 0) {
+  fromLab(lab, intent = 0) {
+    return this._toDevice(lab, intent).map((v) => {
+      const dev16 = Math.round(v * 65535);
+      return dev16 === 0 ? 0 : dev16 === 65535 ? 100 : (dev16 * 100) / 65280;
+    });
+  }
+
+  /** Lab (D50) -> device values 0..1 through the BToA table of `intent` (any number of device channels). */
+  _toDevice([L, a, b], intent = 0) {
     const lut = this.lut(INTENT_TAG[intent] ?? 'B2A0');
     let x;
     if (this.pcs === 'Lab') {
@@ -187,12 +225,89 @@ export class IccProfile {
       const xyz = [finv(fy + a / 500) * D50[0], finv(fy) * D50[1], finv(fy - b / 200) * D50[2]];
       x = xyz.map((v) => Math.min(Math.max(v, 0), 65535 / 32768) * (32768 / 65535));
     }
-    for (const stage of lut.stages) x = stage === 'clut' ? interpolate(lut, x) : stage(x);
-    return x.map((v) => {
-      const dev16 = Math.round(Math.min(Math.max(v, 0), 1) * 65535);
-      return dev16 === 0 ? 0 : dev16 === 65535 ? 100 : (dev16 * 100) / 65280;
-    });
+    for (const stage of lut.stages) x = stage === 'clut' ? (lut.inCh === 3 ? interpolate(lut, x) : interpolateN(lut, x)) : stage(x);
+    return x.map((v) => Math.min(Math.max(v, 0), 1));
   }
+
+  /** Device values 0..1 -> Lab (D50) through the AToB table of `intent`. */
+  toLab(device, intent = 2) {
+    const lut = this.lut(INTENT_A2B[intent] ?? 'A2B0');
+    if (device.length !== lut.inCh) throw new IccError(`The profile's AToB table expects ${lut.inCh} channels`);
+    let x = device.map((v) => Math.min(Math.max(v, 0), 1));
+    for (const stage of lut.stages) x = stage === 'clut' ? interpolateN(lut, x) : stage(x);
+    if (this.pcs === 'XYZ') {
+      const xyz = x.map((v) => (v * 65535) / 32768);
+      const f = (t) => (t > (6 / 29) ** 3 ? Math.cbrt(t) : t / (3 * (6 / 29) ** 2) + 4 / 29);
+      const [fx, fy, fz] = xyz.map((v, i) => f(v / D50[i]));
+      return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
+    }
+    if (lut.kind === 'lut16') return [((x[0] * 65535) / 65280) * 100, (x[1] * 65535) / 256 - 128, (x[2] * 65535) / 256 - 128]; // legacy 16-bit Lab
+    return [x[0] * 100, x[1] * 255 - 128, x[2] * 255 - 128]; // lut8 / v4 encoding
+  }
+
+  /**
+   * Gamut check: Lab -> device -> Lab through the colorimetric tables. Returns the closest colour this printer can
+   * reproduce and how far it is from the requested one (ΔE00; profiles round-trip in-gamut colours to about 1).
+   */
+  gamut(lab) {
+    const closest = this.toLab(this._toDevice(lab, 2), 2);
+    return { closest, dE: deltaE00(lab, closest) };
+  }
+
+  /** Throws IccError with a readable message unless this can be used as a printer (output) profile for gamut checks. */
+  validatePrinter() {
+    if (this.pcs !== 'Lab' && this.pcs !== 'XYZ') throw new IccError(`Unsupported PCS "${this.pcs}"`);
+    if (!['B2A0', 'B2A1', 'B2A2'].some((t) => this.tags[t])) throw new IccError('The profile has no BToA (output) table – a printer / media output profile is needed');
+    if (!['A2B0', 'A2B1', 'A2B2'].some((t) => this.tags[t])) throw new IccError('The profile has no AToB table, so it cannot predict printed colours');
+    const g = this.gamut([50, 0, 0]);
+    if (!g.closest.every(Number.isFinite)) throw new IccError('The profile could not be evaluated');
+  }
+}
+
+/** N-linear interpolation in an N-dimensional CLUT (first input varies slowest) – CMYK and multi-ink AToB tables. */
+function interpolateN(lut, x) {
+  const g = lut.grids, n = lut.outCh, c = lut.clut, d = g.length;
+  const f = x.map((v, k) => Math.min(Math.max(v, 0), 1) * (g[k] - 1));
+  const i0 = f.map((v, k) => Math.max(Math.min(Math.floor(v), g[k] - 2), 0));
+  const r = f.map((v, k) => v - i0[k]);
+  const stride = new Array(d);
+  stride[d - 1] = n;
+  for (let k = d - 2; k >= 0; k--) stride[k] = stride[k + 1] * g[k + 1];
+  const out = new Array(n).fill(0);
+  for (let corner = 0; corner < 1 << d; corner++) {
+    let w = 1, base = 0;
+    for (let k = 0; k < d; k++) {
+      const bit = (corner >> (d - 1 - k)) & 1;
+      w *= bit ? r[k] : 1 - r[k];
+      base += (i0[k] + bit) * stride[k];
+    }
+    if (!w) continue;
+    for (let j = 0; j < n; j++) out[j] += w * c[base + j];
+  }
+  return out;
+}
+
+/** ΔE00 (local copy so this module stays independent of color.js). */
+function deltaE00(p, q) {
+  const rad = Math.PI / 180;
+  const C1 = Math.hypot(p[1], p[2]), C2 = Math.hypot(q[1], q[2]), Cb = (C1 + C2) / 2;
+  const G = 0.5 * (1 - Math.sqrt(Cb ** 7 / (Cb ** 7 + 25 ** 7)));
+  const a1 = (1 + G) * p[1], a2 = (1 + G) * q[1];
+  const c1 = Math.hypot(a1, p[2]), c2 = Math.hypot(a2, q[2]);
+  const h = (a, b) => (a === 0 && b === 0 ? 0 : ((Math.atan2(b, a) / rad) + 360) % 360);
+  const h1 = h(a1, p[2]), h2 = h(a2, q[2]);
+  let dh = 0;
+  if (c1 * c2) { dh = h2 - h1; if (dh > 180) dh -= 360; else if (dh < -180) dh += 360; }
+  const dH = 2 * Math.sqrt(c1 * c2) * Math.sin((dh / 2) * rad);
+  const Lb = (p[0] + q[0]) / 2, cb = (c1 + c2) / 2;
+  let hb = h1 + h2;
+  if (c1 * c2) { if (Math.abs(h1 - h2) > 180) hb += h1 + h2 < 360 ? 360 : -360; hb /= 2; }
+  const T = 1 - 0.17 * Math.cos((hb - 30) * rad) + 0.24 * Math.cos(2 * hb * rad) + 0.32 * Math.cos((3 * hb + 6) * rad) - 0.2 * Math.cos((4 * hb - 63) * rad);
+  const RC = 2 * Math.sqrt(cb ** 7 / (cb ** 7 + 25 ** 7));
+  const SL = 1 + (0.015 * (Lb - 50) ** 2) / Math.sqrt(20 + (Lb - 50) ** 2), SC = 1 + 0.045 * cb, SH = 1 + 0.015 * cb * T;
+  const RT = -Math.sin(2 * 30 * Math.exp(-(((hb - 275) / 25) ** 2)) * rad) * RC;
+  const dL = q[0] - p[0], dC = c2 - c1;
+  return Math.sqrt((dL / SL) ** 2 + (dC / SC) ** 2 + (dH / SH) ** 2 + RT * (dC / SC) * (dH / SH));
 }
 
 function sampleTable(table, v) {
@@ -239,12 +354,14 @@ export const CMYK_PROFILES = {
   USWebUncoated: 'USWebUncoated.icc',
 };
 export const CUSTOM_PREFIX = 'custom:';
+/** Printer (output) profiles for the Print match gamut check – kept apart from the Console's CMYK profiles. */
+export const PRINTER_PREFIX = 'printer:';
 
 const cache = new Map();
 export function loadProfile(name, base = new URL('../icc/', import.meta.url)) {
   if (!cache.has(name)) {
-    const buf = name.startsWith(CUSTOM_PREFIX)
-      ? customProfiles.get(name.slice(CUSTOM_PREFIX.length)).then((b) => { if (!b) throw new Error('custom profile not found'); return b; })
+    const buf = name.startsWith(CUSTOM_PREFIX) || name.startsWith(PRINTER_PREFIX)
+      ? customProfiles.get(name.startsWith(PRINTER_PREFIX) ? name : name.slice(CUSTOM_PREFIX.length)).then((b) => { if (!b) throw new Error('profile not found in this browser'); return b; })
       : CMYK_PROFILES[name]
         ? fetch(new URL(CMYK_PROFILES[name], base)).then((r) => { if (!r.ok) throw new Error(`could not load ${CMYK_PROFILES[name]} (${r.status})`); return r.arrayBuffer(); })
         : Promise.reject(new Error(`unknown profile ${name}`));
@@ -286,7 +403,7 @@ const withTimeout = (p, ms = 3000) => Promise.race([p, new Promise((_, rej) => s
 export const customProfiles = {
   async list() {
     const stored = await withTimeout(tx('readonly', (s) => s.getAllKeys())).catch(() => []);
-    return [...new Set([...stored.map(String), ...memory.keys()])].sort();
+    return [...new Set([...stored.map(String), ...memory.keys()])].filter((k) => !k.startsWith(PRINTER_PREFIX)).sort();
   },
   async get(name) {
     if (memory.has(name)) return memory.get(name);
@@ -310,5 +427,31 @@ export const customProfiles = {
     memory.delete(name);
     cache.delete(CUSTOM_PREFIX + name);
     await withTimeout(tx('readwrite', (s) => s.delete(name))).catch(() => {});
+  },
+};
+
+/** Printer / media output profiles (any ink set: CMYK, CMYK + spot inks …), stored next to the custom CMYK profiles. */
+export const printerProfiles = {
+  async list() {
+    const stored = await withTimeout(tx('readonly', (s) => s.getAllKeys())).catch(() => []);
+    return [...new Set([...stored.map(String), ...memory.keys()])].filter((k) => k.startsWith(PRINTER_PREFIX)).map((k) => k.slice(PRINTER_PREFIX.length)).sort();
+  },
+  /** Validate and store. Returns { name, key, description, channels, saved }. */
+  async add(file) {
+    const buf = await file.arrayBuffer();
+    const profile = new IccProfile(buf);
+    profile.validatePrinter();
+    const name = (profile.description || file.name.replace(/\.(icc|icm)$/i, '')).slice(0, 60) || 'Printer profile';
+    const key = PRINTER_PREFIX + name;
+    memory.set(key, buf);
+    cache.set(key, Promise.resolve(profile));
+    const saved = await withTimeout(tx('readwrite', (s) => s.put(buf, key))).then(() => true, () => false);
+    return { name, key, description: profile.description, channels: profile.lut('A2B1').inCh, saved };
+  },
+  async remove(name) {
+    const key = PRINTER_PREFIX + name;
+    memory.delete(key);
+    cache.delete(key);
+    await withTimeout(tx('readwrite', (s) => s.delete(key))).catch(() => {});
   },
 };
