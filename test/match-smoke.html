@@ -37,7 +37,15 @@
       const setSel = (id, v) => { $(id).value = v; $(id).dispatchEvent(new Event('change')); };
 
       log(!$('viewMatch').classList.contains('hidden') && $('viewConsole').classList.contains('hidden'), '#match opens the Print match view');
-      log($('mMode').value === 'spot' && $('mDesign').value === 'full' && $('mPaper').value === 'a4' && d.querySelectorAll('#mColourList li').length === 1, 'defaults: spot colour sheets, 16 patches, A4, one colour');
+      log($('mMode').value === 'spot' && $('mDesign').value === 'full' && $('mPaper').value === 'custom' && $('mMediaW').value === '210' && $('mMediaH').value === '297' && d.querySelectorAll('#mColourList li').length === 1,
+        'defaults: spot colour sheets, 16 patches, custom media 210 × 297 mm, one colour');
+      setSel('mPaper', 'letter');
+      const letterOk = $('mMediaW').value === '215.9' && $('mMediaH').value === '279.4';
+      $('mMediaW').value = '700'; $('mMediaW').dispatchEvent(new Event('input'));
+      const switched = $('mPaper').value === 'custom';
+      $('mMediaW').dispatchEvent(new Event('change'));
+      log(letterOk && switched && /at 700 mm wide/.test($('mCustomHint').textContent), `a preset fills in its size; editing it switches to custom (${$('mCustomHint').textContent})`);
+      $('mMediaW').value = '210'; $('mMediaW').dispatchEvent(new Event('change'));
       const ids = [...d.querySelectorAll('[id]')].map((e) => e.id);
       log(ids.length === new Set(ids).size && $('matchMf').value === '1', 'element ids are unique; match M-factor shows the job default (M1)');
       setSel('mMode', 'cmyk');

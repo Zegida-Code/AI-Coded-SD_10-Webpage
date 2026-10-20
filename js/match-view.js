@@ -18,7 +18,8 @@ import { printSpectrum } from './printer-sim.js';
 let state, task, settingsFromUI, updateControls, doCalibrate;
 
 // Persisted job (localStorage 'sd10.match'):
-//   settings: mode, media ('a4' … | 'custom'), mediaW/mediaH (mm), patchMm, design ('full' | 'compact'), mf, tol, reads, ripFormat
+//   settings: mode, media ('custom' | a preset 'a4' …), mediaW/mediaH (mm – the size in use, also for presets), patchMm,
+//             design ('full' | 'compact'), mf, tol, reads, ripFormat
 //   formula (DE_FORMULAS key), printerProfile (name of a stored printer profile for the gamut check, '' = none)
 //   colours: [{ id, name, target, targetSpectrum, refReads, refSpectra, accepted,
 //               rounds: [{ round, sheet, mode, centre, step, kFixed, design,
@@ -41,8 +42,9 @@ const match = (() => {
     if (m.paper) m.media = m.paper;
     for (const k of ['target', 'rounds', 'spotName', 'refReads', 'paper']) delete m[k];
   }
-  const out = { mode: 'spot', media: 'a4', mediaW: 210, mediaH: 297, patchMm: 20, design: 'full', mf: 1, tol: 1, reads: 1,
+  const out = { mode: 'spot', media: 'custom', mediaW: 210, mediaH: 297, patchMm: 20, design: 'full', mf: 1, tol: 1, reads: 1,
     formula: 'de00', printerProfile: '', ripFormat: 'cxf', jobId: null, colours: [], active: 0, sheet: 0, next: null, ...m };
+  if (MEDIA[out.media]) [out.mediaW, out.mediaH] = MEDIA[out.media]; // a preset's size is shown in the width / height boxes
   if (!out.colours.length) out.colours = [newColour()];
   return out;
 })();
@@ -108,7 +110,7 @@ function nextIndex(all = sheetPatches()) {
   const k = all.findIndex((e) => e.c.id === match.next?.c && e.i === match.next?.i);
   return k >= 0 ? k : Math.max(0, all.findIndex((e) => !e.p.lab));
 }
-const mediaMm = () => (match.media === 'custom' ? [match.mediaW, match.mediaH] : MEDIA[match.media] ?? MEDIA.a4);
+const mediaMm = () => [match.mediaW, match.mediaH];
 const mediaName = () => (match.media === 'custom' ? `${match.mediaW} × ${match.mediaH} mm` : { a4: 'A4', letter: 'Letter', a3: 'A3', tabloid: 'Tabloid' }[match.media] ?? 'A4');
 
 // Print match is a desktop / tablet workflow (PDFs, spot libraries, RIP software): phones only get the Console.
@@ -179,7 +181,7 @@ export function matchControls(busyLabel) {
   $('btnMatchTarget').textContent = `Measure reference${c.refReads.length ? reading(c.refReads.length) : ''}`;
 }
 
-/** Custom media: the shortest height that holds one colour's sheet on a single page at the chosen width. */
+/** The shortest media height that holds one colour's sheet on a single page at the chosen width. */
 function customHeightHint() {
   const per = DESIGNS[match.design] ?? 16;
   // the current sheet, or a stand-in colour with the chosen number of patches before there is one
@@ -224,10 +226,9 @@ function renderMatch() {
   // settings
   $('mMode').value = match.mode; $('mPaper').value = match.media; $('matchMf').value = match.mf; $('mTol').value = match.tol;
   $('mReads').value = match.reads; $('mPatchMm').value = match.patchMm; $('mDesign').value = match.design;
-  $('mCustomWrap').classList.toggle('hidden', match.media !== 'custom');
   if (document.activeElement !== $('mMediaW')) $('mMediaW').value = match.mediaW;
   if (document.activeElement !== $('mMediaH')) $('mMediaH').value = match.mediaH;
-  $('mCustomHint').textContent = match.media === 'custom' ? customHeightHint() : '';
+  $('mCustomHint').textContent = customHeightHint();
   $('mRipFormatWrap').classList.toggle('hidden', !isLabMode(match.mode));
   if (!RIP_EXPORTS[match.ripFormat]) match.ripFormat = 'cxf';
   $('mRipFormat').value = match.ripFormat;
@@ -741,9 +742,19 @@ export function initMatch(app) {
     if (match.sheet && !confirm('Changing the sheet type starts the matching over. Continue?')) { $('mMode').value = match.mode; return; }
     match.mode = $('mMode').value; resetMatching(); saveMatch(); renderMatch();
   };
-  $('mPaper').onchange = () => { match.media = $('mPaper').value; saveMatch(); renderMatch(); };
+  // A preset fills in the width and height; editing either box makes the size custom.
+  $('mPaper').onchange = () => {
+    match.media = $('mPaper').value;
+    if (MEDIA[match.media]) [match.mediaW, match.mediaH] = MEDIA[match.media];
+    saveMatch(); renderMatch();
+  };
   for (const [id, key, lo, hi] of [['mMediaW', 'mediaW', 50, 3000], ['mMediaH', 'mediaH', 20, 10000]]) {
-    $(id).onchange = () => { match[key] = Math.min(Math.max(Math.round(+$(id).value) || match[key], lo), hi); saveMatch(); renderMatch(); };
+    $(id).oninput = () => { $('mPaper').value = 'custom'; };
+    $(id).onchange = () => {
+      match[key] = Math.min(Math.max(Math.round(+$(id).value * 10) / 10 || match[key], lo), hi);
+      match.media = 'custom';
+      saveMatch(); renderMatch();
+    };
   }
   $('mPatchMm').onchange = () => { match.patchMm = +$('mPatchMm').value; saveMatch(); renderMatch(); };
   $('mDesign').onchange = () => { match.design = $('mDesign').value; saveMatch(); renderMatch(); };
