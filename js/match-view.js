@@ -348,12 +348,14 @@ function renderSheet(c) {
   $('mSheetInfo').innerHTML = `${r.patches.length} patches${pages}. Download, print and scan the patches below.
     <p class="mt-1 text-xs">Round ${r.round}: centre <span class="font-mono">${vals}</span> · steps ${steps}</p>${names}` +
     (layout ? sheetPreview(layout, r) : '');
+  if (layout) wirePreview(`${c.id}|${r.round}|${layout.W}x${layout.H}`, Math.min(...layout.pages[0].boxes.map((b) => b.x)) / layout.W);
 }
 
 /**
  * A small to-scale drawing of the sheet's first page, from the same layout as the PDF: patches in their print colours
  * on the media's real proportions, text as grey lines. At most 200 px tall, so tall sheets fit. A very wide sheet
- * (a strip from a roll) is shown folded: cut into 2–4 equal slices stacked under each other, so it stays readable.
+ * (a strip from a roll) is shown as the whole strip, small, plus a readable close-up that scrolls sideways; a frame on
+ * the strip marks the part in the close-up (see wirePreview).
  */
 function sheetPreview({ W, H, pages }, r) {
   const pct = (v, of) => `${((v / of) * 100).toFixed(3)}%`;
@@ -361,14 +363,42 @@ function sheetPreview({ W, H, pages }, r) {
   const lines = page.texts.map((t) => `<div class="absolute rounded-full bg-slate-300" style="left:${pct(t.x, W)};top:${pct(H - t.y - t.size * 0.7, H)};width:${pct(Math.min(t.str.length * t.size * 0.5, W - t.x), W)};height:${pct(t.size * 0.55, H)}"></div>`).join('');
   const boxes = page.boxes.map((b) => `<div class="absolute ring-1 ring-black/20" style="left:${pct(b.x, W)};top:${pct(H - b.y - b.size, H)};width:${pct(b.size, W)};height:${pct(b.size, H)};background:${patchPreviewHex(r.mode, b.patch.x, b.kFixed)}"></div>`).join('');
   const drawing = `${lines}${boxes}`;
-  const parts = W / H > 6 ? Math.min(4, Math.max(2, Math.round(Math.sqrt(W / H / 1.8)))) : 1;
-  const sheet = parts === 1
-    ? `<div class="relative mx-auto overflow-hidden rounded-sm bg-white shadow ring-1 ring-black/10" style="aspect-ratio:${W.toFixed(1)}/${H.toFixed(1)};max-width:min(100%, ${Math.round((200 * W) / H)}px)">${drawing}</div>`
-    // each slice shows the whole drawing (parts × as wide), shifted left so its own part is in view
-    : `<div class="space-y-1.5">${Array.from({ length: parts }, (_, i) => `<div class="relative overflow-hidden bg-white shadow ring-1 ring-black/10 ${i ? 'border-l-2 border-dashed border-slate-300' : ''}" style="aspect-ratio:${(W / parts).toFixed(1)}/${H.toFixed(1)}">
-        <div class="absolute inset-y-0" style="width:${parts * 100}%;left:${-i * 100}%">${drawing}</div></div>`).join('')}</div>`;
-  const notes = [pages.length > 1 ? `page 1 of ${pages.length}` : '', escapeHtml(mediaName()), parts > 1 ? `shown in ${parts} parts` : ''].filter(Boolean).join(' · ');
-  return `<figure class="mt-3">${sheet}<figcaption class="mt-1 text-center text-[11px] text-slate-500">Preview · ${notes}</figcaption></figure>`;
+  const notes = [pages.length > 1 ? `page 1 of ${pages.length}` : '', escapeHtml(mediaName())].filter(Boolean).join(' · ');
+  if (W / H <= 6) {
+    return `<figure class="mt-3"><div class="relative mx-auto overflow-hidden rounded-sm bg-white shadow ring-1 ring-black/10" style="aspect-ratio:${W.toFixed(1)}/${H.toFixed(1)};max-width:min(100%, ${Math.round((200 * W) / H)}px)">${drawing}</div>
+      <figcaption class="mt-1 text-center text-[11px] text-slate-500">Preview · ${notes}</figcaption></figure>`;
+  }
+  // a strip: the whole sheet small (with a frame marking the close-up), and a readable close-up below
+  const label = 'text-[11px] text-slate-500';
+  return `<figure class="mt-3 space-y-1.5">
+    <div class="${label}">Whole sheet · ${notes}</div>
+    <div id="mPreviewOverview" class="relative w-full cursor-pointer overflow-hidden rounded-sm bg-white ring-1 ring-black/10" style="aspect-ratio:${W.toFixed(1)}/${H.toFixed(1)}" title="Click to show this part in the close-up">${drawing}
+      <div id="mPreviewWindow" class="pointer-events-none absolute inset-y-0 rounded-sm bg-indigo-500/10 ring-2 ring-indigo-500"></div></div>
+    <div class="${label} pt-1">Close-up – scroll sideways, or click the whole sheet above</div>
+    <div id="mPreviewZoom" class="overflow-x-auto pb-1"><div class="relative rounded-sm bg-white ring-1 ring-black/10" style="height:110px;width:${Math.round((110 * W) / H)}px">${drawing}</div></div>
+  </figure>`;
+}
+
+/**
+ * Wide-sheet preview: keep the frame on the whole sheet in step with the close-up's scroll position, let a click on the
+ * whole sheet move the close-up there, and start the close-up at the first patch (or where the user left it).
+ */
+let previewScroll = { key: null, left: 0 };
+function wirePreview(key, firstPatch) {
+  const zoom = $('mPreviewZoom'), frame = $('mPreviewWindow'), overview = $('mPreviewOverview');
+  if (!zoom) return;
+  const sync = () => {
+    frame.style.left = `${(zoom.scrollLeft / zoom.scrollWidth) * 100}%`;
+    frame.style.width = `${(zoom.clientWidth / zoom.scrollWidth) * 100}%`;
+    previewScroll = { key, left: zoom.scrollLeft };
+  };
+  zoom.onscroll = sync;
+  overview.onclick = (e) => {
+    const box = overview.getBoundingClientRect();
+    zoom.scrollLeft = ((e.clientX - box.left) / box.width) * zoom.scrollWidth - zoom.clientWidth / 2;
+  };
+  zoom.scrollLeft = previewScroll.key === key ? previewScroll.left : firstPatch * zoom.scrollWidth - 8;
+  sync();
 }
 
 /** Card 3: the selected colour's patches – measured ones in their measured colour, the next one outlined. */
