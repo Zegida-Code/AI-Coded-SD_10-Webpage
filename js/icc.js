@@ -5,6 +5,8 @@
 //   * the profile's BToA table for the rendering intent is evaluated
 //     (lut8 'mft1', lut16 'mft2' or v4 lutBtoA 'mBA '; Lab or XYZ PCS)
 //   * 16-bit device values are scaled to percent as v*100/65280 (65535 -> 100), like the app.
+// For the Print match gamut check it also evaluates AToB tables (device -> Lab, any number of inks, 'mAB ' too).
+import { deltaE2000 } from './color.js';
 
 const INTENT_TAG = { 0: 'B2A0', 1: 'B2A2', 2: 'B2A1', 3: 'B2A1' }; // perceptual, saturation, relative, absolute
 const INTENT_A2B = { 0: 'A2B0', 1: 'A2B2', 2: 'A2B1', 3: 'A2B1' };
@@ -114,57 +116,59 @@ export class IccProfile {
     };
   }
 
+  /** v4 lutBtoA ('mBA '): B curves -> matrix -> M curves -> CLUT -> A curves (PCS -> device). */
   _lutBtoA(t) {
-    const dv = this.dv, o = t.offset;
-    const inCh = dv.getUint8(o + 8), outCh = dv.getUint8(o + 9);
-    const [offB, offMat, offM, offClut, offA] = [12, 16, 20, 24, 28].map((k) => dv.getUint32(o + k));
-    const curves = (off, n) => { let p = o + off; return Array.from({ length: n }, () => { const c = this._curve(p); p += c.bytes; return c.fn; }); };
+    const { inCh, outCh, off, curvesStage, matrixStage, readClut } = this._mabParts(t);
     const stages = [];
-    if (offB) { const B = curves(offB, inCh); stages.push((x) => x.map((v, i) => B[i](v))); }
-    if (offMat && inCh === 3) {
-      const m = Array.from({ length: 12 }, (_, i) => dv.getInt32(o + offMat + 4 * i) / 65536);
-      stages.push((x) => [0, 1, 2].map((r) => m[3 * r] * x[0] + m[3 * r + 1] * x[1] + m[3 * r + 2] * x[2] + m[9 + r]));
-    }
-    if (offM) { const M = curves(offM, inCh); stages.push((x) => x.map((v, i) => M[i](v))); }
-    let clut = null, grids = null;
-    if (offClut) {
-      const c = o + offClut;
-      grids = Array.from({ length: inCh }, (_, i) => dv.getUint8(c + i));
-      const prec = dv.getUint8(c + 16);
-      const count = grids.reduce((a, b) => a * b, 1) * outCh;
-      clut = new Float64Array(count);
-      for (let i = 0; i < count; i++) clut[i] = prec === 1 ? dv.getUint8(c + 20 + i) / 255 : dv.getUint16(c + 20 + 2 * i) / 65535;
-      stages.push('clut');
-    }
-    if (offA) { const A = curves(offA, outCh); stages.push((y) => y.map((v, i) => A[i](v))); }
+    if (off.B) stages.push(curvesStage(off.B, inCh));
+    if (off.matrix && inCh === 3) stages.push(matrixStage(off.matrix));
+    if (off.M) stages.push(curvesStage(off.M, inCh));
+    const { grids, clut } = off.clut ? readClut(off.clut) : { grids: null, clut: null };
+    if (clut) stages.push('clut');
+    if (off.A) stages.push(curvesStage(off.A, outCh));
     return { kind: 'lutBtoA', inCh, outCh, grids, clut, legacyPcs: false, stages };
   }
 
   /** v4 lutAtoB ('mAB '): A curves -> CLUT -> M curves -> matrix -> B curves (device -> PCS). */
   _lutAtoB(t) {
-    const dv = this.dv, o = t.offset;
-    const inCh = dv.getUint8(o + 8), outCh = dv.getUint8(o + 9);
-    const [offB, offMat, offM, offClut, offA] = [12, 16, 20, 24, 28].map((k) => dv.getUint32(o + k));
-    const curves = (off, n) => { let p = o + off; return Array.from({ length: n }, () => { const c = this._curve(p); p += c.bytes; return c.fn; }); };
+    const { inCh, outCh, off, curvesStage, matrixStage, readClut } = this._mabParts(t);
     const stages = [];
-    if (offA) { const A = curves(offA, inCh); stages.push((x) => x.map((v, i) => A[i](v))); }
-    let clut = null, grids = null;
-    if (offClut) {
-      const c = o + offClut;
-      grids = Array.from({ length: inCh }, (_, i) => dv.getUint8(c + i));
+    if (off.A) stages.push(curvesStage(off.A, inCh));
+    const { grids, clut } = off.clut ? readClut(off.clut) : { grids: null, clut: null };
+    if (clut) stages.push('clut');
+    if (off.M) stages.push(curvesStage(off.M, outCh));
+    if (off.matrix && outCh === 3) stages.push(matrixStage(off.matrix));
+    if (off.B) stages.push(curvesStage(off.B, outCh));
+    return { kind: 'lutAtoB', inCh, outCh, grids, clut, legacyPcs: false, stages };
+  }
+
+  /** Header and element readers shared by the v4 'mAB ' / 'mBA ' tag types (same layout, opposite processing order). */
+  _mabParts(t) {
+    const dv = this.dv, o = t.offset;
+    const [B, matrix, M, clut, A] = [12, 16, 20, 24, 28].map((k) => dv.getUint32(o + k));
+    // n curves stored one after another at offset `rel`, applied channel by channel
+    const curvesStage = (rel, n) => {
+      let p = o + rel;
+      const fns = Array.from({ length: n }, () => { const c = this._curve(p); p += c.bytes; return c.fn; });
+      return (x) => x.map((v, i) => fns[i](v));
+    };
+    // 3×3 matrix plus offset (s15Fixed16)
+    const matrixStage = (rel) => {
+      const m = Array.from({ length: 12 }, (_, i) => dv.getInt32(o + rel + 4 * i) / 65536);
+      return (x) => [0, 1, 2].map((r) => m[3 * r] * x[0] + m[3 * r + 1] * x[1] + m[3 * r + 2] * x[2] + m[9 + r]);
+    };
+    const inCh = dv.getUint8(o + 8), outCh = dv.getUint8(o + 9);
+    // CLUT: grid points per input, precision (1 or 2 bytes), then the table normalised to 0..1
+    const readClut = (rel) => {
+      const c = o + rel;
+      const grids = Array.from({ length: inCh }, (_, i) => dv.getUint8(c + i));
       const prec = dv.getUint8(c + 16);
       const count = grids.reduce((a, b) => a * b, 1) * outCh;
-      clut = new Float64Array(count);
-      for (let i = 0; i < count; i++) clut[i] = prec === 1 ? dv.getUint8(c + 20 + i) / 255 : dv.getUint16(c + 20 + 2 * i) / 65535;
-      stages.push('clut');
-    }
-    if (offM) { const M = curves(offM, outCh); stages.push((x) => x.map((v, i) => M[i](v))); }
-    if (offMat && outCh === 3) {
-      const m = Array.from({ length: 12 }, (_, i) => dv.getInt32(o + offMat + 4 * i) / 65536);
-      stages.push((x) => [0, 1, 2].map((r) => m[3 * r] * x[0] + m[3 * r + 1] * x[1] + m[3 * r + 2] * x[2] + m[9 + r]));
-    }
-    if (offB) { const B = curves(offB, outCh); stages.push((x) => x.map((v, i) => B[i](v))); }
-    return { kind: 'lutAtoB', inCh, outCh, grids, clut, legacyPcs: false, stages };
+      const table = new Float64Array(count);
+      for (let i = 0; i < count; i++) table[i] = prec === 1 ? dv.getUint8(c + 20 + i) / 255 : dv.getUint16(c + 20 + 2 * i) / 65535;
+      return { grids, clut: table };
+    };
+    return { inCh, outCh, off: { B, matrix, M, clut, A }, curvesStage, matrixStage, readClut };
   }
 
   /** Parse a 'curv' or 'para' element at byte p. Returns { fn, bytes } (bytes padded to 4). */
@@ -251,7 +255,7 @@ export class IccProfile {
    */
   gamut(lab) {
     const closest = this.toLab(this._toDevice(lab, 2), 2);
-    return { closest, dE: deltaE00(lab, closest) };
+    return { closest, dE: deltaE2000(lab, closest) };
   }
 
   /** Throws IccError with a readable message unless this can be used as a printer (output) profile for gamut checks. */
@@ -285,29 +289,6 @@ function interpolateN(lut, x) {
     for (let j = 0; j < n; j++) out[j] += w * c[base + j];
   }
   return out;
-}
-
-/** ΔE00 (local copy so this module stays independent of color.js). */
-function deltaE00(p, q) {
-  const rad = Math.PI / 180;
-  const C1 = Math.hypot(p[1], p[2]), C2 = Math.hypot(q[1], q[2]), Cb = (C1 + C2) / 2;
-  const G = 0.5 * (1 - Math.sqrt(Cb ** 7 / (Cb ** 7 + 25 ** 7)));
-  const a1 = (1 + G) * p[1], a2 = (1 + G) * q[1];
-  const c1 = Math.hypot(a1, p[2]), c2 = Math.hypot(a2, q[2]);
-  const h = (a, b) => (a === 0 && b === 0 ? 0 : ((Math.atan2(b, a) / rad) + 360) % 360);
-  const h1 = h(a1, p[2]), h2 = h(a2, q[2]);
-  let dh = 0;
-  if (c1 * c2) { dh = h2 - h1; if (dh > 180) dh -= 360; else if (dh < -180) dh += 360; }
-  const dH = 2 * Math.sqrt(c1 * c2) * Math.sin((dh / 2) * rad);
-  const Lb = (p[0] + q[0]) / 2, cb = (c1 + c2) / 2;
-  let hb = h1 + h2;
-  if (c1 * c2) { if (Math.abs(h1 - h2) > 180) hb += h1 + h2 < 360 ? 360 : -360; hb /= 2; }
-  const T = 1 - 0.17 * Math.cos((hb - 30) * rad) + 0.24 * Math.cos(2 * hb * rad) + 0.32 * Math.cos((3 * hb + 6) * rad) - 0.2 * Math.cos((4 * hb - 63) * rad);
-  const RC = 2 * Math.sqrt(cb ** 7 / (cb ** 7 + 25 ** 7));
-  const SL = 1 + (0.015 * (Lb - 50) ** 2) / Math.sqrt(20 + (Lb - 50) ** 2), SC = 1 + 0.045 * cb, SH = 1 + 0.015 * cb * T;
-  const RT = -Math.sin(2 * 30 * Math.exp(-(((hb - 275) / 25) ** 2)) * rad) * RC;
-  const dL = q[0] - p[0], dC = c2 - c1;
-  return Math.sqrt((dL / SL) ** 2 + (dC / SC) ** 2 + (dH / SH) ** 2 + RT * (dC / SC) * (dH / SH));
 }
 
 function sampleTable(table, v) {

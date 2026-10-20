@@ -124,11 +124,12 @@ export const RIP_EXPORTS = {
 
 // ---------------------------------------------------------------- import
 /**
- * Read a spot colour library file (CxF3 .cxf, Adobe Color Book .acb, VersaWorks .spot) into
+ * Read a spot colour library file (CxF3 .cxf, Adobe Color Book .acb, Edge Print .epcc, VersaWorks .spot) into
  * { format, library, colours: [{ name, lab }], skipped: [names] } with Lab D50 / 2°.
  * Colours without usable D50/2° data are reported in `skipped`.
  */
 export function readLibrary(bytes, fileName = '') {
+  const notALibrary = (why = '') => new Error(`${fileName || 'The file'} is not a CxF, Adobe Color Book, Edge Print or VersaWorks library${why}`);
   bytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   if (String.fromCharCode(...bytes.subarray(0, 4)) === '8BCB') return readAcb(bytes);
   if (bytes[0] === 0xff && bytes[1] === 0xfe) {
@@ -137,11 +138,11 @@ export function readLibrary(bytes, fileName = '') {
   }
   const text = new TextDecoder().decode(bytes);
   const doc = new DOMParser().parseFromString(text, 'application/xml');
-  if (doc.querySelector('parsererror')) throw new Error(`${fileName || 'The file'} is not a CxF, Adobe Color Book, Edge Print or VersaWorks library`);
+  if (doc.querySelector('parsererror')) throw notALibrary();
   const root = doc.documentElement.localName;
   if (root === 'CxF') return readCxf(doc);
   if (root === 'SpotColorLibraryList') return readVersaWorks(doc);
-  throw new Error(`${fileName || 'The file'} is not a CxF, Adobe Color Book, Edge Print or VersaWorks library (root element <${root}>)`);
+  throw notALibrary(` (root element <${root}>)`);
 }
 
 const byLocal = (el, name) => [...el.getElementsByTagName('*')].filter((e) => e.localName === name);
@@ -191,9 +192,15 @@ function readCxf(doc) {
           const start = parseFloat(v.getAttribute('StartWL')) || sp.start || 400;
           const inc = sp.increment || 10;
           const r = v.textContent.trim().split(/\s+/).map(Number);
-          const at = (nm) => { const x = (nm - start) / inc, i = Math.floor(x); return i < 0 || i >= r.length - (x > i ? 1 : 0) ? NaN : r[i] + (x - i) * ((r[i + 1] ?? r[i]) - r[i]); };
+          // value at wavelength nm by linear interpolation; NaN outside the measured range
+          const at = (nm) => {
+            const pos = (nm - start) / inc, i = Math.floor(pos), frac = pos - i;
+            if (i < 0 || i >= r.length || (frac > 0 && i + 1 >= r.length)) return NaN;
+            return frac ? r[i] + frac * (r[i + 1] - r[i]) : r[i];
+          };
+          const scale = Math.max(...r) > 1.5 ? 100 : 1; // spectra given in percent
           const s31 = Array.from({ length: 31 }, (_, i) => at(400 + 10 * i));
-          if (s31.every(Number.isFinite)) { lab = spectrumToLab(s31.map((x) => (Math.max(...r) > 1.5 ? x / 100 : x)), 0, 2); break; }
+          if (s31.every(Number.isFinite)) { lab = spectrumToLab(s31.map((x) => x / scale), 0, 2); break; }
         }
       }
     }

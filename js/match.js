@@ -2,11 +2,14 @@
 // input values (Lab, CMYK or RGB) that reproduce a measured target colour on the user's printer.
 //
 // Method (closed loop, per round):
-//   1. Patches = centre guess x0 + a 16-point design around it (centre ×2, ±step on each axis, 8 corners).
+//   1. Patches = centre guess x0 + a design around it: 16 points (centre ×2, ±step on each axis, 8 corners)
+//      or 8 (no corners).
 //   2. The user prints the sheet and measures every patch: y_i = Lab of patch i.
 //   3. Fit an affine model  y ≈ m0 + J·(x − x0)  by least squares (J is 3×3).
-//   4. Solve  J·Δx = T − m0  (bounded to the valid input range, damped if J is ill-conditioned).
-//   5. The answer x* = x0 + Δx is the centre of the next, finer sheet; its centre patch verifies it.
+//   4. Solve  J·Δx = T − m0  in weighted least squares (lightness weight from the ΔE formula), bounded to a trusted
+//      box around x0 and the valid input range, damped if J is ill-conditioned.
+//   5. The answer x* = x0 + Δx is the centre of the next, finer sheet; its centre patch verifies it. A patch that
+//      already measured closer than the prediction is recommended instead.
 import { deltaE2000, deltaECMC, spectrumToLab } from './color.js';
 
 /**
@@ -115,7 +118,8 @@ export function predict(model, x0, x) {
 
 /**
  * Inputs x within [lo, hi] (default: the mode's range) whose predicted Lab is closest to `target` (least squares in
- * Lab). Uses an active-set loop: axes that would leave the box are pinned to the bound and the rest re-solved.
+ * Lab, each Lab component scaled by `weights`); `dE` scores the prediction. Uses an active-set loop: axes that would
+ * leave the box are pinned to the bound and the rest re-solved.
  */
 export function solveForTarget(mode, model, x0, target, { lo = MODES[mode].min, hi = MODES[mode].max, weights = [1, 1, 1], dE = deltaE2000 } = {}) {
   const { min, max } = MODES[mode];
@@ -162,9 +166,9 @@ export const trustRadius = (mode, step) => step.map((s, k) => Math.max(TRUST_STE
 
 /**
  * Analyse a measured round: model, recommendation, best patch, centre check.
- * The recommendation stays within TRUST_STEPS patch steps of the centre (near a gamut edge the printer barely
- * responds, and an unbounded solve would jump to the ends of the range), and it is never predicted worse than the
- * best patch actually measured – then that patch is recommended instead (source 'best-patch').
+ * The recommendation stays within trustRadius() of the centre (near a gamut edge the printer barely responds, and an
+ * unbounded solve would jump to the ends of the range), and it is never predicted worse than the best patch actually
+ * measured – then that patch is recommended instead (source 'best-patch'). `formula` is a DE_FORMULAS key.
  */
 export function analyseRound(round, target, formula = 'de00') {
   const { min, max } = MODES[round.mode];

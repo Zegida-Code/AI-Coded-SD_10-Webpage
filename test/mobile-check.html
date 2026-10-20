@@ -51,6 +51,8 @@
       $('btnMeasure').click();
       const capOk = await until(() => /Reference captured/.test($('toast').textContent) && !$('btnMeasure').disabled);
       lines.push(`${hintOk && capOk ? 'PASS' : 'FAIL'} compare with no reference captures one (${$('toast').textContent})`);
+      // a different colour than the reference, so making it the reference later visibly changes the comparison
+      $('demoSample').value = 'Sunflower'; $('demoSample').dispatchEvent(new Event('change'));
       $('btnMeasure').click();
       const cmpOk = await until(() => /PASS|FAIL/.test($('verdict').textContent) && !$('btnMeasure').disabled);
       lines.push(`${cmpOk ? 'PASS' : 'FAIL'} next measurement is compared (${$('verdict').textContent.replace(/\s+/g, ' ').trim()})`);

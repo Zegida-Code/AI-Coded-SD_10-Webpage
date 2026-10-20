@@ -146,7 +146,9 @@ Open these pages in Chrome (on the live site, e.g. [sd-10.com/test/](https://sd-
 ```
 index.html          page and layout
 css/app.css         compiled Tailwind stylesheet (source: css/tailwind.src.css)
-js/app.js           UI controller
+js/app.js           Console view (connection, measuring, history, palettes, settings, log) and start-up
+js/match-view.js    Print match view (reference colours, sheets, scanning, results, spot library)
+js/ui.js            DOM / formatting helpers shared by both views
 js/session.js       SD-10 session: byte routing, command queue + FF/FE acks, handshake, operations
 js/protocol.js      command builders and reply parsers
 js/transport.js     Web Bluetooth GATT transport
