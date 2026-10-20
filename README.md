@@ -2,149 +2,170 @@
 
 **Live: [sd-10.com](https://sd-10.com)** · **Try it without hardware: [sd-10.com/?demo](https://sd-10.com/?demo)**
 
-A browser app for the **Epson SD-10 spectrometer**. It connects over Web Bluetooth and does what the official
-Epson Spectrometer Android app does — measure, compare, calibrate, manage device palettes and settings — in a
-desktop or Android browser. Nothing to install; measurements stay in your browser.
+A browser app for the **Epson SD-10 spectrometer**. It connects over Web Bluetooth and does what the official Epson
+Spectrometer Android app does – measure, compare, calibrate, and manage the device's palettes and settings – in a
+desktop or Android browser. On top of that, **Print match** helps you get a printer to reproduce a colour.
+There is nothing to install, and your measurements stay in your browser.
 
 The SD-10 protocol was reverse-engineered from the Android app; see [docs/PROTOCOL.md](docs/PROTOCOL.md) and
 [docs/FEATURES.md](docs/FEATURES.md).
 
-> Unofficial project, not affiliated with or endorsed by Epson.
+> Unofficial project – not affiliated with or endorsed by Epson.
 
 ## Browser support
 
 | Works | Doesn't work |
 |---|---|
-| Chrome or Edge on Windows, macOS, Linux, ChromeOS, Android | Safari, Firefox, anything on iOS/iPadOS (no Web Bluetooth) |
+| Chrome or Edge on Windows, macOS, Linux, ChromeOS and Android | Safari, Firefox, and anything on iOS / iPadOS (no Web Bluetooth) |
 
-The demo ([sd-10.com/?demo](https://sd-10.com/?demo)) works in every modern browser.
+The demo ([sd-10.com/?demo](https://sd-10.com/?demo)) runs in every modern browser.
 
-## Using it
+## Measuring (Console)
 
-1. **Connect** – press **Connect device** and pick your SD-10. If it isn't listed, open the **▾** next to the
+1. **Connect** – press **Connect device** and choose your SD-10. If it isn't listed, open the **▾** next to the
    button and switch on *Show all Bluetooth devices*.
-2. **Calibrate** – close the shutter; the Measure button turns into **Calibrate**. Open the shutter afterwards.
-3. **Measure** – choose a mode and press **Measure** (or the button on the SD-10):
-   - **Spot** – one colour; optionally several readings combined as the median.
-   - **Compare** – measures a sample against a reference and shows PASS/FAIL with ΔE. With no reference set,
-     the first measurement becomes the reference. **Use as reference** (on a result) or **ref** (in History)
-     picks a different one and re-compares the colour on screen; the reference row is marked **REF**.
+2. **Calibrate** – close the shutter and the Measure button becomes **Calibrate**. Open the shutter again afterwards.
+3. **Measure** – choose a mode and press **Measure**, or the button on the SD-10:
+   - **Spot** – one colour, optionally the median of several readings.
+   - **Compare** – a sample against a reference, with PASS / FAIL and the ΔE. With no reference yet, the first
+     measurement becomes the reference. **Use as reference** (under a result) or **ref** (in History) picks another
+     one and re-compares the colour on screen; the reference is marked **REF** in History.
    - **Line scan** – drag the SD-10 across a strip of up to 18 patches.
-4. **Read the result** – sample/reference swatches, L\*a\*b\*, LCh, HEX/RGB, CMYK, LRV and the spectral curve.
-   **Copy values** copies everything as text.
+4. **Read the result** – swatches, L\*a\*b\*, LCh, HEX / RGB, CMYK, LRV and the spectral curve. **Copy values** copies
+   them all as text.
 
-### Print match (matching colours on your printer)
+| Also in the Console | Where |
+|---|---|
+| Battery, charging, calibration and shutter state, device errors | **Device** card – updates when the device reports a change |
+| Device name, buzzer, auto power-off, language, panel direction | **Device → Device settings** |
+| Write colours to the device's four palette slots, or clear a slot | **Device palettes** – tick the colours in History first |
+| Measurement history with CSV export | **History** – kept in this browser |
+| Import measurements stored on the SD-10 | **Sync device history** (new ones) or **Re-import all**; *Clear* resets the sync position |
+| CMYK profile and rendering intent | Under the result; **+ add .icc** adds your own CMYK profile |
+| Every Bluetooth frame, decoded | **Protocol log** at the bottom (collapsed by default) |
 
-Open **Print match** in the header (or [sd-10.com/#match](https://sd-10.com/#match)). It finds the values to put in your
-document so your printer reproduces reference colours. It needs a computer or tablet (768 px or wider) – it works
-with downloaded sheets and your RIP software, so phones only show the Console.
+## Print match
 
-1. **Reference colours** – scan the colour to match (or use the last measurement, or type L\*a\*b\*) and give it the
-   name it has in your artwork. **+ Add colour** matches several colours at once: each colour has its own sheets,
-   scan position and result, and everything below works on the colour selected in the list – so you can scan one
-   colour's sheet while another is still printing or curing, and switching colours never affects the others.
-2. **Test sheet** – pick the sheet type that matches how the colour reaches your printer and download it: the
-   selected colour's sheet (named after the colour and sheet), with 16 patches around a first estimate – or 8 with
-   **Patches per colour: 8** to save media.
+**Print match** (in the header, or [sd-10.com/#match](https://sd-10.com/#match)) finds the values to put in your
+artwork or RIP so that your printer reproduces a reference colour. It works in rounds: print a test sheet, scan it,
+and the app works out how your printer responds and which values should hit the colour – then a finer sheet confirms
+it. It needs a computer or tablet (768 px or wider); phones only show the Console.
 
-   | Sheet type | For | You get |
-   |---|---|---|
-   | **Spot colours (RIP, L\*a\*b\*)** | RIPs and workflows that colour named spot colours from an L\*a\*b\* library | PDF where every patch is a uniquely named spot colour with its L\*a\*b\* as the alternate; the result is the L\*a\*b\* to enter for your named colour |
-   | **L\*a\*b\* objects** | workflows that print Lab colours directly | PDF with CIE Lab (D50) patches |
-   | **CMYK numbers** | documents that send CMYK to the printer (K is kept fixed; first estimate from the selected CMYK profile) | PDF with CMYK patches |
-   | **RGB image (raster workflows)** | software that only accepts raster images | sRGB PNG (300 dpi); the result is an RGB / hex value for your artwork |
+### 1. Reference colours
 
-   **Media** is a custom width × height in mm (the default), A4, Letter, A3 or Tabloid – a preset fills in its size, and
-   editing the size makes it custom. **Save** keeps the current size under a name in this browser (listed under *Your
-   sizes*, ✕ removes it); the size last used is remembered. On wide, short media the sheet's text moves beside the
-   patches. The height can't go below one row of patches plus the sheet's text (the app shows that minimum, and the
-   height that fits each colour on one page). **Patch size** is 10–30 mm. From 20 mm the
-   values (and spot names) are printed under each patch, smaller patches only carry their number. Patches that do not
-   fit on one page continue on further pages. Patches must cover the SD-10's whole measuring area – if readings of
-   one patch jump around, use larger patches.
-3. **Print** it exactly like the final job – same printer, media, quality and colour settings, at 100% – and scan
-   the patches in number order (the SD-10's button works too; tap a patch to re-measure it). If the print is
-   transferred, cured or finished (pressing, curing, laminating …), process the sheet the same way and scan the finished
-   product. On textured or uneven surfaces set **Readings per patch** to 3 or more: each patch is then the average of
-   several readings taken at different spots (a **!** marks patches whose readings disagree by more than 1.5 ΔE00).
-4. **Result** – for the selected colour, the app models how your printer responds around it and calculates the values
-   that should print closest to the reference, with the predicted ΔE00. **Make next sheet** prints a finer sheet for
-   that colour, centred on the answer; its centre patches verify it. A colour reports **Done** once its values print
-   within your tolerance – **Accept** it to stop making sheets for it.
+Scan the colour you want to match (or use the last measurement, or type in L\*a\*b\*) and give it the name it has in
+your artwork. **+ Add colour** lets you work on several colours at once. Each colour has its own sheets, scan
+position and result, and everything below works on the colour **selected in the list** – so you can scan one
+colour's sheet while another is still printing or curing, and switching colours never disturbs the others.
 
-**Colour difference:** matches are judged with **ΔE00** (graphic arts, the default), or for textiles with **ΔE00 2:1:1**
-or **ΔE CMC 2:1**, which judge lightness differences more leniently, as people do on fabric. The solver then also aims
-for hue and chroma first. Changing the formula re-judges existing results without new measurements.
+### 2. Test sheet
 
-**Metamerism check:** when the reference was measured with the SD-10 (not typed in), each result compares the best
-printed patch with the reference under daylight (D65), warm / incandescent light (A), tri-band shop lighting (F11,
-LED-like) and cool white fluorescent (F2) – the difference you would see, and the metamerism index (how far they drift
-apart once the D50 difference is taken out). A large index means the ink and the reference reflect light differently,
-so the colours match under one light but not another; check the colour under the light the product will be seen in.
+Pick the sheet type that matches how colour reaches your printer, then **Create sheet** and download it:
 
-**Printer profile (gamut check):** add the ICC output profile your RIP uses for the printer, ink and media (**+ .icc**;
-CMYK or multi-ink profiles). Each reference is then checked against it: inside the gamut, at its edge, or outside – with
-the closest printable colour and how far it is. An out-of-gamut colour cannot be matched closer than that, whatever the
-rounds. The profile is kept in this browser and only used for this check.
+| Sheet type | For | What you get |
+|---|---|---|
+| **Spot colours (RIP, L\*a\*b\*)** | RIPs that colour named spot colours from an L\*a\*b\* library | A PDF in which every patch is a uniquely named spot colour, with its L\*a\*b\* as the fallback. The result is the L\*a\*b\* to enter for your named colour. |
+| **L\*a\*b\* objects** | Workflows that print Lab colours directly | A PDF with CIE L\*a\*b\* (D50) patches |
+| **CMYK numbers** | Documents that send CMYK values to the printer | A PDF with CMYK patches (K stays fixed; the first estimate comes from the CMYK profile chosen in the Console) |
+| **RGB image (raster workflows)** | Software that only accepts images | A 300 dpi sRGB PNG; the result is an RGB / hex value for your artwork |
 
-Each round's move is limited to the range the sheet's measurements can be trusted for, and the app never recommends
-values predicted to print worse than a patch you already measured. If a reference is outside what the printer and
-media can reproduce, it says so and gives the closest values instead of chasing it. With the simulated printer in the
-demo, a first estimate 22 ΔE00 away reaches about 0.2 ΔE00 in three to four rounds; a real RIP's first estimate is
-usually much closer.
+Each sheet has **16 patches** around the current estimate, or **8** (*Patches per colour*) to save media and scanning.
 
-**Spot library files:** in L\*a\*b\* modes the app also exports spot colour libraries for the RIP, in the format
-chosen under **Spot library format**:
+**Media and patch size**
+
+- **Media** is a custom width × height in mm by default, or A4, Letter, A3 or Tabloid – a preset simply fills in its
+  size, and editing the size makes it custom again. **Save** keeps the current size under a name (listed under
+  *Your sizes*; **✕** removes it), and the size you used last is remembered.
+- The height can't go below one row of patches plus the sheet's text. The app shows that minimum and the height that
+  fits a whole sheet on one page, and raises the height for you (and says so) when a change needs more room.
+- On wide, short media – such as a 700 mm roll – the sheet's text moves beside the patches, so a sheet with 20 mm
+  patches can be as thin as about 40 mm.
+- **Patch size** is 10–30 mm. From 20 mm, each patch also carries its values (and spot name); smaller patches only
+  carry their number. Patches must cover the SD-10's whole measuring area – if readings of one patch jump around,
+  use larger patches. Sheets that don't fit on one page continue on further pages.
+
+### 3. Print and scan
+
+Print the sheet exactly like the final job – same printer, media, quality and colour settings, at 100% – and scan
+the patches in number order with **Measure** or the SD-10's button (tap a patch to re-measure it). If your prints are
+transferred, cured or finished (pressed, cured, laminated…), treat the sheet the same way and scan the finished
+result.
+
+On textured or uneven surfaces, set **Readings per patch** to 3 or more: each patch is then the average of readings
+taken at different spots, and a **!** marks patches whose readings disagree by more than 1.5 ΔE00.
+
+### 4. Result
+
+The app fits a model of how your printer responds around the colour and calculates the values that should print
+closest to the reference, with the predicted colour difference. **Make next sheet** prints a finer sheet centred on
+that answer, and its centre patches check it. A colour shows **Done** once its values print within your tolerance –
+**Accept** it to stop making sheets for it.
+
+To keep the search safe, each round only moves as far as the sheet's measurements can be trusted, and the app never
+recommends values predicted to print worse than a patch you have already measured. If a reference is beyond what the
+printer and media can reproduce, it says so and gives the closest values instead of chasing it. (With the demo's
+simulated printer, a first estimate 22 ΔE00 off reaches about 0.2 ΔE00 in three to four rounds; a real RIP usually
+starts much closer.)
+
+**Colour difference.** Matches are judged with **ΔE00** by default. For textiles, choose **ΔE00 2:1:1** or
+**ΔE CMC 2:1**, which – like people looking at fabric – are more forgiving of lightness differences; the search then
+also aims for hue and chroma first. Changing the formula re-judges existing results without new measurements.
+
+**Metamerism check.** When the reference was measured with the SD-10, each result compares the best printed patch
+with the reference under daylight (D65), warm incandescent light (A), tri-band shop lighting (F11, close to many LEDs)
+and cool white fluorescent (F2). It shows the difference you would see and the *metamerism index* – how far the two
+drift apart once the D50 difference is taken out. A high index means the ink and the reference reflect light
+differently, so they can match under one light but not another: check the colour under the light it will be seen in.
+
+**Gamut check.** Add the ICC output profile your RIP uses for the printer, ink and media (**+ .icc**; CMYK and
+multi-ink profiles both work). Each reference is then marked as inside the printer's gamut, at its edge, or outside –
+with the closest printable colour and how far away it is. No amount of matching gets an out-of-gamut colour closer
+than that. The profile stays in this browser and is only used for this check.
+
+### Spot colour libraries
+
+In the L\*a\*b\* sheet types the app also writes spot colour libraries for your RIP, in the format chosen under
+**Spot library format**:
 
 | Format | Notes |
 |---|---|
-| **CxF3** (`.cxf`) | the ISO 17972-1 colour exchange standard that many RIPs import |
-| **Adobe Color Book** (`.acb`) | read by Photoshop and RIPs that import Adobe colour books; stores L\* in steps of 0.4 and a\*/b\* as whole numbers (the spot library shows what that rounding costs) |
-| **Epson Edge Print** (`.epcc`) | Edge Print colour collection, values with one decimal |
-| **Roland VersaWorks** (`.spot`) | VersaWorks 6 spot colour library (it imports switched off – enable it in the library list) |
+| **CxF3** (`.cxf`) | The ISO 17972-1 colour exchange standard that many RIPs import |
+| **Adobe Color Book** (`.acb`) | Read by Photoshop and by RIPs that import Adobe colour books. It stores L\* in steps of 0.4 and a\*/b\* as whole numbers; the app shows what that rounding costs. |
+| **Epson Edge Print** (`.epcc`) | Edge Print colour collection, values to one decimal |
+| **Roland VersaWorks** (`.spot`) | VersaWorks 6 spot colour library – it imports switched off, so enable it in the library list |
 
-**Sheet library** holds the test sheet's patch colours (import and enable it before printing the sheet, so the patches
-go through the RIP's named-colour path). When a match is done, **Add to spot library** puts the result into your
-**Spot library** under the colour's name – exactly the name used in your artwork, since the RIP finds spot colours by
-name. The spot library collects colours across matches (rename, replace or remove them; it is kept in this browser).
-You can also type a colour in (or take the last measurement) and **Import library…** – any of the formats above, e.g.
-one exported from your RIP – to update existing colours. CxF colours are read from their D50 / 2° L\*a\*b\* values, or
-computed from their reflectance spectra; colours without L\*a\*b\* (e.g. CMYK entries) are skipped. **Download
-library** saves all of them as one file to import into the RIP. Other formats can be added from a sample library
-exported by that RIP.
+- **Sheet library** holds the current test sheet's patch colours. Import and enable it before printing the sheet, so
+  the patches go through the same named-colour path as your artwork.
+- **Add to spot library** stores a finished match under the colour's name – use exactly the name from your artwork,
+  because the RIP finds spot colours by name.
+- The **Spot library** collects colours across jobs and is kept in this browser. You can rename or remove entries,
+  type a colour in (or take the last measurement), and **Import library…** any of the formats above – for example one
+  exported from your RIP – to update existing colours. CxF colours are read from their D50 / 2° L\*a\*b\* values or
+  computed from their spectra; entries without L\*a\*b\* (such as CMYK) are skipped.
+- **Download library** saves the whole library as one file to import into the RIP. Support for other RIPs' formats
+  can be added from a sample library exported by that RIP.
 
-### Other features
+## Colour accuracy
 
-| Feature | Where |
-|---|---|
-| Battery, charging, calibration and shutter state, device errors | **Device** card (refreshes when the device reports a change) |
-| Device name, buzzer, auto power-off, language, panel direction | **Device → Device settings** |
-| Write colours to the device's 4 palette slots / delete a slot | **Device palettes** – tick colours in History first |
-| History with CSV export | **History** – stored in this browser |
-| Import measurements saved on the SD-10 | **Sync device history** (new ones) / **Re-import all**; *Clear* resets the sync position |
-| CMYK profile and rendering intent | under the result; **+ add .icc** to use your own CMYK profile |
-| Every Bluetooth frame, decoded | **Protocol log** at the bottom (collapsed by default) |
-
-### Colour accuracy
-
-- **Lab** uses the illuminant/observer weighting tables recovered from the app's own colour library, so values
-  match the official app (checked against the native code to better than 0.001).
-- **CMYK** is computed like the app: Lab (D50/2°) → the selected ICC profile, default **EpsonWideCMYK_Ver2**,
-  **perceptual**. It agrees with the app's own colour engine to within 0.42 percentage points (mean 0.15).
-- **Your own profiles**: CMYK output profiles, ICC v2 or v4 (Lab or XYZ PCS). They are kept in this browser
-  (IndexedDB); if the browser blocks storage they work for the current session only.
-- **HEX/RGB** is sRGB (D50 → D65 Bradford). **LRV** is Y under D65/10°.
+- **L\*a\*b\*** uses the illuminant and observer weighting tables recovered from the official app's colour library,
+  so values match the app (checked against its native code to better than 0.001).
+- **CMYK** is calculated the way the app does it – L\*a\*b\* (D50 / 2°) through the selected ICC profile, by default
+  **EpsonWideCMYK_Ver2** with **perceptual** intent – and agrees with the app's own colour engine to within
+  0.42 percentage points (0.15 on average).
+- **Your own profiles** can be CMYK output profiles in ICC v2 or v4 (Lab or XYZ connection space). They are kept in this
+  browser (IndexedDB); if the browser blocks storage, they work for the current session only.
+- **HEX / RGB** is sRGB (D50 → D65, Bradford). **LRV** is Y under D65 / 10°.
 
 ## Tests
 
-Open these pages in Chrome (on the live site, e.g. [sd-10.com/test/](https://sd-10.com/test/), or a local copy):
+Open these pages in Chrome – on the live site (e.g. [sd-10.com/test/](https://sd-10.com/test/)) or a local copy:
 
-| Page | Checks |
+| Page | What it checks |
 |---|---|
-| [`test/index.html`](https://sd-10.com/test/index.html) | 99 checks: command frames vs. the app's own (emulated) code, Lab and CMYK vs. the native libraries, ΔE2000 reference data, ICC v4 parsing, print-match model fitting/convergence for all four sheet types, PDF/PNG sheet structure, CxF3 structure, Adobe Color Book bytes, Edge Print .epcc vs. a real Edge Print export, ΔE CMC / ΔE00 2:1:1 vs. colour-science, metamerism, ICC AToB vs. LittleCMS and the gamut check, compact design, multi-page layout, library import (CxF incl. spectra, ACB, .epcc, .spot), VersaWorks .spot output vs. a real VersaWorks export, a full session against the simulator |
-| [`test/ui-smoke.html`](https://sd-10.com/test/ui-smoke.html) | 34 checks driving the real UI against the simulator (calibrate, measure, compare, line scan, history sync, palettes, settings, custom ICC) |
-| [`test/mobile-check.html`](https://sd-10.com/test/mobile-check.html) | Layout at 375 px wide (no sideways scrolling) plus the compare/reference flows |
-| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 49 checks for Print match against the simulated device and printer: rounds to within tolerance, textile ΔE, metamerism and printer-profile gamut checks, several colours in progress at once (each with its own sheet and scan, accepting a colour), custom media and height limits, spot colour sheets with averaged readings, a spot library (add, import, type in) exported as CxF3 / Adobe Color Book / VersaWorks, RGB/PNG sheets |
+| [`test/index.html`](https://sd-10.com/test/index.html) | 99 checks of the core code: command frames against the app's own (emulated) code; L\*a\*b\* and CMYK against its native libraries; ΔE2000, CMC and ΔE00 2:1:1 against reference data; the ICC engine against LittleCMS; Print match convergence, layouts and PDF / PNG sheets; the library formats against real VersaWorks and Edge Print exports, the CxF3 standard and a reference Adobe Color Book encoder; and a full session against the simulated SD-10 |
+| [`test/ui-smoke.html`](https://sd-10.com/test/ui-smoke.html) | 34 checks driving the Console against the simulated SD-10: calibrate, measure, compare, line scan, history sync, palettes, settings, custom ICC profiles |
+| [`test/mobile-check.html`](https://sd-10.com/test/mobile-check.html) | The layout at phone width (no sideways scrolling) and the compare / reference flows |
+| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 49 checks driving Print match against the simulated device and printer: matching to within tolerance, several colours at once, media sizes and limits, readings per patch, textile ΔE, metamerism and gamut checks, spot colour sheets and libraries, RGB sheets |
 
 ## Project layout
 
@@ -153,34 +174,34 @@ index.html          page and layout
 css/app.css         compiled Tailwind stylesheet (source: css/tailwind.src.css)
 js/app.js           Console view (connection, measuring, history, palettes, settings, log) and start-up
 js/match-view.js    Print match view (reference colours, sheets, scanning, results, spot library)
-js/ui.js            DOM / formatting helpers shared by both views
-js/session.js       SD-10 session: byte routing, command queue + FF/FE acks, handshake, operations
+js/ui.js            DOM and formatting helpers shared by both views
+js/session.js       SD-10 session: byte routing, command queue with FF / FE acks, handshake, operations
 js/protocol.js      command builders and reply parsers
 js/transport.js     Web Bluetooth GATT transport
 js/mock.js          simulated SD-10 (demo mode and tests)
-js/color.js         spectrum → Lab, ΔE (76/94/2000/CMC), sRGB, LRV
+js/color.js         spectrum → L*a*b*, ΔE (76 / 94 / 2000 / CMC), sRGB, LRV
 js/weights.js       CIE weighting tables from the app (12 illuminants × 2 observers)
-js/match.js         Print match: patch design, printer-response model, solver, PDF / PNG sheets
-js/rip-export.js    spot colour library files for RIPs (CxF3, Adobe Color Book, Edge Print, VersaWorks): export and import
+js/match.js         Print match maths: patch design, printer model, solver, metamerism, PDF / PNG sheet layout
+js/rip-export.js    spot colour library files (CxF3, Adobe Color Book, Edge Print, VersaWorks): export and import
 js/printer-sim.js   simulated CMYK printer (demo and tests)
-js/icc.js           ICC engine (lut8/lut16/lutBtoA) for Lab → CMYK; custom profile storage
+js/icc.js           ICC engine (L*a*b* → CMYK, and device → L*a*b* for the gamut check); profile storage
 js/storage.js       history and preferences (localStorage)
 icc/                CMYK profiles bundled with the app
 docs/               protocol, feature and development notes
 test/               test pages and reference data
-bump-version.sh     release helper
+bump-version.sh     release helper (cache-busting version for every script)
 build-css.sh        rebuilds css/app.css
 ```
 
 ## Troubleshooting
 
-- **SD-10 not in the device list** – switch on *Show all Bluetooth devices* (▾ next to Connect), make sure the
-  SD-10 is on and not connected to the phone app.
-- **"Device rejected control"** – another app (e.g. the Epson app) holds the session; close it and reconnect.
-- **Anything else** – open the **Protocol log**, press *Copy* and include it in a bug report.
-- Large palette writes are slow because writes go in 20-byte chunks; raise `chunkSize` in `js/transport.js` if
-  your setup allows bigger writes.
-- Firmware updates are intentionally not supported.
+- **The SD-10 isn't in the device list** – switch on *Show all Bluetooth devices* (▾ next to Connect), and check that
+  the SD-10 is switched on and not connected to the phone app.
+- **"Device rejected control"** – another app (such as the Epson app) holds the session; close it and reconnect.
+- **Anything else** – open the **Protocol log**, press *Copy* and include it in your bug report.
+- Writing large palettes is slow because data goes in 20-byte chunks; raise `chunkSize` in `js/transport.js` if your
+  setup allows bigger writes.
+- Firmware updates are deliberately not supported.
 
 ## Licences
 

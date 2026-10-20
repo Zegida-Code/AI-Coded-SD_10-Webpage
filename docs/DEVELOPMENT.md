@@ -24,9 +24,17 @@ Class names assembled at runtime must be listed in `safelist` in `tailwind.confi
 
 GitHub Pages lets browsers cache files for 10 minutes, so a visitor could get a new `index.html` with an old
 `js/app.js`. Every script URL in `index.html` therefore carries a release version (`?v=…`, via an import map).
-Before each release:
+A new module in `js/` must also be added to that import map, or it loads without a version
+(`test/mobile-check.html` checks that every module carries one). Before each release:
 
 ```sh
 ./bump-version.sh
 git add -A && git commit -m "Release" && git push
 ```
+
+## Tests
+
+Serve the folder as above and open `test/index.html` (core code), `test/ui-smoke.html` (Console),
+`test/mobile-check.html` (phone layout) and `test/match-smoke.html` (Print match). Each page sets its title to
+`ALL PASS` when every check passes, so they can also run headless, e.g.
+`chrome --headless=new --dump-dom http://localhost:8765/test/index.html`.

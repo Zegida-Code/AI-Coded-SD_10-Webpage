@@ -39,10 +39,7 @@ const match = (() => {
   if (!m.colours && (m.target || m.rounds?.length)) {
     // single-colour job saved by an earlier version: becomes the first colour
     const id = newId();
-    m.colours = [{ id, name: m.spotName ?? '', target: m.target ?? null, refReads: m.refReads ?? [], accepted: false,
-      rounds: (m.rounds ?? []).map((r) => ({ ...r, sheet: r.round })) }];
-    m.sheet = m.rounds?.length ? m.rounds[m.rounds.length - 1].round : 0;
-    m.next = { c: id, i: m.next ?? 0 };
+    m.colours = [{ id, name: m.spotName ?? '', target: m.target ?? null, refReads: m.refReads ?? [], accepted: false, next: m.next ?? 0, rounds: m.rounds ?? [] }];
     if (m.paper) m.media = m.paper;
     for (const k of ['target', 'rounds', 'spotName', 'refReads', 'paper']) delete m[k];
   }
@@ -128,17 +125,12 @@ function gamutHtml(c) {
 }
 const latest = (c) => c.rounds[c.rounds.length - 1] ?? null;
 const colourLabel = (c) => c.name || `Colour ${match.colours.indexOf(c) + 1}`;
-/** The selected colour with its current round (latest sheet) – what the sheet, scan and result cards work on. */
-const sheetItems = () => { const c = activeColour(), r = latest(c); return r ? [{ c, r }] : []; };
-/** The current sheet as layout groups, one per colour. */
-const sheetGroups = () => sheetItems().map(({ c, r }) => ({ label: colourLabel(c), target: c.target, patches: r.patches, kFixed: r.kFixed }));
-/** All patches of the current sheet in scan order: [{ c, r, p, i }]. */
-const sheetPatches = () => sheetItems().flatMap(({ c, r }) => r.patches.map((p, i) => ({ c, r, p, i })));
-/** Index (in sheetPatches()) of the patch to measure next: the selected colour's scan position. */
-function nextIndex(all = sheetPatches()) {
-  const k = all.findIndex((e) => e.i === activeColour().next);
-  return k >= 0 ? k : Math.max(0, all.findIndex((e) => !e.p.lab));
-}
+/** The selected colour and its current round (latest sheet) – what the sheet, scan and result cards work on – or null. */
+const currentSheet = () => { const c = activeColour(), r = latest(c); return r ? { c, r } : null; };
+/** A colour's round as a sheet-layout group. */
+const sheetGroup = (c, r) => ({ label: colourLabel(c), target: c.target, patches: r.patches, kFixed: r.kFixed });
+/** Index of the patch to measure next: the colour's scan position, or else its first unmeasured patch. */
+const nextPatchIndex = (c, r) => (r.patches[c.next] ? c.next : Math.max(0, r.patches.findIndex((p) => !p.lab)));
 const mediaMm = () => [match.mediaW, match.mediaH];
 const mediaName = () => PRESET_NAMES[match.media] ?? (match.media.startsWith(SIZE_PREFIX) ? match.media.slice(SIZE_PREFIX.length) : `${match.mediaW} × ${match.mediaH} mm`);
 
@@ -210,7 +202,7 @@ function modeHelp(mode) {
     lab: 'Patches are plain CIE L*a*b* objects. This only matches a spot colour workflow if the RIP converts Lab objects with the same profile and rendering intent as named colours – otherwise use spot colours.',
     cmyk: `For documents that send CMYK numbers to the printer. The starting values come from the CMYK profile selected in the Console (${profile}); K is kept fixed.`,
     rgb: 'For software that only accepts raster images. The sheet is an sRGB PNG and the result is an sRGB value / hex for your artwork – keep the artwork in sRGB like the sheet.',
-  }[mode] + ' Colours are measured at D50 / 2°. Several colours can be matched on the same sheets; 8 patches per colour need less media, 16 are more robust on noisy or uneven prints.';
+  }[mode] + ' Colours are measured at D50 / 2°. Several colours can be in progress at once, each with its own sheets; 8 patches per colour need less media, 16 are more robust on noisy or uneven prints.';
 }
 
 function printTips(mode) {
@@ -225,18 +217,18 @@ function printTips(mode) {
 export function matchControls(busyLabel) {
   if (!state || !$('btnMatchMeasure')) return; // the Console refreshes its controls before initMatch() has run
   const on = !!state.session?.connected, idle = on && !state.busy;
-  const all = sheetPatches();
-  const e = all[nextIndex(all)];
   const c = activeColour();
+  const cur = currentSheet();
+  const p = cur && cur.r.patches[nextPatchIndex(c, cur.r)];
   $('btnMatchTarget').disabled = !idle;
   $('btnMatchUseLast').disabled = !(state.lastLabD50 || state.last) || state.busy;
   $('btnMatchSheet').disabled = !c.target || state.busy;
-  $('btnMatchMeasure').disabled = !idle || !all.length;
-  $('btnMatchAnalyse').disabled = state.busy || !sheetItems().some(({ r }) => r.patches.filter((p) => p.lab).length >= 5);
+  $('btnMatchMeasure').disabled = !idle || !cur;
+  $('btnMatchAnalyse').disabled = state.busy || !cur || cur.r.patches.filter((q) => q.lab).length < 5;
   $('btnMatchRefine').disabled = state.busy || !c.target || c.accepted;
   const reading = (n) => (match.reads > 1 ? ` (reading ${n + 1}/${match.reads})` : '');
   $('btnMatchMeasure').textContent = busyLabel ? `${busyLabel}…`
-    : !e ? 'Measure patch' : `Measure patch #${e.p.n}${match.colours.length > 1 ? ` – ${colourLabel(e.c)}` : ''}${reading(e.p.lab ? 0 : e.p.reads?.length ?? 0)}`;
+    : !p ? 'Measure patch' : `Measure patch #${p.n}${match.colours.length > 1 ? ` – ${colourLabel(c)}` : ''}${reading(p.lab ? 0 : p.reads?.length ?? 0)}`;
   $('btnMatchTarget').textContent = `Measure reference${c.refReads.length ? reading(c.refReads.length) : ''}`;
 }
 
@@ -246,16 +238,12 @@ export function matchControls(busyLabel) {
  * colour on a single page.
  */
 function heightLimits() {
-  const per = DESIGNS[match.design] ?? 16;
+  const cur = currentSheet();
   // the current sheet, or a stand-in colour with the chosen number of patches before there is one
-  const groups = sheetGroups().length ? sheetGroups() : [{ label: 'Colour 1', target: [50, 0, 0], kFixed: 0,
-    patches: Array.from({ length: per }, (_, i) => ({ n: i + 1, offset: [0, 0, 0], x: [0, 0, 0], name: 'SD10-XXXX-R1-01' })) }];
-  const opts = (g) => ({ mode: match.mode, groups: [g], round: latest(activeColour())?.round ?? 1, media: [match.mediaW, 0], patchMm: match.patchMm });
-  const worst = (hs) => (hs.some((h) => h == null) ? null : Math.max(...hs));
-  return {
-    min: worst(groups.map((g) => minSheetHeight(opts(g), { onePage: false }))),
-    onePage: worst(groups.map((g) => minSheetHeight(opts(g)))),
-  };
+  const group = cur ? sheetGroup(cur.c, cur.r) : { label: 'Colour 1', target: [50, 0, 0], kFixed: 0,
+    patches: Array.from({ length: DESIGNS[match.design] ?? 16 }, (_, i) => ({ n: i + 1, offset: [0, 0, 0], x: [0, 0, 0], name: 'SD10-XXXX-R1-01' })) };
+  const opts = { mode: match.mode, groups: [group], round: cur?.r.round ?? 1, media: [match.mediaW, 0], patchMm: match.patchMm };
+  return { min: minSheetHeight(opts, { onePage: false }), onePage: minSheetHeight(opts) };
 }
 
 function heightHint({ min, onePage }) {
@@ -324,61 +312,59 @@ function renderMatch() {
   $('mModeHelp').innerHTML = modeHelp(match.mode);
   $('mPrintTips').innerHTML = printTips(match.mode);
 
-  // sheet
-  const items = sheetItems();
-  const all = sheetPatches();
-  const per = DESIGNS[match.design] ?? 16;
-  const current = latest(c);
-  $('mRoundLabel').textContent = `· ${colourLabel(c)}${current ? ` – sheet ${current.round}` : ''}`;
-  $('btnMatchSheet').textContent = current ? 'New first sheet' : 'Create sheet';
-  $('mSheetActions').classList.toggle('hidden', !items.length);
-  $('btnMatchPdf').textContent = match.mode === 'rgb' ? 'Download PNG' : 'Download PDF';
-  $('btnMatchRipSheet').classList.toggle('hidden', !items.some(({ r }) => r.mode === 'spot'));
-  if (!t) $('mSheetInfo').textContent = `Set the reference of ${colourLabel(c)} first.`;
-  else if (!items.length) $('mSheetInfo').textContent = `Creates a sheet of ${per} ${MODE_NAME[match.mode]} patches for ${colourLabel(c)}, around a first estimate of its reference.`;
-  else {
-    let pages = '';
-    try {
-      const n = sheetLayout({ mode: match.mode, groups: sheetGroups(), round: current.round, media: mediaMm(), patchMm: match.patchMm }).pages.length;
-      pages = ` · ${n} page${n > 1 ? 's' : ''} of ${mediaName()} with ${match.patchMm} mm patches`;
-    } catch (e) { pages = ` · <span class="text-rose-600">${escapeHtml(e.message)}</span>`; }
-    const lines = items.map(({ c: x, r }) => {
-      const vals = formatValues(r.mode, r.centre, r.kFixed).map(([k, v]) => `${k} ${v}`).join('  ');
-      const steps = r.step.map((v, k) => `${MODES[r.mode].axes[k]} ±${fmt1(v)}`).join(', ');
-      return `<li><b>${escapeHtml(colourLabel(x))}</b> (round ${r.round}): centre <span class="font-mono">${vals}</span> · steps ${steps}</li>`;
-    }).join('');
-    $('mSheetInfo').innerHTML = `${all.length} patches${pages}. Download, print and scan the patches below.
-      <ul class="mt-1 text-xs space-y-0.5">${lines}</ul>` +
-      (items.some(({ r }) => r.mode === 'spot') ? `<p class="text-xs mt-1">Spot names <span class="font-mono">${escapeHtml(all[0].p.name ?? '')}</span> … <span class="font-mono">${escapeHtml(all[all.length - 1].p.name ?? '')}</span>.</p>` : '');
-  }
-
-  // patch grid, grouped by colour
-  const grid = $('mPatchGrid');
-  if (!all.length) grid.innerHTML = '<p class="text-sm text-slate-500">No sheet yet.</p>';
-  else {
-    const nx = nextIndex(all);
-    let k = 0;
-    grid.innerHTML = items.map(({ c: x, r }) => `<div>
-      ${items.length > 1 ? `<div class="flex items-center gap-2 text-xs font-medium mb-1"><span class="h-3 w-3 rounded-sm ring-1 ring-black/10" style="background:${displayHex(x.target)}"></span>${escapeHtml(colourLabel(x))} <span class="text-slate-500 font-normal">round ${r.round}</span></div>` : ''}
-      <div class="grid grid-cols-4 sm:grid-cols-8 gap-2">${r.patches.map((p) => {
-        const idx = k++;
-        const done = !!p.lab;
-        const bg = done ? displayHex(p.lab) : patchPreviewHex(r.mode, p.x, r.kFixed);
-        const dE = done && x.target ? DE().fn(x.target, p.lab) : null;
-        const partial = !done && p.reads?.length ? `${p.reads.length}/${match.reads}` : '';
-        const uneven = done && p.spread > 1.5; // readings disagree – textured / uneven print
-        const title = `Patch #${p.n} · ${colourLabel(x)}${p.name ? ' · ' + p.name : ''}${done && p.spread != null && p.reads?.length > 1 ? ` · ${p.reads.length} readings, spread ΔE00 ${p.spread.toFixed(2)}` : ''}${done ? ' – tap to re-measure' : ''}`;
-        return `<button type="button" data-patch="${idx}" class="text-left rounded-lg p-1.5 ring-1 ${idx === nx ? 'ring-2 ring-indigo-500' : 'ring-slate-200 dark:ring-slate-800'}" title="${escapeHtml(title)}">
-          <div class="h-10 rounded-md ${done ? '' : 'opacity-40'}" style="background:${bg}"></div>
-          <div class="flex justify-between text-[11px] mt-1"><b>#${p.n}${uneven ? ' <span class="text-amber-600" title="Readings differ by more than 1.5 ΔE00">!</span>' : ''}</b><span class="font-mono ${dE != null && dE <= match.tol ? 'text-emerald-600' : 'text-slate-500'}">${dE != null ? 'ΔE ' + dE.toFixed(1) : partial}</span></div>
-        </button>`;
-      }).join('')}</div></div>`).join('');
-  }
-  $('mProgress').textContent = all.length ? `${all.filter((e) => e.p.lab).length} / ${all.length} measured` : '';
+  renderSheet(c);
+  renderPatchGrid(c);
   renderMatchResult();
   renderLibrary();
   updateControls();
   updateGamut();
+}
+
+/** Card 2: the selected colour's current sheet – what it holds, how it prints, the download buttons. */
+function renderSheet(c) {
+  const r = latest(c);
+  $('mRoundLabel').textContent = `· ${colourLabel(c)}${r ? ` – sheet ${r.round}` : ''}`;
+  $('btnMatchSheet').textContent = r ? 'New first sheet' : 'Create sheet';
+  $('mSheetActions').classList.toggle('hidden', !r);
+  $('btnMatchPdf').textContent = match.mode === 'rgb' ? 'Download PNG' : 'Download PDF';
+  $('btnMatchRipSheet').classList.toggle('hidden', r?.mode !== 'spot');
+  if (!c.target) { $('mSheetInfo').textContent = `Set the reference of ${colourLabel(c)} first.`; return; }
+  if (!r) {
+    $('mSheetInfo').textContent = `Creates a sheet of ${DESIGNS[match.design] ?? 16} ${MODE_NAME[match.mode]} patches for ${colourLabel(c)}, around a first estimate of its reference.`;
+    return;
+  }
+  let pages;
+  try {
+    const n = sheetLayout({ mode: match.mode, groups: [sheetGroup(c, r)], round: r.round, media: mediaMm(), patchMm: match.patchMm }).pages.length;
+    pages = ` · ${n} page${n > 1 ? 's' : ''} of ${mediaName()} with ${match.patchMm} mm patches`;
+  } catch (e) { pages = ` · <span class="text-rose-600">${escapeHtml(e.message)}</span>`; }
+  const vals = formatValues(r.mode, r.centre, r.kFixed).map(([k, v]) => `${k} ${v}`).join('  ');
+  const steps = r.step.map((v, k) => `${MODES[r.mode].axes[k]} ±${fmt1(v)}`).join(', ');
+  const names = r.mode === 'spot'
+    ? `<p class="text-xs mt-1">Spot names <span class="font-mono">${escapeHtml(r.patches[0].name ?? '')}</span> … <span class="font-mono">${escapeHtml(r.patches[r.patches.length - 1].name ?? '')}</span>.</p>`
+    : '';
+  $('mSheetInfo').innerHTML = `${r.patches.length} patches${pages}. Download, print and scan the patches below.
+    <p class="mt-1 text-xs">Round ${r.round}: centre <span class="font-mono">${vals}</span> · steps ${steps}</p>${names}`;
+}
+
+/** Card 3: the selected colour's patches – measured ones in their measured colour, the next one outlined. */
+function renderPatchGrid(c) {
+  const r = latest(c);
+  if (!r) { $('mPatchGrid').innerHTML = '<p class="text-sm text-slate-500">No sheet yet.</p>'; $('mProgress').textContent = ''; return; }
+  const next = nextPatchIndex(c, r);
+  $('mPatchGrid').innerHTML = `<div class="grid grid-cols-4 sm:grid-cols-8 gap-2">${r.patches.map((p, i) => {
+    const done = !!p.lab;
+    const bg = done ? displayHex(p.lab) : patchPreviewHex(r.mode, p.x, r.kFixed);
+    const dE = done && c.target ? DE().fn(c.target, p.lab) : null;
+    const partial = !done && p.reads?.length ? `${p.reads.length}/${match.reads}` : '';
+    const uneven = done && p.spread > 1.5; // readings disagree – textured / uneven print
+    const title = `Patch #${p.n}${p.name ? ' · ' + p.name : ''}${done && p.spread != null && p.reads?.length > 1 ? ` · ${p.reads.length} readings, spread ΔE00 ${p.spread.toFixed(2)}` : ''}${done ? ' – tap to re-measure' : ''}`;
+    return `<button type="button" data-patch="${i}" class="text-left rounded-lg p-1.5 ring-1 ${i === next ? 'ring-2 ring-indigo-500' : 'ring-slate-200 dark:ring-slate-800'}" title="${escapeHtml(title)}">
+      <div class="h-10 rounded-md ${done ? '' : 'opacity-40'}" style="background:${bg}"></div>
+      <div class="flex justify-between text-[11px] mt-1"><b>#${p.n}${uneven ? ' <span class="text-amber-600" title="Readings differ by more than 1.5 ΔE00">!</span>' : ''}</b><span class="font-mono ${dE != null && dE <= match.tol ? 'text-emerald-600' : 'text-slate-500'}">${dE != null ? 'ΔE ' + dE.toFixed(1) : partial}</span></div>
+    </button>`;
+  }).join('')}</div>`;
+  $('mProgress').textContent = `${r.patches.filter((p) => p.lab).length} / ${r.patches.length} measured`;
 }
 
 /** How the best printed patch holds up under other lights, from the measured spectra. */
@@ -656,18 +642,17 @@ function makeNextSheet() {
 
 /** The selected colour's current sheet as a PDF (or PNG pages for raster workflows), named after the colour and sheet. */
 async function downloadSheet() {
-  if (!sheetItems().length) return;
+  const cur = currentSheet();
+  if (!cur) return;
+  const { c, r } = cur;
+  const opts = { mode: match.mode, groups: [sheetGroup(c, r)], round: r.round, media: mediaMm(), patchMm: match.patchMm };
+  const base = safeFileName(`${colourLabel(c)} - sheet ${r.round}`);
   try {
-    for (const g of sheetGroups()) {
-      const { round } = latest(activeColour());
-      const opts = { mode: match.mode, groups: [g], round, media: mediaMm(), patchMm: match.patchMm };
-      const base = safeFileName(`${g.label} - sheet ${round}`);
-      if (match.mode === 'rgb') {
-        const pages = await buildSheetPng(opts);
-        pages.forEach(({ png }, i) => downloadFile(png, 'image/png', `${base}${pages.length > 1 ? ` - page ${i + 1}` : ''}.png`));
-        if (pages[0].dpi < 300) toast(`Large media: the PNG is ${pages[0].dpi} dpi (still printed at actual size).`);
-      } else downloadFile(buildSheetPdf(opts), 'application/pdf', `${base}.pdf`);
-    }
+    if (match.mode === 'rgb') {
+      const pages = await buildSheetPng(opts);
+      pages.forEach(({ png }, i) => downloadFile(png, 'image/png', `${base}${pages.length > 1 ? ` - page ${i + 1}` : ''}.png`));
+      if (pages[0].dpi < 300) toast(`Large media: the PNG is ${pages[0].dpi} dpi (still printed at actual size).`);
+    } else downloadFile(buildSheetPdf(opts), 'application/pdf', `${base}.pdf`);
   } catch (e) { toast(e.message, 'error'); }
 }
 
@@ -675,9 +660,10 @@ async function downloadSheet() {
 function downloadRipLibrary(what, rip = match.ripFormat) {
   const ex = RIP_EXPORTS[rip];
   if (!ex) return;
-  if (what === 'sheet' && sheetItems().length) {
-    const { c, r } = sheetItems()[0];
-    const colours = sheetPatches().filter((e) => e.p.name).map((e) => ({ name: e.p.name, lab: e.p.x }));
+  const cur = currentSheet();
+  if (what === 'sheet' && cur) {
+    const { c, r } = cur;
+    const colours = r.patches.filter((p) => p.name).map((p) => ({ name: p.name, lab: p.x }));
     if (!colours.length) return;
     const text = ex.build({ library: `SD10 ${c.code} sheet ${r.round}`, description: `Print match test sheet patches for ${colourLabel(c)}, CIE L*a*b* D50/2°`, colours });
     downloadFile(text, ex.mime, `sd10-${c.code}-sheet${r.round}.${ex.ext}`);
@@ -688,11 +674,13 @@ function downloadRipLibrary(what, rip = match.ripFormat) {
   }
 }
 
+/** Measure the selected colour's next patch (one reading of it, with several readings per patch). */
 function measurePatch() {
-  const all = sheetPatches();
-  if (!all.length) return;
-  const k = nextIndex(all);
-  const { c, r, p } = all[k];
+  const cur = currentSheet();
+  if (!cur) return;
+  const { c, r } = cur; // kept: switching colours while measuring still records into this patch
+  const k = nextPatchIndex(c, r);
+  const p = r.patches[k];
   return task(`Measuring #${p.n}`, async () => {
     // Demo: the simulated SD-10 "sees" what a simulated printer would print for this patch.
     if (DEMO && state.transport?.setSpectrumOverride) {
@@ -715,13 +703,15 @@ function measurePatch() {
     Object.assign(p, averageReadings(p.reads));
     p.spectrum = roundSpectrum(meanSpectrum(p.spectra));
     delete p.spectra; // the mean is enough – keeps the saved job small
-    const after = all.findIndex((e, j) => j > k && !e.p.lab);
-    const any = all.findIndex((e) => !e.p.lab);
-    c.next = all[after >= 0 ? after : any >= 0 ? any : k].i;
-    if (r.patches.every((q) => q.lab)) analyseColour(c, r);
+    // next: the first unmeasured patch after this one, else any unmeasured patch
+    const after = r.patches.findIndex((q, j) => j > k && !q.lab);
+    const any = r.patches.findIndex((q) => !q.lab);
+    c.next = after >= 0 ? after : any >= 0 ? any : k;
+    const complete = r.patches.every((q) => q.lab);
+    if (complete) analyseColour(c, r);
     saveMatch();
     renderMatch();
-    if (all.every((e) => e.p.lab)) $('mResultCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (complete) $('mResultCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 }
 
@@ -740,10 +730,10 @@ function analyseColour(c, r = latest(c)) {
 
 /** "Calculate now": the selected colour's result from the patches measured so far (at least 5). */
 function analyseMatch() {
-  let any = false;
-  for (const { c, r } of sheetItems()) if (r.patches.filter((p) => p.lab).length >= 5 && analyseColour(c, r)) any = true;
+  const cur = currentSheet();
+  const ok = cur && cur.r.patches.filter((p) => p.lab).length >= 5 && analyseColour(cur.c, cur.r);
   saveMatch(); renderMatch();
-  if (any) $('mResultCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (ok) $('mResultCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function copyMatchValues(c) {
@@ -890,8 +880,8 @@ export function initMatch(app) {
   $('mPatchGrid').onclick = (e) => {
     const b = e.target.closest('[data-patch]');
     if (!b) return;
-    const en = sheetPatches()[+b.dataset.patch];
-    if (en) { activeColour().next = en.i; saveMatch(); renderMatch(); }
+    const cur = currentSheet();
+    if (cur?.r.patches[+b.dataset.patch]) { cur.c.next = +b.dataset.patch; saveMatch(); renderMatch(); }
   };
   setView(location.hash === '#match' ? 'match' : 'console');
   WIDE.addEventListener('change', () => { if (!WIDE.matches && state.view === 'match') setView('console'); });
@@ -899,5 +889,5 @@ export function initMatch(app) {
 
 /** The SD-10's button in this view: measure the next patch, or the reference while there is no sheet. */
 export function onMatchButton() {
-  if (sheetPatches().length) measurePatch(); else measureMatchTarget();
+  if (currentSheet()) measurePatch(); else measureMatchTarget();
 }
