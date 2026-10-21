@@ -49,9 +49,10 @@ The demo ([sd-10.com/?demo](https://sd-10.com/?demo)) runs in every modern brows
 **Print match** (in the header, or [sd-10.com/#match](https://sd-10.com/#match)) finds the values to put in your
 artwork or RIP so that your printer reproduces a reference colour. It works in rounds: print a test sheet, scan it,
 and the app works out how your printer responds and which values should hit the colour – then a finer sheet confirms
-it. With a measured [colour space](#colour-space) of your printer, the first sheet already starts from a prediction. It needs a computer or tablet (768 px or wider); phones only show the Console. On wide screens the colour list and
-settings (with tips on sheet types and printing) sit in a column at the left, next to the selected colour's
-workflow.
+it. With a measured [colour space](#colour-space) of your printer, the first sheet already starts from a prediction. It needs a computer or tablet (768 px or wider); phones only show the Console. On wide screens the colour list,
+settings and tips sit in a column at the left; the selected colour's workflow, the spot library and the colour space
+are at the right. Settings you change less often – readings per patch, M-factor, ΔE formula, tolerance, printer
+profile and library format – are folded under **Measuring & matching**, whose closed line shows their current values.
 
 ### 1. Reference colours
 
@@ -150,11 +151,12 @@ the colour space predicts. When a whole sheet prints differently, the app warns 
 probably changed. A **Check** chart (24 patches) tests exactly that. If the change is meant to stay, **Keep only data
 from … on** removes the older measurements. Older measurements also count less over time.
 
-**Measured data** lists every chart, check chart and test sheet in the colour space, and **remove** takes one out
+**Data & files** lists every chart, check chart and test sheet in the colour space, and **remove** takes one out
 again – for example a sheet printed on the wrong media. Make a separate colour space for each printer, ink, media and
 RIP setting. A colour space only predicts for the sheet type it was measured with.
 
-**Export** saves the colour space as a file to keep, move to another computer or share; **Import…** (or dropping the
+**Export** (under *Data & files*, with **Rename** and **Delete**) saves the colour space as a file to keep, move to
+another computer or share; **Import…** (or dropping the
 file on the page) loads it again. **CGATS** writes the measurements as a CGATS.17 text file (device values and
 measured L\*a\*b\*) – the format profiling software reads – and CGATS / IT8 files from other software (CMYK or RGB
 charts with L\*a\*b\* values, including ArgyllCMS `.ti3`) can be imported as a colour space.
@@ -188,7 +190,7 @@ In the L\*a\*b\* sheet types the app also writes spot colour libraries for your 
 - **Add to spot library** stores a finished match under the colour's name – use exactly the name from your artwork,
   because the RIP finds spot colours by name.
 - The **Spot library** collects colours across jobs and is kept in this browser. You can rename or remove entries,
-  type a colour in (or take the last measurement), and **Import library…** any of the formats above – for example one
+  type a colour in (or take the last measurement) under **Add a colour**, and **Import…** any of the formats above – for example one
   exported from your RIP – to update existing colours. You can also drop library files anywhere on the Print match
   page, and an `.icc` / `.icm` file dropped there is added as the printer profile. CxF colours are read from their D50 / 2° L\*a\*b\* values or
   computed from their spectra; entries without L\*a\*b\* (such as CMYK) are skipped.

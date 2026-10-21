@@ -268,11 +268,10 @@ function heightLimits() {
   return { min: minSheetHeight(opts, { onePage: false }), onePage: minSheetHeight(opts) };
 }
 
+/** Under the media size: the least height (one row of patches plus the sheet's text) and the height for one page. */
 function heightHint({ min, onePage }) {
   if (min == null) return `${match.patchMm} mm patches do not fit on ${match.mediaW} mm wide media.`;
-  return min === onePage
-    ? `Minimum height ${min} mm at ${match.mediaW} mm wide – one row of patches plus the sheet's text, each colour on one page.`
-    : `Minimum height ${min} mm at ${match.mediaW} mm wide (one row of patches plus the sheet's text); ${onePage} mm fits each colour on one page.`;
+  return `Minimum height ${min} mm at ${match.mediaW} mm wide${min === onePage ? '' : ` · ${onePage} mm fits a sheet on one page`}.`;
 }
 
 // ---------------------------------------------------------------- printer profile (gamut check)
@@ -301,7 +300,7 @@ async function updateGamut() {
 
 function gamutHtml(c) {
   if (!c.target) return '';
-  if (!match.printerProfile) return '<span class="text-slate-500">Add your printer / media ICC profile under Settings to check whether this colour is printable.</span>';
+  if (!match.printerProfile) return ''; // the check is offered under Settings
   const g = gamutFor(c);
   if (!g) return '<span class="text-slate-500">Checking the printer gamut…</span>';
   if (g.error) return `<span class="text-rose-600">Gamut check failed: ${escapeHtml(g.error)}</span>`;
@@ -436,6 +435,8 @@ function renderMatch() {
   $('btnLibDownload').textContent = `Download library (${ripLabel})`;
   $('mModeHelp').innerHTML = `<b>${escapeHtml($('mMode').selectedOptions[0]?.textContent ?? 'Sheet type')}:</b> ${modeHelp(match.mode)}`;
   $('mPrintTips').innerHTML = printTips(match.mode);
+  // the folded "Measuring & matching" settings show their values on the closed line
+  $('mMoreSummary').textContent = `${['M0', 'M1', 'M2'][match.mf] ?? 'M1'} · ${DE().label} ≤ ${match.tol}${match.reads > 1 ? ` · ${match.reads} readings` : ''}${match.printerProfile ? ' · gamut check' : ''}${isLabMode(match.mode) ? ` · ${ripLabel.replace(/ \(.*\)$/, '')}` : ''}`;
   // the cards
   renderSheet(workItem());
   renderPatchGrid(workItem());
@@ -475,7 +476,7 @@ function renderSheet(c) {
   if (chart) {
     $('mSheetInfo').innerHTML = `<p>${r.patches.length} patches${pages}. ${scannedCount(r) === r.patches.length
       ? '<b class="text-emerald-600">All patches are scanned and in the colour space.</b> Close the chart to go back to your colours.'
-      : 'Print it exactly like the final job and scan every patch in number order – each one goes into the colour space as you scan it. The colours are mixed on purpose, so uneven printing across the sheet averages out.'}</p>${names}${preview}`;
+      : 'Print it like the final job and scan the patches in number order – each goes into the colour space as you scan it.'}</p>${names}${preview}`;
   } else {
     const vals = formatValues(r.mode, r.centre, r.kFixed).map(([k, v]) => `${k} ${v}`).join('  ');
     const steps = r.step.map((v, k) => `${MODES[r.mode].axes[k]} ±${fmt1(v)}`).join(', ');
@@ -918,9 +919,12 @@ function renderLibrary() {
   $('mLibCount').textContent = n ? `(${n})` : '';
   if (document.activeElement !== $('mLibName')) $('mLibName').value = spotLib.name;
   $('btnLibDownload').disabled = !n;
+  // the download is the card's main action once there is something to download
+  $('btnLibDownload').classList.toggle('btn-primary', !!n);
+  $('btnLibDownload').classList.toggle('btn-ghost', !n);
   $('btnLibClear').disabled = !n;
   $('mLibList').innerHTML = !n
-    ? '<p class="text-sm text-slate-500">No colours yet – finish a match in an L*a*b* sheet type and press <b>Add to spot library</b>, add one below, or import a library.</p>'
+    ? '<p class="text-sm text-slate-500">No colours yet – add a finished match, type one in below, or import a library.</p>'
     : `<table class="w-full text-sm"><thead class="text-xs text-slate-500"><tr><th class="text-left font-normal">Name</th><th class="text-right font-normal">L*</th><th class="text-right font-normal">a*</th><th class="text-right font-normal">b*</th><th class="text-right font-normal">Pred. ΔE00</th><th></th></tr></thead><tbody>
       ${spotLib.colours.map((c, i) => `<tr class="border-t border-slate-200 dark:border-slate-800" data-lib="${i}">
         <td class="py-1.5"><button data-lib-act="rename" class="flex items-center gap-2 text-left hover:underline" title="Rename"><span class="h-5 w-5 flex-none rounded ring-1 ring-black/10" style="background:${displayHex(c.lab)}"></span><span class="font-medium">${escapeHtml(c.name)}</span></button></td>
@@ -1066,17 +1070,21 @@ function renderSpaceCard() {
   $('mSpaceActions').classList.toggle('hidden', !s);
   $('btnSpaceCgats').disabled = !s?.points.length;
   $('btnSpaceChart').textContent = s?.chart ? 'New chart' : 'Create chart';
-  $('mSpaceData').classList.toggle('hidden', !s?.sessions.length);
+  // a chart is the card's main action until the colour space can predict
+  const needsChart = !s || s.points.length < SPACE_MIN_POINTS;
+  $('btnSpaceChart').classList.toggle('btn-primary', needsChart);
+  $('btnSpaceChart').classList.toggle('btn-ghost', !needsChart);
+  $('mSpaceData').classList.toggle('hidden', !s);
   if (!s) {
-    $('mSpaceInfo').innerHTML = `<p>A colour space is a measured map of what your printer, ink and media really print. Print and scan a chart once: the app then predicts the values for any reference straight away, and every test sheet you scan makes it more accurate.</p>
-      <p>Make one for each printer, ink, media and RIP setting – or import a saved one, or a CGATS / IT8 measurement file.</p>`;
+    $('mSpaceInfo').innerHTML = '<p>A colour space is a measured map of what your printer really prints: scan a chart once, and every colour starts from a prediction instead of a guess.</p>';
     return;
   }
   const st = spaceStats(s);
   const parts = [];
   if (s.mode !== match.mode) parts.push(`<p class="text-amber-600">This colour space was measured with ${MODE_NAME[s.mode]} sheets – switch the sheet type to use it.</p>`);
-  parts.push(`<p>${st.points} measured patch${st.points === 1 ? '' : 'es'} · ${MODE_NAME[s.mode]} sheets${st.accuracy ? ` · predicts within ΔE00 ${st.accuracy.median.toFixed(2)} typically (90 % within ${st.accuracy.p90.toFixed(2)})` : ''}</p>`);
-  if (st.points < SPACE_MIN_POINTS) parts.push(`<p>Print and scan a chart – the colour space predicts once it holds ${SPACE_MIN_POINTS} patches.</p>`);
+  parts.push(st.points < SPACE_MIN_POINTS
+    ? `<p>${st.points ? `${st.points} measured patch${st.points === 1 ? '' : 'es'} so far` : 'No measurements yet'} – scan a chart; the colour space predicts once it holds ${SPACE_MIN_POINTS} patches.</p>`
+    : `<p>${st.points} measured patches${st.accuracy ? ` · predicts within ΔE00 ${st.accuracy.median.toFixed(2)} typically (90 % within ${st.accuracy.p90.toFixed(2)})` : ''}</p>`);
   if (s.chart && !activeChart()) {
     const r = s.chart.rounds[0];
     parts.push(`<p>${escapeHtml(s.chart.name)}: ${scannedCount(r)} of ${r.patches.length} patches scanned – <button type="button" data-space-act="chart" class="font-medium text-indigo-600 hover:underline dark:text-indigo-400">continue scanning</button></p>`);
@@ -1091,8 +1099,8 @@ function renderSpaceCard() {
     parts.push(`<p class="text-emerald-600">${escapeHtml(last.q.label)} (${fmtDate(last.q.time)}): the printer still prints as predicted (typically ΔE00 ${last.d.median.toFixed(2)} off).</p>`);
   }
   $('mSpaceInfo').innerHTML = parts.join('');
-  $('mSpaceData').querySelector('summary').textContent = `Measured data (${s.sessions.length})`;
-  $('mSpaceSessions').innerHTML = [...s.sessions].sort((a, b) => b.time - a.time).map((q) => {
+  $('mSpaceData').querySelector('summary').textContent = `Data & files${s.sessions.length ? ` · ${s.sessions.length} set${s.sessions.length === 1 ? '' : 's'} of measurements` : ''}`;
+  $('mSpaceSessions').innerHTML = !s.sessions.length ? '<li class="text-slate-500">No measurements yet – scan a chart.</li>' : [...s.sessions].sort((a, b) => b.time - a.time).map((q) => {
     const d = driftOf(s, q.id);
     return `<li data-session="${escapeHtml(q.id)}" class="flex items-center gap-2 border-t border-slate-200 pt-1 dark:border-slate-800">
       <span class="min-w-0 flex-1"><span class="block truncate font-medium text-slate-700 dark:text-slate-300">${escapeHtml(q.label)}</span>
@@ -1338,7 +1346,7 @@ function wireSettings() {
   $('mPatchMm').onchange = () => { match.patchMm = +$('mPatchMm').value; commit(); };
   $('mDesign').onchange = () => { match.design = $('mDesign').value; commit(); };
   $('mReads').onchange = () => { match.reads = Math.min(Math.max(+$('mReads').value || 1, 1), 9); for (const c of match.colours) c.refReads = []; commit(); };
-  $('matchMf').onchange = () => { match.mf = +$('matchMf').value; saveMatch(); };
+  $('matchMf').onchange = () => { match.mf = +$('matchMf').value; commit(); };
   $('matchFormula').onchange = () => {
     match.formula = $('matchFormula').value;
     // re-judge every result with the new formula (the measurements stay)
@@ -1352,8 +1360,11 @@ function wireSettings() {
   $('btnPrinterIccRemove').onclick = removePrinterProfile;
   refreshPrinterProfiles().then(() => { if (state.view === 'match') renderMatch(); });
   $('mRipFormat').onchange = () => { match.ripFormat = $('mRipFormat').value; commit(); };
-  $('mTipsBox').open = !readFlag('sd10.tipsClosed');
-  $('mTipsBox').ontoggle = () => writeFlag('sd10.tipsClosed', !$('mTipsBox').open);
+  // folded sections remember whether they were open; Tips start closed
+  for (const [id, key] of [['mTipsBox', 'sd10.tipsOpen'], ['mMoreSettings', 'sd10.moreSettingsOpen'], ['mLibEdit', 'sd10.libEditOpen']]) {
+    $(id).open = readFlag(key);
+    $(id).ontoggle = () => writeFlag(key, $(id).open);
+  }
 }
 
 /** Sheet, scan and result cards. */
