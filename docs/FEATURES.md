@@ -11,7 +11,7 @@ Key source locations:
 | Device event handler (C2 / C4 / A0) | `java_src/Q1/i.java` `g(int)` |
 | Group (palette) comparison session | `java_src/p096r1/e.java` |
 | Device-palette editor | `java_src/p029f1/ViewOnClickListenerC0305c0.java`, `F3/c.java` `E()` |
-| Colour maths wrappers | `java_src/P0/a.java`, `D1/c.java` |
+| Color maths wrappers | `java_src/P0/a.java`, `D1/c.java` |
 | Local DB schema | `assets/create.sql` |
 
 ---
@@ -64,11 +64,11 @@ Measurement settings (`Q0/o`, defaults): mFactor **M1**, illuminant **D50**, obs
 
 | App mode | Patches per line | SetColorMeasurementMode (§5.9) | Result handling |
 |---|---|---|---|
-| **SpotScan** — single colour | 1 | method 1, save=1, mF, light, angle | 1 record → spectrum → colour info |
-| **SpotComparison** — compare with a reference colour | 1 | method 2, + formula, threshold | ΔE vs reference computed on host |
+| **SpotScan** — single color | 1 | method 1, save=1, mF, light, angle | 1 record → spectrum → color info |
+| **SpotComparison** — compare with a reference color | 1 | method 2, + formula, threshold | ΔE vs reference computed on host |
 | **GroupSpotComparisonScan** — compare with a palette stored on the device | 1 | method 3, save=1, groupNo = device slot, startPatchNo | device picks the patch; host stores the result |
 | **LineScan** — drag across a strip | 18 | method 4, save=0, patchNum, lineNo | N records; average ΔE vs palette ≤ threshold → NotifySuccessOrFailure(1/0) (§5.6) |
-| **LineCompareScan** — strip vs palette | 10 | palette ≤ 80 colours: method 5 (groupNo, patchNum, startPatchNo = 10·(line−1)+1, lineNo); otherwise method 7 (+ formula, threshold, labs) | as LineScan |
+| **LineCompareScan** — strip vs palette | 10 | palette ≤ 80 colors: method 5 (groupNo, patchNum, startPatchNo = 10·(line−1)+1, lineNo); otherwise method 7 (+ formula, threshold, labs) | as LineScan |
 
 Every measurement: SetColorMeasurementMode → `ExecuteColorMeasurement` (§5.3) → wait for event `C1` (20 s timeout) → GetResultFromCache size + data (§5.4/5.5). A record with `gettingResult == 0` means it failed → GetStatus for the reason.
 
@@ -78,7 +78,7 @@ Every measurement: SetColorMeasurementMode → `ExecuteColorMeasurement` (§5.3)
 Event `C2` (button on the device, debounced 1.5 s, ignored while busy) → GetColorMeasurementMode (§5.15) → map wire method + groupNo/startPatchNo to an app scan mode → run that scan as in §3.2.
 
 ### 3.4 Group (palette) comparison session (`p096r1/e`)
-1. Start: if the palette is not on the device and has ≤ 80 colours, write it to **slot 1** with SetGroupInformation (§5.11), then SetColorMeasurementMode.
+1. Start: if the palette is not on the device and has ≤ 80 colors, write it to **slot 1** with SetGroupInformation (§5.11), then SetColorMeasurementMode.
 2. Measure patches (GroupSpot / LineCompare).
 3. Finish: NotifyGroupMeasurementCompleted then SetStandAloneMode (§5.10). Cancel: SetStandAloneMode.
 
@@ -112,10 +112,10 @@ GetGroupInformation → for each of the 4 slots, SetGroupInformation either *reg
 | Gamut check | native `IsInGamut` (libgamut) | not implemented |
 | LRV | native `GetLRV` (D65/10°) | Y of XYZ (D65/10°) |
 | Chromatic adaptation between illuminants | native `ConvertBradford` | Bradford matrix |
-| Colour harmonies | native `CreateHarmonicLab` | LCh hue rotation |
-| Munsell notation, colour sample books, near-colour search | encrypted licensed DB `assets/d02.bin` | **excluded** (licensed content) |
+| Color harmonies | native `CreateHarmonicLab` | LCh hue rotation |
+| Munsell notation, color sample books, near-color search | encrypted licensed DB `assets/d02.bin` | **excluded** (licensed content) |
 | History, favourites, palettes, notes, photos, GPS | local SQLite (`create.sql`) | IndexedDB/localStorage |
-| Camera colour pick, Epson "Port" cloud palettes, news | `com.epson.colorpic`, `com.epson.port` | excluded |
+| Camera color pick, Epson "Port" cloud palettes, news | `com.epson.colorpic`, `com.epson.port` | excluded |
 
 ---
 
@@ -136,4 +136,4 @@ GetGroupInformation → for each of the 4 slots, SetGroupInformation either *reg
 10. Line scan (18 patches) and line-compare scan.
 11. Device history sync (History check/get).
 
-**Excluded:** firmware update, Munsell/colour-book data, gamut check, cloud features, NVRAM log (could go in a debug panel).
+**Excluded:** firmware update, Munsell/color-book data, gamut check, cloud features, NVRAM log (could go in a debug panel).

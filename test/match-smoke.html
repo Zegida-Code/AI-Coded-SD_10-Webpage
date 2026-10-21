@@ -37,8 +37,8 @@
       const setSel = (id, v) => { $(id).value = v; $(id).dispatchEvent(new Event('change')); };
 
       log(!$('viewMatch').classList.contains('hidden') && $('viewConsole').classList.contains('hidden'), '#match opens the Print match view');
-      log($('mMode').value === 'spot' && $('mDesign').value === 'full' && $('mPaper').value === 'custom' && $('mMediaW').value === '210' && $('mMediaH').value === '297' && d.querySelectorAll('#mColourList li').length === 1,
-        'defaults: spot colour sheets, 16 patches, custom media 210 × 297 mm, one colour');
+      log($('mMode').value === 'spot' && $('mDesign').value === 'full' && $('mPaper').value === 'custom' && $('mMediaW').value === '210' && $('mMediaH').value === '297' && d.querySelectorAll('#mColorList li').length === 1,
+        'defaults: spot color sheets, 16 patches, custom media 210 × 297 mm, one color');
       setSel('mPaper', 'letter');
       const letterOk = $('mMediaW').value === '215.9' && $('mMediaH').value === '279.4';
       $('mMediaW').value = '700'; $('mMediaW').dispatchEvent(new Event('input'));
@@ -78,7 +78,7 @@
       await until(() => /Calibrated/.test($('statusChips').textContent) && !$('btnMatchTarget').disabled);
       $('demoShutter').click(); await sleep(200);
 
-      // Reference: a colour the simulated printer can reach (typed in, like a user entering Lab values)
+      // Reference: a color the simulated printer can reach (typed in, like a user entering Lab values)
       const target = spectrumToLab(printSpectrum([18, 62, 74, 6]), 0, 2);
       [['mL', 0], ['mA', 1], ['mB', 2]].forEach(([id, i]) => { $(id).value = target[i].toFixed(2); });
       $('mB').dispatchEvent(new Event('change'));
@@ -131,59 +131,59 @@
       $('demoButton').click();
       log(await until(() => $('mProgress').textContent.startsWith('1 /')), 'SD-10 button measures the next patch');
 
-      // ---- several colours in progress at once: each has its own sheet; scanning only affects the selected colour
+      // ---- several colors in progress at once: each has its own sheet; scanning only affects the selected color
       await until(() => !state_busy());
       setSel('mMode', 'lab'); setSel('mDesign', 'compact'); setSel('mPaper', 'custom'); setSel('mPatchMm', '15');
       $('mMediaW').value = '150'; $('mMediaW').dispatchEvent(new Event('change'));
       $('mMediaH').value = '200'; $('mMediaH').dispatchEvent(new Event('change'));
       const label = () => $('mRoundLabel').textContent;
       await until(() => !$('btnMatchSheet').disabled);
-      $('btnMatchSheet').click(); // colour 1 (selected)
-      await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 8 && /Colour 1 – sheet 1/.test(label()));
+      $('btnMatchSheet').click(); // color 1 (selected)
+      await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 8 && /Color 1 – sheet 1/.test(label()));
       for (let i = 0; i < 3; i++) {
         await until(() => !$('btnMatchMeasure').disabled);
         $('btnMatchMeasure').click();
         await until(() => $('mProgress').textContent.startsWith(`${i + 1} /`));
       }
-      $('btnColourAdd').click();
+      $('btnColorAdd').click();
       $('mSpotName').value = 'Second'; $('mSpotName').dispatchEvent(new Event('change'));
       const t2 = spectrumToLab(printSpectrum([60, 10, 20, 0]), 0, 2);
       [['mL', 0], ['mA', 1], ['mB', 2]].forEach(([id, i]) => { $(id).value = t2[i].toFixed(2); });
       $('mB').dispatchEvent(new Event('change'));
-      log(d.querySelectorAll('#mColourList li').length === 2 && /No sheet yet/.test($('mPatchGrid').textContent) && /for Second/.test($('mSheetInfo').textContent) && $('mResultCard').classList.contains('hidden'),
-        'a new colour starts with its own empty sheet, scan and result');
+      log(d.querySelectorAll('#mColorList li').length === 2 && /No sheet yet/.test($('mPatchGrid').textContent) && /for Second/.test($('mSheetInfo').textContent) && $('mResultCard').classList.contains('hidden'),
+        'a new color starts with its own empty sheet, scan and result');
       await until(() => !$('btnMatchSheet').disabled);
       $('btnMatchSheet').click();
       await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 8 && /Second – sheet 1/.test(label()));
       const nFiles = files.length;
       $('btnMatchPdf').click();
-      const colourPdfs = files.slice(nFiles).filter((f) => f.name.endsWith('.pdf'));
-      const pdf1 = colourPdfs[0] ? await readFile(colourPdfs[0]) : '';
-      log(colourPdfs.length === 1 && colourPdfs[0].name === 'Second - sheet 1.pdf' && /MediaBox \[0 0 425\.20 566\.93\]/.test(pdf1), `the PDF is the selected colour's sheet (${colourPdfs.map((f) => f.name).join(', ')}, 150 × 200 mm)`);
+      const colorPdfs = files.slice(nFiles).filter((f) => f.name.endsWith('.pdf'));
+      const pdf1 = colorPdfs[0] ? await readFile(colorPdfs[0]) : '';
+      log(colorPdfs.length === 1 && colorPdfs[0].name === 'Second - sheet 1.pdf' && /MediaBox \[0 0 425\.20 566\.93\]/.test(pdf1), `the PDF is the selected color's sheet (${colorPdfs.map((f) => f.name).join(', ')}, 150 × 200 mm)`);
       for (let i = 0; i < 8; i++) {
         await until(() => !$('btnMatchMeasure').disabled);
         $('btnMatchMeasure').click();
         await until(() => $('mProgress').textContent.startsWith(`${i + 1} /`));
       }
       await until(() => !$('mResultCard').classList.contains('hidden'));
-      const firstRow = d.querySelectorAll('#mColourList li')[0].textContent;
+      const firstRow = d.querySelectorAll('#mColorList li')[0].textContent;
       log(/Second/.test($('mResult').textContent) && d.querySelectorAll('#mResult [data-res]').length === 1 && /3\/8 scanned/.test(firstRow),
-        `scanning Second left Colour 1 where it was (${firstRow.replace(/\s+/g, ' ').trim()})`);
-      d.querySelectorAll('#mColourList [data-colour-act=select]')[0].click();
-      log($('mProgress').textContent.startsWith('3 / 8') && /#4/.test($('btnMatchMeasure').textContent) && /Colour 1 – sheet 1/.test(label()) && $('mResultCard').classList.contains('hidden'),
-        `selecting Colour 1 brings back its sheet and scan position (${$('btnMatchMeasure').textContent})`);
-      d.querySelectorAll('#mColourList [data-colour-act=select]')[1].click();
+        `scanning Second left Color 1 where it was (${firstRow.replace(/\s+/g, ' ').trim()})`);
+      d.querySelectorAll('#mColorList [data-color-act=select]')[0].click();
+      log($('mProgress').textContent.startsWith('3 / 8') && /#4/.test($('btnMatchMeasure').textContent) && /Color 1 – sheet 1/.test(label()) && $('mResultCard').classList.contains('hidden'),
+        `selecting Color 1 brings back its sheet and scan position (${$('btnMatchMeasure').textContent})`);
+      d.querySelectorAll('#mColorList [data-color-act=select]')[1].click();
       d.querySelector('#mResult [data-res-act=accept]').click();
-      log($('btnMatchRefine').disabled && /accepted/.test($('mColourList').textContent), 'an accepted colour gets no further sheets');
-      d.querySelectorAll('#mColourList [data-colour-act=remove]')[1].click();
+      log($('btnMatchRefine').disabled && /accepted/.test($('mColorList').textContent), 'an accepted color gets no further sheets');
+      d.querySelectorAll('#mColorList [data-color-act=remove]')[1].click();
       setSel('mDesign', 'full'); setSel('mPaper', 'a4'); setSel('mPatchMm', '20');
 
-      // ---- spot colour sheet, 3 readings per patch, VersaWorks libraries
+      // ---- spot color sheet, 3 readings per patch, VersaWorks libraries
       await until(() => !state_busy());
       setSel('mMode', 'spot');
       // measured reference (the simulator's sample): its spectrum enables the metamerism check
       $('btnMatchTarget').click();
-      await until(() => /Reference colour measured/.test($('toast').textContent) && !state_busy());
+      await until(() => /Reference color measured/.test($('toast').textContent) && !state_busy());
       setSel('mReads', '3');
       log($('mRipFormat').value === 'cxf' && /CxF3 format/.test($('btnMatchRipSheet').title), 'CxF3 is the default spot library format');
       setSel('mRipFormat', 'versaworks');
@@ -197,7 +197,7 @@
       const lib = files.find((f) => f.name.endsWith('.spot'));
       const libText = lib ? await readFile(lib) : '';
       const libNames = [...libText.matchAll(/<Lab16SpotColor name="(SD10-[^"]+)"/g)].map((m) => m[1]);
-      log(files.filter((f) => f.name.endsWith('.pdf')).pop()?.name === 'Brand Red - sheet 1.pdf' && libNames.length === 16 && libText.startsWith('<?xml version="1.0" encoding="UTF-8"?>\n<SpotColorLibraryList strVersion="4.3.0.0">'), `sheet .spot library has the 16 patch colours (${lib?.name})`);
+      log(files.filter((f) => f.name.endsWith('.pdf')).pop()?.name === 'Brand Red - sheet 1.pdf' && libNames.length === 16 && libText.startsWith('<?xml version="1.0" encoding="UTF-8"?>\n<SpotColorLibraryList strVersion="4.3.0.0">'), `sheet .spot library has the 16 patch colors (${lib?.name})`);
       for (let i = 0; i < 2; i++) { await until(() => !$('btnMatchMeasure').disabled); $('btnMatchMeasure').click(); await until(() => d.querySelector('[data-patch="0"]').textContent.includes(`${i + 1}/3`)); }
       log($('mProgress').textContent.startsWith('0 /') && /reading 3\/3/.test($('btnMatchMeasure').textContent), 'patch stays open until its 3rd reading');
       for (let n = 0; n < 5 * 3 - 2; n++) { await until(() => !$('btnMatchMeasure').disabled); $('btnMatchMeasure').click(); await until(() => $('btnMatchMeasure').disabled === false && !w.document.querySelector('#btnMatchMeasure').textContent.endsWith('…'), 5000); await sleep(30); }
@@ -205,7 +205,7 @@
       log($('mProgress').textContent.startsWith('5 /'), `15 readings -> 5 patches averaged (${$('mProgress').textContent})`);
       $('btnMatchAnalyse').click();
       await until(() => !$('mResultCard').classList.contains('hidden'));
-      log(/named colour Brand Red/.test($('mResult').textContent) && d.querySelector('#mResult [data-res-act=add]'), 'spot result names the colour and offers Add to spot library');
+      log(/named color Brand Red/.test($('mResult').textContent) && d.querySelector('#mResult [data-res-act=add]'), 'spot result names the color and offers Add to spot library');
       log(/Metamerism check \(best patch #\d+ vs reference\)/.test($('mResult').textContent) && /Tri-band shop light/.test($('mResult').textContent), `metamerism check compares the best patch with the measured reference under other lights (${($('mResult').textContent.match(/Metamerism check.{0,120}/) || [''])[0]})`);
       setSel('matchFormula', 'cmc21');
       log(/predicted ΔE CMC 2:1/.test($('mResult').textContent) && /Centre patch\s*ΔE CMC 2:1/.test($('mResult').textContent), 'switching to ΔE CMC 2:1 re-judges the result');
@@ -217,34 +217,34 @@
       $('mSpotName').value = 'Brand Red'; $('mSpotName').dispatchEvent(new Event('change'));
       let asked = 0; w.confirm = () => { asked++; return true; };
       d.querySelector('#mResult [data-res-act=add]').click();
-      log(libRows().join() === 'Brand Red,Brand Blue' && asked === 1 && $('mLibCount').textContent === '(2)', `spot library collects colours; same name asks and replaces (${libRows().join(', ')})`);
+      log(libRows().join() === 'Brand Red,Brand Blue' && asked === 1 && $('mLibCount').textContent === '(2)', `spot library collects colors; same name asks and replaces (${libRows().join(', ')})`);
       $('btnLibDownload').click();
-      const libFile = files.find((f) => f.name === 'SD-10 spot colours.spot');
+      const libFile = files.find((f) => f.name === 'SD-10 spot colors.spot');
       const libSpot = libFile ? await readFile(libFile) : '';
-      log((libSpot.match(/<Lab16SpotColor name="Brand (Red|Blue)" flags="0" redirectLibraryName="" redirectColorName=""><L VALUE="[\d.]+"\/><a VALUE="-?[\d.]+"\/><b VALUE="-?[\d.]+"\/><\/Lab16SpotColor>/g) || []).length === 2 && /LabSpotColorLibrary name="SD-10 spot colours"/.test(libSpot), 'one VersaWorks .spot file holds the whole library');
-      $('mLibName').value = 'House colours'; $('mLibName').dispatchEvent(new Event('change'));
+      log((libSpot.match(/<Lab16SpotColor name="Brand (Red|Blue)" flags="0" redirectLibraryName="" redirectColorName=""><L VALUE="[\d.]+"\/><a VALUE="-?[\d.]+"\/><b VALUE="-?[\d.]+"\/><\/Lab16SpotColor>/g) || []).length === 2 && /LabSpotColorLibrary name="SD-10 spot colors"/.test(libSpot), 'one VersaWorks .spot file holds the whole library');
+      $('mLibName').value = 'House colors'; $('mLibName').dispatchEvent(new Event('change'));
       setSel('mRipFormat', 'cxf');
       $('btnLibDownload').click();
-      const cxfFile = files.find((f) => f.name === 'House colours.cxf');
+      const cxfFile = files.find((f) => f.name === 'House colors.cxf');
       const cxfText = cxfFile ? await readFile(cxfFile) : '';
-      log(/<cc:Object ObjectType="Standard" Name="Brand Red" Id="EXC_1">/.test(cxfText) && /<cc:Object ObjectType="Standard" Name="Brand Blue" Id="EXC_2">/.test(cxfText), 'CxF3 library file named after the library, both colours inside');
+      log(/<cc:Object ObjectType="Standard" Name="Brand Red" Id="EXC_1">/.test(cxfText) && /<cc:Object ObjectType="Standard" Name="Brand Blue" Id="EXC_2">/.test(cxfText), 'CxF3 library file named after the library, both colors inside');
       setSel('mRipFormat', 'acb');
-      // a colour that 8-bit storage visibly rounds (a* 10.5 -> 11), so the note shows whatever the simulated results are
+      // a color that 8-bit storage visibly rounds (a* 10.5 -> 11), so the note shows whatever the simulated results are
       $('libNewName').value = 'Rounding'; $('libNewL').value = '50.2'; $('libNewA').value = '10.5'; $('libNewB').value = '-10.5';
       $('btnLibAdd').click();
       log(/stores L\* in steps of 0\.4/.test($('mLibNote').textContent) && /Adobe Color Book/.test($('btnLibDownload').textContent), 'Adobe Color Book: library shows the 8-bit rounding');
       d.querySelector('#mLibList tr[data-lib="2"] [data-lib-act=del]').click();
       $('btnLibDownload').click();
-      const acbFile = files.find((f) => f.name === 'House colours.acb');
+      const acbFile = files.find((f) => f.name === 'House colors.acb');
       const acbBytes = acbFile ? new Uint8Array(await (await fetch(acbFile.href)).arrayBuffer()) : new Uint8Array();
       log(String.fromCharCode(...acbBytes.slice(0, 4)) === '8BCB' && String.fromCharCode(...acbBytes.slice(-8)) === 'spflspot', `.acb library downloaded (${acbBytes.length} bytes)`);
       setSel('mRipFormat', 'cxf');
       w.prompt = () => 'Brand Navy';
       d.querySelector('#mLibList tr[data-lib="1"] [data-lib-act=rename]').click();
       d.querySelector('#mLibList tr[data-lib="0"] [data-lib-act=del]').click();
-      log(libRows().join() === 'Brand Navy' && JSON.parse(w.localStorage.getItem('sd10.spotLibrary')).colours.length === 1, 'library entries can be renamed and removed (kept in browser storage)');
+      log(libRows().join() === 'Brand Navy' && JSON.parse(w.localStorage.getItem('sd10.spotLibrary')).colors.length === 1, 'library entries can be renamed and removed (kept in browser storage)');
 
-      // import a library file (one clash -> replaced) and add a colour by hand
+      // import a library file (one clash -> replaced) and add a color by hand
       const imp = '<?xml version="1.0" encoding="UTF-8"?>\n<SpotColorLibraryList strVersion="4.3.0.0"><LabSpotColorLibrary name="RIP"><m_eMakerType>0</m_eMakerType><m_bUseLibrary>false</m_bUseLibrary>' +
         '<Lab16SpotColor name="Brand Navy" flags="0" redirectLibraryName="" redirectColorName=""><L VALUE="20.00"/><a VALUE="5.00"/><b VALUE="-40.00"/></Lab16SpotColor>' +
         '<Lab16SpotColor name="Lime" flags="0" redirectLibraryName="" redirectColorName=""><L VALUE="85.00"/><a VALUE="-45.00"/><b VALUE="70.00"/></Lab16SpotColor></LabSpotColorLibrary></SpotColorLibraryList>\n';
@@ -253,8 +253,8 @@
       $('libFile').files = dt.files;
       $('libFile').dispatchEvent(new w.Event('change'));
       await until(() => libRows().length === 2);
-      const navy = JSON.parse(w.localStorage.getItem('sd10.spotLibrary')).colours.find((c) => c.name === 'Brand Navy');
-      log(libRows().join() === 'Brand Navy,Lime' && navy?.lab.join() === '20,5,-40' && /1 added, 1 replaced/.test($('toast').textContent), `import adds new colours and replaces clashes (${$('toast').textContent})`);
+      const navy = JSON.parse(w.localStorage.getItem('sd10.spotLibrary')).colors.find((c) => c.name === 'Brand Navy');
+      log(libRows().join() === 'Brand Navy,Lime' && navy?.lab.join() === '20,5,-40' && /1 added, 1 replaced/.test($('toast').textContent), `import adds new colors and replaces clashes (${$('toast').textContent})`);
       // drag & drop a CxF in Digital Factory's form (BOM, cc: prefix, CRLF) onto the page; the page highlights while dragging
       const dfCxf = '﻿<?xml version="1.0" encoding="UTF-8"?>\r\n<cc:CxF xmlns:cc="http://colorexchangeformat.com/CxF3-core">\r\n  <cc:Resources>\r\n    <cc:ObjectCollection>\r\n' +
         '      <cc:Object ObjectType="Standard" Name="Dropped" Id="EXC_1">\r\n        <cc:ColorValues>\r\n          <cc:ColorCIELab ColorSpecification="CS0">\r\n' +
@@ -271,12 +271,12 @@
       dropOn.dispatchEvent(over);
       dropOn.dispatchEvent(new w.DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: ddt }));
       await until(() => libRows().length === 3);
-      const dropped = JSON.parse(w.localStorage.getItem('sd10.spotLibrary')).colours.find((c) => c.name === 'Dropped');
+      const dropped = JSON.parse(w.localStorage.getItem('sd10.spotLibrary')).colors.find((c) => c.name === 'Dropped');
       log(lit && over.defaultPrevented && !$('viewMatch').classList.contains('outline-dashed') && dropped?.lab.join() === '42,0,69', 'a CxF file dropped on the page is imported (Digital Factory form)');
       d.querySelector('#mLibList tr[data-lib="2"] [data-lib-act=del]').click();
       $('libNewName').value = 'Hand Typed'; $('libNewL').value = '55'; $('libNewA').value = '10'; $('libNewB').value = '-12.5';
       $('btnLibAdd').click();
-      log(libRows().join() === 'Brand Navy,Lime,Hand Typed' && $('libNewName').value === '', 'a colour can be typed into the library');
+      log(libRows().join() === 'Brand Navy,Lime,Hand Typed' && $('libNewName').value === '', 'a color can be typed into the library');
       $('btnLibFromLast').click();
       log(Number.isFinite(parseFloat($('libNewL').value)), 'Use last measurement fills L*a*b*');
 
@@ -302,7 +302,7 @@
       [['mL', 50], ['mA', 90], ['mB', -100]].forEach(([id, v]) => { $(id).value = String(v); });
       $('mB').dispatchEvent(new Event('change'));
       await until(() => /Outside the printer gamut/.test($('mGamut').textContent));
-      log(/Outside the printer gamut/.test($('mGamut').textContent) && /OUT OF GAMUT/.test($('mColourList').textContent), `printer profile flags an unprintable reference (${$('mGamut').textContent.slice(0, 90)}…)`);
+      log(/Outside the printer gamut/.test($('mGamut').textContent) && /OUT OF GAMUT/.test($('mColorList').textContent), `printer profile flags an unprintable reference (${$('mGamut').textContent.slice(0, 90)}…)`);
       [['mL', 60], ['mA', 10], ['mB', 20]].forEach(([id, v]) => { $(id).value = String(v); });
       $('mB').dispatchEvent(new Event('change'));
       await until(() => /Inside the printer gamut/.test($('mGamut').textContent));
@@ -323,11 +323,11 @@
       const measured = (rep.journal ?? []).find((e) => e.kind === 'measure');
       const repChecks = { format: rep.format === 'sd10-debug-report', note: rep.note === 'Result looked wrong', version: /^\d{4}-\d{2}-\d{2}/.test(rep.app?.version ?? ''), device: !!(rep.app?.connected && rep.app.device?.model),
         protocol: rep.app?.protocolLog?.length > 50, kinds: ['start', 'click', 'change', 'toast', 'task', 'match', 'measure', 'result'].every((k) => kinds.has(k)), measure: measured?.data?.lab?.length === 3,
-        storage: !!(rep.storage?.['sd10.match']?.colours?.length >= 1 && rep.storage['sd10.spotLibrary'] && !rep.storage['sd10.debugJournal']),
+        storage: !!(rep.storage?.['sd10.match']?.colors?.length >= 1 && rep.storage['sd10.spotLibrary'] && !rep.storage['sd10.debugJournal']),
         screen: rep.screen?.view === 'viewMatch' && rep.screen.cards.some((c) => /Settings/.test(c.title)), browser: !!rep.browser?.userAgent };
       log(Object.values(repChecks).every(Boolean) && rep.format === 'sd10-debug-report' && rep.note === 'Result looked wrong' && /^\d{4}-\d{2}-\d{2}/.test(rep.app?.version ?? '') && rep.app.connected && rep.app.device?.model &&
         rep.app.protocolLog?.length > 50 && ['start', 'click', 'change', 'toast', 'task', 'match', 'measure', 'result'].every((k) => kinds.has(k)) && measured?.data?.lab?.length === 3 &&
-        rep.storage['sd10.match']?.colours?.length >= 1 && rep.storage['sd10.spotLibrary'] && !rep.storage['sd10.debugJournal'] &&
+        rep.storage['sd10.match']?.colors?.length >= 1 && rep.storage['sd10.spotLibrary'] && !rep.storage['sd10.debugJournal'] &&
         rep.screen?.view === 'viewMatch' && rep.screen.cards.some((c) => /Settings/.test(c.title)) && rep.browser?.userAgent,
         `debug report saved ${Object.entries(repChecks).filter(([, v]) => !v).map(([k]) => 'MISSING ' + k).join(' ')}(${repFile?.name}: ${rep.journal?.length} journal entries – ${[...kinds].join(', ')}; ${rep.screen?.cards?.length} cards of screen text)`);
       log(errors.length === 0, `no JS errors ${errors.join(' | ')}`);

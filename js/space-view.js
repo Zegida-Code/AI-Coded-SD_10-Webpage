@@ -1,8 +1,8 @@
-// Colour space view: a large, turnable 3-D picture of a measured colour space in CIE L*a*b* – every measured patch in the
-// colour it printed, the gamut surface around them, optionally a second space as a wireframe to compare (another
-// media or printer), and the Print match reference colours. Plain canvas 2-D with a small perspective projection;
+// Color space view: a large, turnable 3-D picture of a measured color space in CIE L*a*b* – every measured patch in the
+// color it printed, the gamut surface around them, optionally a second space as a wireframe to compare (another
+// media or printer), and the Print match reference colors. Plain canvas 2-D with a small perspective projection;
 // drag to turn, scroll or pinch to zoom, hover a patch for its values.
-// The data comes from the Print match view (initSpaceView's `data` callback), which owns the colour spaces.
+// The data comes from the Print match view (initSpaceView's `data` callback), which owns the color spaces.
 import { $, displayHex, escapeHtml } from './ui.js';
 import { spaceStats } from './colorspace.js';
 import { MODE_NAME } from './match.js';
@@ -100,7 +100,7 @@ function buildScene() {
   const other = spaces.find((s) => s.id === prefs.compare) ?? null;
   const labs = space ? space.points.map((p) => p.lab) : [];
   const sessions = new Map((space?.sessions ?? []).map((s) => [s.id, s.label]));
-  // the picture is scaled to the colours shown: the largest chroma of either space or a reference, plus a margin
+  // the picture is scaled to the colors shown: the largest chroma of either space or a reference, plus a margin
   const chroma = [...labs, ...(other?.points.map((p) => p.lab) ?? []), ...refs.map((r) => r.lab)].map((l) => Math.hypot(l[1], l[2]));
   const shell = gamutShell(labs);
   // a reference is outside when its chroma is beyond the surface at its lightness and hue
@@ -132,7 +132,7 @@ function project([a, L, b]) {
   return { x: W / 2 + X * s, y: H * 0.46 - Y * s, z: Z, s };
 }
 
-/** Colours of the axes, labels, wireframe and markers for the light or dark page. */
+/** Colors of the axes, labels, wireframe and markers for the light or dark page. */
 function theme() {
   const dark = matchMedia('(prefers-color-scheme: dark)').matches;
   return { ink: (alpha) => `rgba(${dark ? '203,213,225' : '51,65,85'},${alpha})`, wire: dark ? 'rgba(255,255,255,0.55)' : 'rgba(15,23,42,0.5)', text: dark ? '#fff' : '#0f172a' };
@@ -231,7 +231,7 @@ function drawItems(items, { wire }) {
   }
 }
 
-/** Reference colours on top of everything, with their names – ringed red when outside the surface. */
+/** Reference colors on top of everything, with their names – ringed red when outside the surface. */
 function drawReferences({ text }) {
   ctx.font = '600 12px ui-sans-serif, system-ui, sans-serif';
   for (const ref of scene.refs) {
@@ -247,10 +247,10 @@ function drawReferences({ text }) {
 function draw() {
   dirty = false;
   if (!fitCanvas()) return;
-  const colours = theme();
-  drawAxes(colours);
-  drawItems(depthItems(), colours);
-  if (prefs.refs && scene) drawReferences(colours);
+  const colors = theme();
+  drawAxes(colors);
+  drawItems(depthItems(), colors);
+  if (prefs.refs && scene) drawReferences(colors);
 }
 
 function loop(time) {
@@ -269,7 +269,7 @@ const fmtInt = (v) => Math.round(v).toLocaleString();
 function renderPanel() {
   const { spaces } = data();
   const opts = (none) => (none ? `<option value="">${none}</option>` : '') + spaces.map((s) => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
-  $('vsSpace').innerHTML = opts(spaces.length ? '' : 'No colour spaces yet');
+  $('vsSpace').innerHTML = opts(spaces.length ? '' : 'No color spaces yet');
   $('vsSpace').value = prefs.space;
   $('vsCompare').innerHTML = opts('Nothing');
   $('vsCompare').value = prefs.compare;
@@ -277,9 +277,9 @@ function renderPanel() {
   const { space, shell, otherShell, other } = scene;
   $('vsEmpty').classList.toggle('hidden', !!space?.points.length);
   $('vsEmpty').innerHTML = !spaces.length
-    ? 'No colour spaces yet. Create one in <b>Print match</b> (Colour space → Create chart, then scan it) or import a colour space or CGATS file there.'
-    : 'This colour space has no measured patches yet – scan its chart in <b>Print match</b>.';
-  if (!space) { $('vsInfo').innerHTML = '<p class="text-slate-500">Select a colour space to see it.</p>'; return; }
+    ? 'No color spaces yet. Create one in <b>Print match</b> (Color space → Create chart, then scan it) or import a color space or CGATS file there.'
+    : 'This color space has no measured patches yet – scan its chart in <b>Print match</b>.';
+  if (!space) { $('vsInfo').innerHTML = '<p class="text-slate-500">Select a color space to see it.</p>'; return; }
   const st = spaceStats(space);
   const pts = space.points;
   const chroma = pts.map((p) => ({ C: Math.hypot(p.lab[1], p.lab[2]), p }));
@@ -299,9 +299,9 @@ function renderPanel() {
       ${other ? row(`“${escapeHtml(other.name)}”`, otherVol ? `${fmtInt(otherVol / 1000)} k ΔE³ (${((otherVol / vol) * 100).toFixed(0)} %)` : 'too few patches') : ''}
     </dl>
     ${scene.refs.length ? `<p class="text-xs ${outside.length ? 'text-rose-600' : 'text-emerald-600'}">${outside.length
-      ? `${outside.length} of ${scene.refs.length} reference colour${scene.refs.length > 1 ? 's' : ''} outside the gamut surface: ${outside.map((r) => escapeHtml(r.name)).join(', ')}`
-      : `All ${scene.refs.length} reference colour${scene.refs.length > 1 ? 's' : ''} inside the gamut surface`}</p>` : ''}
-    <p class="text-xs text-slate-500">The surface follows the most colourful patches measured at each lightness and hue – a chart's patches reach the printer's edge. ${other ? 'The wireframe is the space compared with.' : ''}</p>`;
+      ? `${outside.length} of ${scene.refs.length} reference color${scene.refs.length > 1 ? 's' : ''} outside the gamut surface: ${outside.map((r) => escapeHtml(r.name)).join(', ')}`
+      : `All ${scene.refs.length} reference color${scene.refs.length > 1 ? 's' : ''} inside the gamut surface`}</p>` : ''}
+    <p class="text-xs text-slate-500">The surface follows the most colorful patches measured at each lightness and hue – a chart's patches reach the printer's edge. ${other ? 'The wireframe is the space compared with.' : ''}</p>`;
 }
 
 // ---------------------------------------------------------------- interaction
@@ -370,7 +370,7 @@ function wire() {
   $('vsReset').onclick = () => { cam = { ...HOME }; kick(); };
 }
 
-/** Called once by the Print match view, which owns the colour spaces: `getData()` -> { spaces, active, refs: [{ name, lab }] }. */
+/** Called once by the Print match view, which owns the color spaces: `getData()` -> { spaces, active, refs: [{ name, lab }] }. */
 export function initSpaceView(getData) {
   data = getData;
   wire();

@@ -65,7 +65,7 @@ export const STATUS_ERROR_BITS = {
   41: 'INFO: battery discharge (high) controlled', 42: 'INFO: battery discharge (low) cancelled', 43: 'INFO: battery discharge (low) controlled',
   44: 'INFO: battery low', 47: 'INFO: shutter open (power-on + measurement)', 48: 'INFO: shutter open at power-on', 49: 'INFO: shutter open during measurement',
   50: 'INFO: scan failed – patch too short', 51: 'INFO: scan failed – timeout', 52: 'INFO: scan failed – moved too fast',
-  54: 'INFO: colour history full', 55: 'INFO: group history full', 57: 'INFO: other measurement error',
+  54: 'INFO: color history full', 55: 'INFO: group history full', 57: 'INFO: other measurement error',
 };
 
 // ---------------------------------------------------------------- helpers
@@ -191,7 +191,7 @@ export function encodeGroup(g) {
   const name = new TextEncoder().encode(g.name ?? '');
   if (name.length > 42) throw new RangeError('group name is limited to 42 bytes');
   const labs = g.labs ?? [];
-  if (labs.length > 80) throw new RangeError('a device palette holds at most 80 colours');
+  if (labs.length > 80) throw new RangeError('a device palette holds at most 80 colors');
   const nameBytes = Array.from({ length: 42 }, (_, i) => (name[i] ?? 0) ^ 0x5a);
   const out = [2, g.slot, g.hardwareId & 0xff, (g.hardwareId >> 8) & 0xff, name.length, ...nameBytes,
     g.patchBorder ? 1 : 0, labs.length, g.mFactor ?? 0, g.lightSource ?? 0, g.viewingAngle ?? 2, g.colorDiffFormula ?? 0,

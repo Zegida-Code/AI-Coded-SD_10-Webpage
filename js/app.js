@@ -1,5 +1,5 @@
 // SD-10 Web Console – Console view (device connection, measuring, history, palettes, settings, log) and start-up.
-// The Print match view is in match-view.js (which also switches views), the 3-D Colour space view in space-view.js,
+// The Print match view is in match-view.js (which also switches views), the 3-D Color space view in space-view.js,
 // the debug report in debug.js; shared DOM helpers are in ui.js.
 import { BleTransport } from './transport.js';
 import { MockTransport, SAMPLES } from './mock.js';
@@ -32,7 +32,7 @@ const state = {
   view: 'console', // 'console' | 'match' | 'space'
   mode: 'spot', // Console measuring mode: 'spot' | 'compare' | 'line'
   last: null, // result on screen: { spectrum, lab, d, strip, itemId, cmyk }
-  lastLabD50: null, // newest colour measured or shown (Lab D50/2°), for "Use last measurement" in Print match …
+  lastLabD50: null, // newest color measured or shown (Lab D50/2°), for "Use last measurement" in Print match …
   lastSpectrum: null, // … and its spectrum
   reference: null, // Compare reference: { spectrum, id }
   chartArgs: null, // last drawChart() arguments, redrawn on resize
@@ -117,7 +117,7 @@ function attachLog(session) {
  * the result on screen, the stored ICC profiles and the protocol log.
  */
 async function saveDebugReport() {
-  const note = prompt('What happened, or what did you expect? (optional)\n\nThe report holds this page’s recent actions and messages, what it shows, its settings, measurements and colour data, and the device and browser details – no passwords or personal details.', '');
+  const note = prompt('What happened, or what did you expect? (optional)\n\nThe report holds this page’s recent actions and messages, what it shows, its settings, measurements and color data, and the device and browser details – no passwords or personal details.', '');
   if (note === null) return;
   const names = async (store) => { try { return await store.list(); } catch { return []; } };
   const report = buildDebugReport({
@@ -344,7 +344,7 @@ async function onDeviceEvent(code) {
     return;
   }
   if (code !== EVENT.BUTTON || state.busy) return;
-  if (state.view !== 'console') { onMatchButton(); return; } // Print match / Colour space
+  if (state.view !== 'console') { onMatchButton(); return; } // Print match / Color space
   // Console: the app reads the device's mode; group modes come from the device, otherwise use the UI mode.
   const mode = await state.session.getMode().catch(() => null);
   if (mode?.method === METHOD.CALIBRATION) return task('Calibrating', doCalibrate);
@@ -362,7 +362,7 @@ function showResult({ spectrum, lab, strip, item }) {
   const d = describeSpectrum(spectrum, p.lightSource, p.observer);
   if (lab) { d.lab = lab; d.lch = labToLch(lab); }
   state.last = { spectrum, lab: d.lab, d, strip, itemId: item?.id ?? null };
-  state.lastLabD50 = spectrumToLab(spectrum, 0, 2); // newest colour on screen, for "Use last measurement" in Print match
+  state.lastLabD50 = spectrumToLab(spectrum, 0, 2); // newest color on screen, for "Use last measurement" in Print match
   state.lastSpectrum = spectrum;
   $('resultArea').classList.remove('hidden');
   $('swatch').style.background = d.hex;
@@ -532,7 +532,7 @@ function onHistoryClick(e) {
 }
 
 /**
- * Make this colour the comparison reference and switch to the Compare tab.
+ * Make this color the comparison reference and switch to the Compare tab.
  * compareCurrent: re-compare the sample currently on screen against the new reference (used from History).
  */
 function setReference(spectrum, { id = null, compareCurrent = false } = {}) {
@@ -618,14 +618,14 @@ async function readGroups() {
       <div class="flex items-center justify-between"><span class="font-medium">Slot ${slot} · ${escapeHtml(g.name || '(unnamed)')}</span>
       <button class="text-xs text-rose-600 hover:underline" data-delslot="${slot}">delete</button></div>
       <div class="flex flex-wrap gap-1 mt-1">${sw}${g.labs.length > 12 ? `<span class="text-xs text-slate-500">+${g.labs.length - 12}</span>` : ''}</div>
-      <p class="text-xs text-slate-500 mt-1">${g.labs.length} colours · ${LIGHT_SOURCE_NAME[g.lightSource] ?? g.lightSource}/${g.viewingAngle}° · M${g.mFactor} · ${DIFF_FORMULAS[g.colorDiffFormula] ?? ''} ≤ ${fmt(g.threshold, 1)}</p></li>`;
+      <p class="text-xs text-slate-500 mt-1">${g.labs.length} colors · ${LIGHT_SOURCE_NAME[g.lightSource] ?? g.lightSource}/${g.viewingAngle}° · M${g.mFactor} · ${DIFF_FORMULAS[g.colorDiffFormula] ?? ''} ≤ ${fmt(g.threshold, 1)}</p></li>`;
   }).join('');
 }
 
 async function writeGroup() {
   const items = state.history.filter((h) => state.checked.has(h.id));
   if (!items.length) return;
-  if (items.length > 80) { toast('A device palette holds at most 80 colours.', 'error'); return; }
+  if (items.length > 80) { toast('A device palette holds at most 80 colors.', 'error'); return; }
   await task('Writing palette', async () => {
     const p = settingsFromUI();
     const slot = +$('groupSlot').value;

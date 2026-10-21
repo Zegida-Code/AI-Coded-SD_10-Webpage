@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>SD-10 colour space smoke test</title>
+  <title>SD-10 color space smoke test</title>
   <style>
     body { margin: 0; font: 12px ui-monospace, monospace; display: flex; gap: 12px; align-items: flex-start; }
     iframe { border: 0; width: 1300px; height: 2600px; flex: none; }
@@ -13,7 +13,7 @@
   <iframe id="app" src="../index.html?demo#match"></iframe>
   <pre id="out">running…</pre>
   <script type="module">
-    // Drives the colour space workflow of Print match against the simulated SD-10 and printer: chart, scanning into the
+    // Drives the color space workflow of Print match against the simulated SD-10 and printer: chart, scanning into the
     // space, import / export, the prediction for a reference, a first sheet that starts from it, learning, the drift
     // check with a check chart, and removing measurements again.
     import { printSpectrum } from '../js/printer-sim.js';
@@ -39,7 +39,7 @@
       const readFile = async (f) => (await fetch(f.href)).text();
       const busy = () => /…$/.test($('btnMatchMeasure').textContent);
       const setSel = (id, v) => { $(id).value = v; $(id).dispatchEvent(new Event('change')); };
-      const stored = () => JSON.parse(w.localStorage.getItem('sd10.colourSpaces') || '[]');
+      const stored = () => JSON.parse(w.localStorage.getItem('sd10.colorSpaces') || '[]');
       const text = (id) => $(id).textContent.replace(/\s+/g, ' ');
       const pick = (input, name, content) => {
         const dt = new w.DataTransfer();
@@ -55,15 +55,15 @@
           await until(() => $('mProgress').textContent !== before && !busy());
         }
       }
-      // the demo's printer for spot colour sheets: the RIP's profile converts L*a*b* to CMYK, the simulated printer prints it
+      // the demo's printer for spot color sheets: the RIP's profile converts L*a*b* to CMYK, the simulated printer prints it
       const profile = await loadProfile('EpsonWideCMYK_Ver2');
       const prints = (lab, shift = [0, 0, 0]) => spectrumToLab(printSpectrum(profile.fromLab(lab, 0)), 0, 2).map((v, i) => v + shift[i]);
-      const spaceFile = (name, shift, t) => JSON.stringify({ format: 'sd10-colour-space', version: 1, id: `test-${name}`, name, mode: 'spot', created: t, updated: t,
+      const spaceFile = (name, shift, t) => JSON.stringify({ format: 'sd10-color-space', version: 1, id: `test-${name}`, name, mode: 'spot', created: t, updated: t,
         sessions: [{ id: 'chart:file', kind: 'chart', label: `${name} – chart 1`, time: t, updated: t, checks: {} }],
         points: designChart('spot', 300, 5).map((p) => ({ x: p.x, lab: prints(p.x, shift), t, s: 'chart:file', n: p.n })) });
 
       log(/measured map/.test(text('mSpaceInfo')) && $('mSpace').value === '' && $('mSpaceActions').classList.contains('hidden') && $('mSpacePred').classList.contains('hidden'),
-        'no colour space at first: the card explains what one is');
+        'no color space at first: the card explains what one is');
       $('btnConnect').click();
       await until(() => /simulated/.test($('connPill').textContent) && !$('btnMatchTarget').disabled);
       $('demoShutter').click(); await sleep(200);
@@ -76,26 +76,26 @@
       setSel('mChartSize', 'starter');
       $('btnSpaceChart').click();
       await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 200);
-      const listTop = d.querySelector('#mColourList li');
-      log(stored().length === 1 && stored()[0].name === 'Demo printer' && stored()[0].mode === 'spot' && listTop?.dataset.colour === 'chart' && /0\/200 scanned/.test(listTop.textContent) &&
+      const listTop = d.querySelector('#mColorList li');
+      log(stored().length === 1 && stored()[0].name === 'Demo printer' && stored()[0].mode === 'spot' && listTop?.dataset.color === 'chart' && /0\/200 scanned/.test(listTop.textContent) &&
         $('mRefCard').classList.contains('hidden') && /Demo printer – chart 1/.test(text('mRoundLabel')) && $('btnMatchSheet').classList.contains('hidden') && $('btnMatchRestart').textContent === 'Close chart',
-        'Create chart makes a colour space and a 200-patch chart; the cards switch to the chart');
+        'Create chart makes a color space and a 200-patch chart; the cards switch to the chart');
       $('btnMatchPdf').click();
       $('btnMatchRipSheet').click();
       const pdf = files.find((f) => f.name === 'Demo printer – chart 1.pdf');
       const pdfText = pdf ? await readFile(pdf) : '';
       const lib = files.find((f) => /^sd10-[A-Z2-9]{4}-chart\.cxf$/.test(f.name));
       const libText = lib ? await readFile(lib) : '';
-      log((pdfText.match(/\/Type \/Page /g) ?? []).length >= 2 && /SD-10 colour space chart/.test(pdfText) && new Set(pdfText.match(/\/Separation \/SD10-[A-Z2-9]{4}-C1-\d{3}/g)).size === 200 &&
+      log((pdfText.match(/\/Type \/Page /g) ?? []).length >= 2 && /SD-10 color space chart/.test(pdfText) && new Set(pdfText.match(/\/Separation \/SD10-[A-Z2-9]{4}-C1-\d{3}/g)).size === 200 &&
         (libText.match(/<cc:Object /g) ?? []).length === 200,
-        `chart PDF (${(pdfText.match(/\/Type \/Page /g) ?? []).length} pages, 200 named spot colours) and its spot library (${lib?.name})`);
+        `chart PDF (${(pdfText.match(/\/Type \/Page /g) ?? []).length} pages, 200 named spot colors) and its spot library (${lib?.name})`);
       await scan(3);
       log(stored()[0].points.length === 3 && stored()[0].chart.rounds[0].patches.filter((p) => p.lab).length === 3 && $('mProgress').textContent.startsWith('3 / 200') && /#4/.test($('btnMatchMeasure').textContent),
-        'scanned chart patches go into the colour space straight away');
+        'scanned chart patches go into the color space straight away');
       $('btnMatchRestart').click();
       await until(() => !$('mRefCard').classList.contains('hidden'));
-      log(!stored()[0].chart && d.querySelector('#mColourList li').dataset.colour !== 'chart' && /3 measured patches/.test(text('mSpaceInfo')) && /predicts once it holds 20/.test(text('mSpaceInfo')) &&
-        /chart 1.*3 patches/.test(text('mSpaceSessions')), `Close chart goes back to the colours; the scanned patches stay (${text('mSpaceInfo').slice(0, 80)})`);
+      log(!stored()[0].chart && d.querySelector('#mColorList li').dataset.color !== 'chart' && /3 measured patches/.test(text('mSpaceInfo')) && /predicts once it holds 20/.test(text('mSpaceInfo')) &&
+        /chart 1.*3 patches/.test(text('mSpaceSessions')), `Close chart goes back to the colors; the scanned patches stay (${text('mSpaceInfo').slice(0, 80)})`);
 
       // ---- import a measured space (300 chart patches of the demo printer)
       const T = Date.now() - 5 * 864e5;
@@ -104,7 +104,7 @@
       await until(() => /predicts within/.test(text('mSpaceInfo')));
       const acc = parseFloat(text('mSpaceInfo').match(/predicts within ΔE00 ([\d.]+)/)?.[1]);
       log($('mSpace').selectedOptions[0]?.textContent === 'Demo printer full' && /300 measured patches/.test(text('mSpaceInfo')) && acc < 2 && /imported – 300 patches/.test($('toast').textContent),
-        `a colour space file is imported and used (typically accurate to ΔE00 ${acc})`);
+        `a color space file is imported and used (typically accurate to ΔE00 ${acc})`);
 
       // ---- reference -> prediction; the first sheet starts from it and lands close
       const target = prints([48, 42, -30]);
@@ -117,12 +117,12 @@
       log(predDE < 1.5 && predPrints < 2, `the reference gets predicted values straight away (predicted ΔE00 ${predDE}; they print ${predPrints.toFixed(2)})`);
       w.prompt = () => 'Brand Violet';
       d.querySelector('#mSpacePred [data-pred-act=add]').click();
-      const libEntry = JSON.parse(w.localStorage.getItem('sd10.spotLibrary')).colours.find((c) => c.name === 'Brand Violet');
+      const libEntry = JSON.parse(w.localStorage.getItem('sd10.spotLibrary')).colors.find((c) => c.name === 'Brand Violet');
       log(libEntry && libEntry.lab.every((v, i) => Math.abs(v - predVals[i]) <= 0.051), 'the prediction can go straight into the spot library (under the name given)');
       await until(() => !$('btnMatchSheet').disabled);
       $('btnMatchSheet').click();
       await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 16);
-      log(/Starts from the colour space prediction \(Demo printer full/.test(text('mSheetInfo')) && /steps L\* ±2\.5/.test(text('mSheetInfo')), 'the first sheet is centred on the prediction, with finer steps');
+      log(/Starts from the color space prediction \(Demo printer full/.test(text('mSheetInfo')) && /steps L\* ±2\.5/.test(text('mSheetInfo')), 'the first sheet is centred on the prediction, with finer steps');
       await scan(16);
       await until(() => !$('mResultCard').classList.contains('hidden'));
       const centre = parseFloat(text('mResult').match(/Centre patch\s*ΔE00 ([\d.]+)/)?.[1]);
@@ -136,9 +136,9 @@
       const json = files.find((f) => f.name === 'Demo printer full.json'), cg = files.find((f) => f.name === 'Demo printer full.txt');
       const jsonOut = json ? JSON.parse(await readFile(json)) : {};
       const cgText = cg ? await readFile(cg) : '';
-      log(jsonOut.format === 'sd10-colour-space' && jsonOut.points.length === 316 && /^CGATS\.17/.test(cgText) && /NUMBER_OF_SETS\t316/.test(cgText), 'the colour space exports as a file and as CGATS measurements');
+      log(jsonOut.format === 'sd10-color-space' && jsonOut.points.length === 316 && /^CGATS\.17/.test(cgText) && /NUMBER_OF_SETS\t316/.test(cgText), 'the color space exports as a file and as CGATS measurements');
 
-      // ---- the 3-D Colour space view
+      // ---- the 3-D Color space view
       d.querySelector('[data-view=space]').click();
       const painted = () => {
         const cv = $('vsCanvas');
@@ -150,21 +150,21 @@
       };
       await until(() => painted() > 2000);
       log(!$('viewSpace').classList.contains('hidden') && $('viewMatch').classList.contains('hidden') && w.location.hash === '#space' && $('vsSpace').selectedOptions[0]?.textContent === 'Demo printer full' &&
-        painted() > 2000 && /Gamut volume\s*[\d,]+ k ΔE³/.test(text('vsInfo')) && /316/.test(text('vsInfo')) && /reference colour/.test(text('vsInfo')),
-        `the Colour space view draws the space in 3-D (${text('vsInfo').match(/Gamut volume[^Δ]*ΔE³/)?.[0]})`);
+        painted() > 2000 && /Gamut volume\s*[\d,]+ k ΔE³/.test(text('vsInfo')) && /316/.test(text('vsInfo')) && /reference color/.test(text('vsInfo')),
+        `the Color space view draws the space in 3-D (${text('vsInfo').match(/Gamut volume[^Δ]*ΔE³/)?.[0]})`);
       setSel('vsCompare', stored()[0].id);
       $('vsTop').click();
       await until(() => !$('vsMeasure').disabled);
       $('vsMeasure').click();
       await until(() => /shown as “Last measurement”/.test($('toast').textContent));
       log(/Demo printer/.test(text('vsInfo')) && $('vs_spin').checked === false && /Last measurement/.test(text('vsInfo') + $('toast').textContent),
-        'compare with another space, view from above, and measure a colour into the picture');
+        'compare with another space, view from above, and measure a color into the picture');
       d.querySelector('[data-view=match]').click();
       await until(() => !$('viewMatch').classList.contains('hidden'));
 
       // ---- other sheet types do not use it
       setSel('mMode', 'rgb');
-      log(/measured with named spot colour sheets/.test(text('mSpaceInfo')) && $('mSpacePred').classList.contains('hidden'), 'a colour space only predicts for the sheet type it was measured with');
+      log(/measured with named spot color sheets/.test(text('mSpaceInfo')) && $('mSpacePred').classList.contains('hidden'), 'a color space only predicts for the sheet type it was measured with');
       setSel('mMode', 'spot');
 
       // ---- drift: a space measured while the printer printed differently; a check chart shows the change
@@ -175,26 +175,51 @@
       await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 24);
       await scan(24);
       await until(() => /printed differently/.test(text('mSpaceInfo')));
-      log(/check chart 1 printed differently from what this colour space predicts/.test(text('mSpaceInfo')) && /Check chart: the printer prints differently/.test($('toast').textContent),
+      log(/check chart 1 printed differently from what this color space predicts/.test(text('mSpaceInfo')) && /Check chart: the printer prints differently/.test($('toast').textContent),
         `a check chart after the printer changed is flagged (${text('mSpaceInfo').match(/typically ΔE00 [\d.]+ off/)?.[0]})`);
       d.querySelector('#mSpaceInfo [data-space-act=trim]').click();
       const after = stored().find((s) => s.name === 'Before service');
       log(after.points.length === 24 && after.sessions.length === 1 && after.sessions[0].kind === 'check', 'Keep only the newer data removes the measurements from before the change');
       $('btnMatchRestart').click();
       d.querySelector('#mSpaceSessions [data-space-act=remove]').click();
-      log(stored().find((s) => s.name === 'Before service').points.length === 0, 'a set of measurements can be removed from the colour space');
+      log(stored().find((s) => s.name === 'Before service').points.length === 0, 'a set of measurements can be removed from the color space');
 
-      // ---- a CGATS file dropped on the page becomes a colour space
+      // ---- a CGATS file dropped on the page becomes a color space
       const cgFile = spaceToCgats({ name: 'Dropped chart', mode: 'spot', points: designChart('spot', 30, 2).map((p) => ({ x: p.x, lab: prints(p.x) })) });
       const ddt = new w.DataTransfer();
       ddt.items.add(new w.File([cgFile], 'measurements.txt', { type: 'text/plain' }));
       $('mResult').dispatchEvent(new w.DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: ddt }));
       await until(() => stored().length === 4);
-      log(stored()[3].name === 'Dropped chart' && stored()[3].points.length === 30 && $('mSpace').selectedOptions[0]?.textContent === 'Dropped chart', 'a CGATS file dropped on the page is imported as a colour space');
+      log(stored()[3].name === 'Dropped chart' && stored()[3].points.length === 30 && $('mSpace').selectedOptions[0]?.textContent === 'Dropped chart', 'a CGATS file dropped on the page is imported as a color space');
       $('btnSpaceDelete').click();
-      log(stored().length === 3 && $('mSpace').value === '', 'a colour space can be deleted');
+      log(stored().length === 3 && $('mSpace').value === '', 'a color space can be deleted');
 
       log(errors.length === 0, `no script errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
+
+      // ---- data saved by versions that spelled "colour" is taken over when the app loads
+      const oldSpace = { ...stored()[1], id: 'legacy-space', name: 'Saved before the rename', chart: null };
+      w.localStorage.clear();
+      w.localStorage.setItem('sd10.colourSpaces', JSON.stringify([oldSpace]));
+      w.localStorage.setItem('sd10.match', JSON.stringify({ mode: 'spot', space: 'legacy-space',
+        colours: [{ id: 'c-old', code: 'OLD1', name: 'Old colour', target: [50, 20, -30], refReads: [], refSpectra: [], accepted: false, next: 0, rounds: [] }], active: 0 }));
+      w.localStorage.setItem('sd10.spotLibrary', JSON.stringify({ name: 'Old library', colours: [{ name: 'Old spot', lab: [40, 10, 10], predictedDeltaE: null }] }));
+      const second = document.createElement('iframe');
+      second.src = '../index.html?demo#match';
+      second.style.cssText = 'width:1300px;height:900px';
+      document.body.appendChild(second);
+      await new Promise((r) => { second.onload = r; });
+      const d2 = second.contentDocument, $2 = (id) => d2.getElementById(id);
+      await until(() => /Old colour/.test($2('mColorList').textContent));
+      const ls = second.contentWindow.localStorage;
+      await until(() => ls.getItem('sd10.colorSpaces'));
+      log(/Old colour/.test($2('mColorList').textContent) && /Old spot/.test($2('mLibList').textContent) && $2('mLibName').value === 'Old library' &&
+        $2('mSpace').selectedOptions[0]?.textContent === 'Saved before the rename' && !$2('mSpacePred').classList.contains('hidden') &&
+        JSON.parse(ls.getItem('sd10.colorSpaces'))[0]?.points.length === oldSpace.points.length && ls.getItem('sd10.colourSpaces') === null,
+        'a job, spot library and color space saved under the old "colour" names load, and the color space moves to its new key');
+      $2('mSpotName').value = 'Old colour renamed'; $2('mSpotName').dispatchEvent(new Event('change'));
+      const resaved = JSON.parse(ls.getItem('sd10.match'));
+      log(Array.isArray(resaved.colors) && resaved.colors[0].name === 'Old colour renamed' && !('colours' in resaved),
+        'the job is saved again under the new names');
       const pass = lines.every((l) => l.startsWith('PASS'));
       document.title = pass ? 'ALL PASS' : 'FAILURES';
     };

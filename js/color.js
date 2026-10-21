@@ -1,4 +1,4 @@
-// Colour science for the SD-10 web app.
+// Color science for the SD-10 web app.
 // spectrumToLab reproduces the Android app's librmcc.so conversion using weights recovered from it.
 import { WEIGHTS } from './weights.js';
 import { LIGHT_SOURCE_NAME } from './protocol.js';
@@ -37,7 +37,7 @@ export function labToLch([L, a, b]) {
   return [L, Math.hypot(a, b), h];
 }
 
-// ---------------------------------------------------------------- colour difference
+// ---------------------------------------------------------------- color difference
 export function deltaE76(p, q) { return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); }
 
 export function deltaE94(ref, smp, textile = false) {
@@ -86,7 +86,7 @@ export function deltaE2000(lab1, lab2, kL = 1, kC = 1, kH = 1) {
   return Math.sqrt((dLp / SL) ** 2 + (dCp / SC) ** 2 + (dHp / SH) ** 2 + RT * (dCp / SC) * (dHp / SH));
 }
 
-/** CMC l:c (BS 6923 / ISO 105-J03) – the textile industry's colour difference; 2:1 for acceptability. Not symmetric: ref first. */
+/** CMC l:c (BS 6923 / ISO 105-J03) – the textile industry's color difference; 2:1 for acceptability. Not symmetric: ref first. */
 export function deltaECMC(ref, smp, l = 2, c = 1) {
   const [L1, a1, b1] = ref, [L2, a2, b2] = smp;
   const C1 = Math.hypot(a1, b1), C2 = Math.hypot(a2, b2);
@@ -113,7 +113,7 @@ export function deltaE(ref, smp, formula = 0) {
   }
 }
 
-// ---------------------------------------------------------------- display colour
+// ---------------------------------------------------------------- display color
 // XYZ(D50) -> linear sRGB, Bradford-adapted (Lindbloom).
 const M_D50_SRGB = [
   [3.1338561, -1.6168667, -0.4906146],
@@ -177,7 +177,7 @@ export function meanSpectrum(spectra) {
   return Array.from({ length: 31 }, (_, i) => spectra.reduce((s, sp) => s + sp[i], 0) / spectra.length);
 }
 
-/** Approximate display colour of a wavelength (for the chart gradient). */
+/** Approximate display color of a wavelength (for the chart gradient). */
 export function wavelengthColor(nm) {
   let r = 0, g = 0, b = 0;
   if (nm < 440) { r = (440 - nm) / 60; b = 1; } else if (nm < 490) { g = (nm - 440) / 50; b = 1; }

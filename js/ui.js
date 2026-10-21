@@ -19,7 +19,7 @@ export function toast(msg, kind = 'info') {
 export const fmt = (v, d = 2) => (Number.isFinite(v) ? v.toFixed(d) : '—');
 export const round2 = (v) => Math.round(v * 100) / 100;
 export const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-/** sRGB hex of a Lab D50 colour, for swatches. */
+/** sRGB hex of a Lab D50 color, for swatches. */
 export const displayHex = (lab) => rgbHex(labD50ToSrgb(lab).rgb);
 export const safeFileName = (s) => s.replace(/[\\/:*?"<>|]+/g, '_').trim() || 'spot';
 export const NEEDS_CALIBRATION = 'Calibration needed: close the shutter, then calibrate.';

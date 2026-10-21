@@ -1,4 +1,4 @@
-// Colour spaces: a measured map of what one printer – with its ink, media and RIP settings – really prints.
+// Color spaces: a measured map of what one printer – with its ink, media and RIP settings – really prints.
 //
 // A chart of a few hundred patches spread over everything the printer might produce is printed and scanned once; every
 // patch is a point "asked for x -> printed L*a*b*". From those points:
@@ -6,8 +6,8 @@
 //     by distance and age, with one robust re-weighting pass so a smudged or mis-scanned patch does not pull it. It
 //     averages repeated readings and is smooth between the patches.
 //   - invert(target) finds the inputs whose predicted print is closest to a reference (Gauss-Newton on the local fits,
-//     started from the best-printing measured patches), with the predicted colour difference – also an honest answer
-//     for colours the printer cannot reach.
+//     started from the best-printing measured patches), with the predicted color difference – also an honest answer
+//     for colors the printer cannot reach.
 //   - learn() adds every patch scanned later (test sheets, check charts), so the space gets denser where it is used.
 //     Each one is first compared with what the rest of the space predicts for it: when a whole sheet disagrees, the
 //     printer, ink or media has probably changed (driftOf).
@@ -32,7 +32,7 @@ const UNIT = { spot: [1, 1, 1], lab: [1, 1, 1], cmyk: [1, 1, 1, 1], rgb: [2.55, 
 /** Inputs per point: CMYK spaces keep K as a fourth input (a test sheet holds it fixed, a chart varies it). */
 const inputCount = (mode) => (mode === 'cmyk' ? 4 : 3);
 export const pointX = (mode, x, k = 0) => (mode === 'cmyk' ? [...x.slice(0, 3), k] : [...x]);
-/** Spot colour name of a chart patch, e.g. SD10-K3P9-C1-007. */
+/** Spot color name of a chart patch, e.g. SD10-K3P9-C1-007. */
 export const chartSpotName = (code, chart, n) => `SD10-${code}-C${chart}-${String(n).padStart(3, '0')}`;
 export const newSpaceId = () => (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2));
 
@@ -87,7 +87,7 @@ function seeded(seed) {
 
 /**
  * The `n` patches of a chart for a sheet type: a neutral ramp, the device corners (larger charts) and evenly spread
- * colours over everything the printer might produce –
+ * colors over everything the printer might produce –
  *   L*a*b* (spot, lab): L* 3–98, hues all round, chroma out to somewhat beyond typical printer gamuts (chromaEnvelope);
  *   CMYK: C, M, Y evenly, K weighted towards light values; RGB: the whole cube.
  * The patches are put in a random order (from `seed`), so uneven printing across the sheet averages out instead of
@@ -324,7 +324,7 @@ export function keepFrom(space, time) {
 /** The space as JSON (without a chart in progress). */
 export function spaceToJson(space) {
   const { id, name, mode, created, updated, sessions, points } = space;
-  return JSON.stringify({ format: 'sd10-colour-space', version: 1, id, name, mode, created, updated, sessions, points });
+  return JSON.stringify({ format: 'sd10-color-space', version: 1, id, name, mode, created, updated, sessions, points });
 }
 
 const CGATS_FIELDS = { cmyk: ['CMYK_C', 'CMYK_M', 'CMYK_Y', 'CMYK_K'], rgb: ['RGB_R', 'RGB_G', 'RGB_B'], lab: ['REQ_L', 'REQ_A', 'REQ_B'] };
@@ -360,7 +360,7 @@ export function spaceToCgats(space, created = new Date()) {
 /**
  * A space from a CGATS / IT8 measurement file – one written by spaceToCgats, or a chart measured with other software
  * (CMYK_ or RGB_ fields with LAB_ values; ArgyllCMS .ti3 files store RGB as 0–100). The sheet type comes from the
- * SD10_MODE keyword, else from the fields (REQ_ fields = spot colour sheets).
+ * SD10_MODE keyword, else from the fields (REQ_ fields = spot color sheets).
  */
 export function spaceFromCgats(text, fileName = '') {
   const what = fileName || 'The file';
@@ -393,7 +393,7 @@ export function spaceFromCgats(text, fileName = '') {
     lab: labCols.map((c) => round2(parseFloat(r[c]))), t: now, s: session, n: i + 1,
   })).filter((p) => [...p.x, ...p.lab].every(Number.isFinite));
   if (!points.length) throw new Error(`${what} holds no complete measurements`);
-  const name = meta.DESCRIPTOR || fileName.replace(/^.*[\\/]/, '').replace(/\.[^.]*$/, '') || 'Imported colour space';
+  const name = meta.DESCRIPTOR || fileName.replace(/^.*[\\/]/, '').replace(/\.[^.]*$/, '') || 'Imported color space';
   return { id: newSpaceId(), name: name.slice(0, 60), mode, created: now, updated: now, points,
     sessions: [{ id: session, kind: 'import', label: `Imported from ${fileName || 'a measurement file'}`, time: now, updated: now, checks: {} }], chart: null };
 }
@@ -404,7 +404,8 @@ export function readSpaceFile(bytes, fileName = '') {
   if (!text.trimStart().startsWith('{')) return spaceFromCgats(text, fileName);
   let o;
   try { o = JSON.parse(text); } catch { throw new Error(`${fileName || 'The file'} is not valid JSON`); }
-  if (o?.format !== 'sd10-colour-space' || !MODES[o.mode]) throw new Error(`${fileName || 'The file'} is not an SD-10 colour space`);
+  // 'sd10-colour-space': files exported by versions that spelled "colour"
+  if (!['sd10-color-space', 'sd10-colour-space'].includes(o?.format) || !MODES[o.mode]) throw new Error(`${fileName || 'The file'} is not an SD-10 color space`);
   const D = inputCount(o.mode), now = Date.now();
   const points = (Array.isArray(o.points) ? o.points : [])
     .filter((p) => p?.x?.length === D && p.lab?.length === 3 && [...p.x, ...p.lab].every(Number.isFinite))
@@ -413,6 +414,6 @@ export function readSpaceFile(bytes, fileName = '') {
   for (const id of new Set(points.map((p) => p.s))) {
     if (!sessions.some((s) => s.id === id)) sessions.push({ id, kind: 'import', label: `Imported from ${fileName || 'a file'}`, time: now, updated: now, checks: {} });
   }
-  return { id: String(o.id || newSpaceId()), name: String(o.name || 'Imported colour space').slice(0, 60), mode: o.mode,
+  return { id: String(o.id || newSpaceId()), name: String(o.name || 'Imported color space').slice(0, 60), mode: o.mode,
     created: Number(o.created) || now, updated: now, points, sessions, chart: null };
 }

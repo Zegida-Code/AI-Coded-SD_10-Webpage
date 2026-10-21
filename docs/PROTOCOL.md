@@ -269,7 +269,7 @@ official app always sends zero targets in tag `0E`.
 `SetStandAloneMode 00 43 1D 12 01 00 00 00 01` — hand control back to the device UI.
 `NotifyGroupMeasurementCompleted 00 43 1E 13 01 00 00 00 01`.
 
-### 5.11 Group information (device colour-palette slots)
+### 5.11 Group information (device color-palette slots)
 
 Payload = concatenation of records. **Register** record (control `02`):
 

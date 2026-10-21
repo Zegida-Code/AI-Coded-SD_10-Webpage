@@ -65,7 +65,7 @@ export class IccProfile {
     if (this.colorSpace !== 'CMYK') throw new IccError(`This is a ${this.colorSpace} profile – a CMYK output profile is needed`);
     if (this.pcs !== 'Lab' && this.pcs !== 'XYZ') throw new IccError(`Unsupported PCS "${this.pcs}"`);
     const tag = ['B2A0', 'B2A1', 'B2A2'].find((t) => this.tags[t]);
-    if (!tag) throw new IccError('The profile has no BToA (output) table, so it cannot convert colours to CMYK');
+    if (!tag) throw new IccError('The profile has no BToA (output) table, so it cannot convert colors to CMYK');
     const lut = this.lut(tag);
     if (lut.inCh !== 3 || lut.outCh !== 4) throw new IccError(`Unexpected ${tag} table (${lut.inCh} → ${lut.outCh} channels)`);
     this.fromLab([50, 0, 0], 0); // smoke-run the whole pipeline
@@ -250,8 +250,8 @@ export class IccProfile {
   }
 
   /**
-   * Gamut check: Lab -> device -> Lab through the colorimetric tables. Returns the closest colour this printer can
-   * reproduce and how far it is from the requested one (ΔE00; profiles round-trip in-gamut colours to about 1).
+   * Gamut check: Lab -> device -> Lab through the colorimetric tables. Returns the closest color this printer can
+   * reproduce and how far it is from the requested one (ΔE00; profiles round-trip in-gamut colors to about 1).
    */
   gamut(lab) {
     const closest = this.toLab(this._toDevice(lab, 2), 2);
@@ -262,7 +262,7 @@ export class IccProfile {
   validatePrinter() {
     if (this.pcs !== 'Lab' && this.pcs !== 'XYZ') throw new IccError(`Unsupported PCS "${this.pcs}"`);
     if (!['B2A0', 'B2A1', 'B2A2'].some((t) => this.tags[t])) throw new IccError('The profile has no BToA (output) table – a printer / media output profile is needed');
-    if (!['A2B0', 'A2B1', 'A2B2'].some((t) => this.tags[t])) throw new IccError('The profile has no AToB table, so it cannot predict printed colours');
+    if (!['A2B0', 'A2B1', 'A2B2'].some((t) => this.tags[t])) throw new IccError('The profile has no AToB table, so it cannot predict printed colors');
     const g = this.gamut([50, 0, 0]);
     if (!g.closest.every(Number.isFinite)) throw new IccError('The profile could not be evaluated');
   }
@@ -305,7 +305,7 @@ function mat3(m, x) {
 
 /**
  * Trilinear interpolation in a 3-D CLUT (per-dimension grid sizes). Compared with the app's own CMM
- * (libepcmm, emulated) on 12 reference colours this is the closest of trilinear/tetrahedral (mean 0.15,
+ * (libepcmm, emulated) on 12 reference colors this is the closest of trilinear/tetrahedral (mean 0.15,
  * max 0.42 percentage points; the native engine resamples the profile into its own internal LUT, so an
  * exact match is not possible from the profile alone).
  */

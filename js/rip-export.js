@@ -1,18 +1,18 @@
-// Spot colour library files for RIP software, so the named colours of a test sheet (or of the final match) can be
+// Spot color library files for RIP software, so the named colors of a test sheet (or of the final match) can be
 // imported into the RIP. One exporter per format; more can be added as sample library files become available.
-// colours: [{ name, lab: [L, a, b] }] – CIE L*a*b* D50 / 2°.
+// colors: [{ name, lab: [L, a, b] }] – CIE L*a*b* D50 / 2°.
 import { spectrumToLab } from './color.js';
 
 const xmlEsc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
 
 const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi);
-/** Colour book id for a library: stable per name, kept clear of the stock Photoshop books (3000+). */
+/** Color book id for a library: stable per name, kept clear of the stock Photoshop books (3000+). */
 const bookId = (name) => 4000 + ([...String(name)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % 20000);
 
 export const RIP_EXPORTS = {
-  // CxF3 (ISO 17972-1, X-Rite Color Exchange Format) – the open standard for named colour libraries, imported by
-  // many RIPs. Written exactly the way CadLink Digital Factory exports its spot colour libraries (UTF-8 with BOM, CRLF,
-  // cc: prefixed core schema, one object per colour with its CIELab value, one shared D50/2° specification), so RIPs
+  // CxF3 (ISO 17972-1, X-Rite Color Exchange Format) – the open standard for named color libraries, imported by
+  // many RIPs. Written exactly the way CadLink Digital Factory exports its spot color libraries (UTF-8 with BOM, CRLF,
+  // cc: prefixed core schema, one object per color with its CIELab value, one shared D50/2° specification), so RIPs
   // that read Digital Factory's files read these too. Digital Factory also states its measuring device (XRGA, UV
   // excluded); that is left out, since the values here are not tied to that device. Library name and description
   // have no place in this form and are not written.
@@ -20,9 +20,9 @@ export const RIP_EXPORTS = {
     label: 'CxF3',
     ext: 'cxf',
     mime: 'application/xml',
-    build({ colours }) {
+    build({ colors }) {
       const num = (v) => String(Math.round(v * 100) / 100 + 0); // 42, 26.4, -31.65 (never "-0")
-      const objects = colours.map(({ name, lab }, i) => [
+      const objects = colors.map(({ name, lab }, i) => [
         `      <cc:Object ObjectType="Standard" Name="${xmlEsc(name)}" Id="EXC_${i + 1}">`,
         '        <cc:ColorValues>',
         '          <cc:ColorCIELab ColorSpecification="CS0">',
@@ -66,9 +66,9 @@ export const RIP_EXPORTS = {
     },
   },
 
-  // Adobe Color Book (Photoshop "Color Books"; also read by RIPs that import Adobe colour book libraries).
+  // Adobe Color Book (Photoshop "Color Books"; also read by RIPs that import Adobe color book libraries).
   // Binary, big-endian: '8BCB', version 1, book id, 4 UTF-16 strings (uint32 length in characters, no terminator),
-  // colour count, page size, page key, colour model (7 = Lab), then per colour: name, 6-character ASCII code and
+  // color count, page size, page key, color model (7 = Lab), then per color: name, 6-character ASCII code and
   // 3 bytes L*·255/100, a*+128, b*+128; trailer 'spflspot'. Layout as in the @atesgoral/acb encoder (ISC).
   // Lab is stored with 8 bits per channel: L* in steps of 100/255, a*/b* in whole numbers – see quantize().
   acb: {
@@ -77,7 +77,7 @@ export const RIP_EXPORTS = {
     mime: 'application/octet-stream',
     precision: 'L* in steps of 0.4 and a*/b* as whole numbers',
     quantize: ([L, a, b]) => [Math.round((clamp(L, 0, 100) * 255) / 100) * 100 / 255, Math.round(clamp(a, -128, 127)), Math.round(clamp(b, -128, 127))],
-    build({ library, colours, description = '', id = bookId(library) }) {
+    build({ library, colors, description = '', id = bookId(library) }) {
       const out = [];
       const u16 = (v) => out.push((v >> 8) & 0xff, v & 0xff);
       const str = (s) => {
@@ -88,8 +88,8 @@ export const RIP_EXPORTS = {
       const ascii = (s) => { for (const c of s) out.push(c.charCodeAt(0) & 0x7f); };
       ascii('8BCB'); u16(1); u16(id);
       str(library); str(''); str(''); str(description);
-      u16(colours.length); u16(Math.max(1, Math.min(9, colours.length))); u16(1); u16(7);
-      colours.forEach(({ name, lab }, i) => {
+      u16(colors.length); u16(Math.max(1, Math.min(9, colors.length))); u16(1); u16(7);
+      colors.forEach(({ name, lab }, i) => {
         str(name);
         ascii(`SD${String(i + 1).padStart(4, '0')}`);
         out.push(Math.round((clamp(lab[0], 0, 100) * 255) / 100), Math.round(clamp(lab[1], -128, 127)) + 128, Math.round(clamp(lab[2], -128, 127)) + 128);
@@ -99,9 +99,9 @@ export const RIP_EXPORTS = {
     },
   },
 
-  // Epson Edge Print colour collection (.epcc) – format taken from collections exported by Edge Print: UTF-16LE text
-  // with a BOM and CRLF lines: 'EpsonEdgePrint', '200', '0', collection name, colour count, then one line per colour
-  // '0,<name length>,<name>,<colour type>,<value count>,<values ;-separated>' – type 0 = L*a*b* (3 values),
+  // Epson Edge Print color collection (.epcc) – format taken from collections exported by Edge Print: UTF-16LE text
+  // with a BOM and CRLF lines: 'EpsonEdgePrint', '200', '0', collection name, color count, then one line per color
+  // '0,<name length>,<name>,<color type>,<value count>,<values ;-separated>' – type 0 = L*a*b* (3 values),
   // type 1 = CMYK (4 values). Values are written with at most one decimal, as Edge Print does.
   epcc: {
     label: 'Edge Print',
@@ -109,10 +109,10 @@ export const RIP_EXPORTS = {
     mime: 'application/octet-stream',
     precision: 'values with one decimal',
     quantize: (lab) => lab.map((v) => Math.round(v * 10) / 10),
-    build({ library, colours }) {
+    build({ library, colors }) {
       const num = (v) => String(Math.round(v * 10) / 10 + 0); // 42, 15.4 (and never "-0")
-      const lines = ['EpsonEdgePrint', '200', '0', String(library), String(colours.length),
-        ...colours.map(({ name, lab }) => `0,${String(name).length},${name},0,3,${lab.map(num).join(';')}`)];
+      const lines = ['EpsonEdgePrint', '200', '0', String(library), String(colors.length),
+        ...colors.map(({ name, lab }) => `0,${String(name).length},${name},0,3,${lab.map(num).join(';')}`)];
       const text = lines.map((l) => `${l}\r\n`).join('');
       const out = new Uint8Array(2 + text.length * 2);
       out[0] = 0xff; out[1] = 0xfe;
@@ -126,8 +126,8 @@ export const RIP_EXPORTS = {
     label: 'VersaWorks .spot',
     ext: 'spot',
     mime: 'application/xml',
-    build({ library, colours }) {
-      const items = colours.map(({ name, lab }) =>
+    build({ library, colors }) {
+      const items = colors.map(({ name, lab }) =>
         `<Lab16SpotColor name="${xmlEsc(name)}" flags="0" redirectLibraryName="" redirectColorName="">` +
         `<L VALUE="${lab[0].toFixed(2)}"/><a VALUE="${lab[1].toFixed(2)}"/><b VALUE="${lab[2].toFixed(2)}"/></Lab16SpotColor>`).join('');
       return '<?xml version="1.0" encoding="UTF-8"?>\n<SpotColorLibraryList strVersion="4.3.0.0">' +
@@ -139,9 +139,9 @@ export const RIP_EXPORTS = {
 
 // ---------------------------------------------------------------- import
 /**
- * Read a spot colour library file (CxF3 .cxf, Adobe Color Book .acb, Edge Print .epcc, VersaWorks .spot) into
- * { format, library, colours: [{ name, lab }], skipped: [names] } with Lab D50 / 2°.
- * Colours without usable D50/2° data are reported in `skipped`.
+ * Read a spot color library file (CxF3 .cxf, Adobe Color Book .acb, Edge Print .epcc, VersaWorks .spot) into
+ * { format, library, colors: [{ name, lab }], skipped: [names] } with Lab D50 / 2°.
+ * Colors without usable D50/2° data are reported in `skipped`.
  */
 export function readLibrary(bytes, fileName = '') {
   const notALibrary = (why = '') => new Error(`${fileName || 'The file'} is not a CxF, Adobe Color Book, Edge Print or VersaWorks library${why}`);
@@ -170,16 +170,16 @@ const num = (el, name) => parseFloat(child(el, name)?.textContent);
 
 function readVersaWorks(doc) {
   const libs = byLocal(doc, 'LabSpotColorLibrary');
-  const colours = byLocal(doc, 'Lab16SpotColor').map((c) => ({
+  const colors = byLocal(doc, 'Lab16SpotColor').map((c) => ({
     name: c.getAttribute('name') ?? '',
     lab: ['L', 'a', 'b'].map((k) => parseFloat(child(c, k)?.getAttribute('VALUE'))),
   }));
-  const ok = colours.filter((c) => c.name && c.lab.every(Number.isFinite));
-  return { format: 'versaworks', library: libs[0]?.getAttribute('name') ?? '', colours: ok, skipped: colours.filter((c) => !ok.includes(c)).map((c) => c.name || '(unnamed)') };
+  const ok = colors.filter((c) => c.name && c.lab.every(Number.isFinite));
+  return { format: 'versaworks', library: libs[0]?.getAttribute('name') ?? '', colors: ok, skipped: colors.filter((c) => !ok.includes(c)).map((c) => c.name || '(unnamed)') };
 }
 
 function readCxf(doc) {
-  // colour specifications: id -> { illuminant, observer, start, increment }
+  // color specifications: id -> { illuminant, observer, start, increment }
   const specs = {};
   for (const s of byLocal(doc, 'ColorSpecification')) {
     const tri = child(s, 'TristimulusSpec');
@@ -192,7 +192,7 @@ function readCxf(doc) {
     };
   }
   const isD50 = (sp) => !sp || ((!sp.illuminant || /^D50$/i.test(sp.illuminant)) && (!sp.observer || /^2/.test(sp.observer)));
-  const colours = [], skipped = [];
+  const colors = [], skipped = [];
   for (const o of byLocal(doc, 'Object')) {
     const name = o.getAttribute('Name') ?? '';
     const values = child(o, 'ColorValues');
@@ -223,17 +223,17 @@ function readCxf(doc) {
         }
       }
     }
-    if (name && lab) colours.push({ name, lab }); else skipped.push(name || '(unnamed)');
+    if (name && lab) colors.push({ name, lab }); else skipped.push(name || '(unnamed)');
   }
   const info = byLocal(doc, 'FileInformation')[0];
   const library = (info && child(info, 'Description')?.textContent.split(' – ')[0].trim()) || '';
-  return { format: 'cxf', library, colours, skipped };
+  return { format: 'cxf', library, colors, skipped };
 }
 
 function readEpcc(text) {
   const lines = text.split(/\r?\n/);
   const library = lines[3] ?? '';
-  const colours = [], skipped = [];
+  const colors = [], skipped = [];
   for (const line of lines.slice(5)) {
     if (!line.trim()) continue;
     // 0,<name length>,<name>,<type>,<count>,<values>  – the length lets names contain commas
@@ -242,10 +242,10 @@ function readEpcc(text) {
     const start = m[0].length, name = line.substr(start, +m[2]);
     const [type, count, values] = line.slice(start + name.length + 1).split(',');
     const v = (values ?? '').split(';').map(Number);
-    if (type === '0' && count === '3' && v.length === 3 && v.every(Number.isFinite)) colours.push({ name, lab: v });
+    if (type === '0' && count === '3' && v.length === 3 && v.every(Number.isFinite)) colors.push({ name, lab: v });
     else skipped.push(name);
   }
-  return { format: 'epcc', library, colours, skipped };
+  return { format: 'epcc', library, colors, skipped };
 }
 
 function readAcb(bytes) {
@@ -260,11 +260,11 @@ function readAcb(bytes) {
   const count = u16(); u16(); u16();
   const model = u16();
   if (model !== 7) throw new Error('Only L*a*b* Adobe Color Books can be imported (this one is ' + ({ 0: 'RGB', 2: 'CMYK' }[model] ?? `model ${model}`) + ')');
-  const colours = [];
+  const colors = [];
   for (let i = 0; i < count; i++) {
     const name = str(); p += 6; // 6-character code
     const [L, a, b] = [bytes[p], bytes[p + 1], bytes[p + 2]]; p += 3;
-    if (name) colours.push({ name: `${prefix}${name}${postfix}`.replace(/^\$\$\$\/[^=]*=/, ''), lab: [(L * 100) / 255, a - 128, b - 128] });
+    if (name) colors.push({ name: `${prefix}${name}${postfix}`.replace(/^\$\$\$\/[^=]*=/, ''), lab: [(L * 100) / 255, a - 128, b - 128] });
   }
-  return { format: 'acb', library, colours, skipped: [] };
+  return { format: 'acb', library, colors, skipped: [] };
 }

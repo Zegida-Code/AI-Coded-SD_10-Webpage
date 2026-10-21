@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <link rel="stylesheet" href="css/app.css?v=2026-10-20.46f7796-194217">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-20.06bc5ee-195835">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -17,14 +17,14 @@
         </div>
       </div>
       <!-- View switcher (desktop / tablet only – Print match needs files and RIP software, so phones get the Console):
-           the views share the same device connection; Colour space shows a measured colour space in 3-D -->
+           the views share the same device connection; Color space shows a measured color space in 3-D -->
       <nav class="seg-group hidden md:inline-flex md:ml-3" aria-label="Views">
         <button type="button" class="seg" data-view="console" aria-current="page">
           <svg class="hidden lg:block h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M3 4.75A1.75 1.75 0 0 1 4.75 3h10.5A1.75 1.75 0 0 1 17 4.75v7.5A1.75 1.75 0 0 1 15.25 14H11.5v1.5h2a.75.75 0 0 1 0 1.5h-7a.75.75 0 0 1 0-1.5h2V14H4.75A1.75 1.75 0 0 1 3 12.25v-7.5Z"/></svg>Console</button>
         <button type="button" class="seg" data-view="match">
           <svg class="hidden lg:block h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5 2.75A.75.75 0 0 1 5.75 2h8.5a.75.75 0 0 1 .75.75V6h.25A2.75 2.75 0 0 1 18 8.75v4.5A1.75 1.75 0 0 1 16.25 15H15v2.25a.75.75 0 0 1-.75.75h-8.5a.75.75 0 0 1-.75-.75V15H3.75A1.75 1.75 0 0 1 2 13.25v-4.5A2.75 2.75 0 0 1 4.75 6H5V2.75ZM13.5 6V3.5h-7V6h7Zm-7 7v3.5h7V13h-7Z" clip-rule="evenodd"/></svg>Print match</button>
         <button type="button" class="seg" data-view="space">
-          <svg class="hidden lg:block h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10.4 1.6a.75.75 0 0 0-.8 0l-6.75 4A.75.75 0 0 0 2.5 6.25v7.5c0 .27.14.51.37.65l6.75 4a.75.75 0 0 0 .76 0l6.75-4a.75.75 0 0 0 .37-.65v-7.5a.75.75 0 0 0-.37-.65l-6.75-4ZM10 3.12l5.27 3.13L10 9.38 4.73 6.25 10 3.12ZM4 7.57l5.25 3.11v5.83L4 13.4V7.57Zm6.75 8.94v-5.83L16 7.57v5.83l-5.25 3.11Z"/></svg>Colour space</button>
+          <svg class="hidden lg:block h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10.4 1.6a.75.75 0 0 0-.8 0l-6.75 4A.75.75 0 0 0 2.5 6.25v7.5c0 .27.14.51.37.65l6.75 4a.75.75 0 0 0 .76 0l6.75-4a.75.75 0 0 0 .37-.65v-7.5a.75.75 0 0 0-.37-.65l-6.75-4ZM10 3.12l5.27 3.13L10 9.38 4.73 6.25 10 3.12ZM4 7.57l5.25 3.11v5.83L4 13.4V7.57Zm6.75 8.94v-5.83L16 7.57v5.83l-5.25 3.11Z"/></svg>Color space</button>
       </nav>
       <div class="hidden md:block flex-1"></div>
       <span id="connPill" class="chip max-w-[45%] truncate bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300">● Disconnected</span>
@@ -131,12 +131,12 @@
           <button id="btnReadGroups" class="btn btn-ghost" disabled>Read</button>
         </div>
         <ul id="groupList" class="space-y-2 text-sm"></ul>
-        <p class="text-xs text-slate-500 mt-3">To write a palette: tick colours in History, choose a slot and name, then write. Uses the current measurement settings.</p>
+        <p class="text-xs text-slate-500 mt-3">To write a palette: tick colors in History, choose a slot and name, then write. Uses the current measurement settings.</p>
         <div class="grid grid-cols-3 gap-2 mt-2">
           <select id="groupSlot" class="input"><option value="1">Slot 1</option><option value="2">Slot 2</option><option value="3">Slot 3</option><option value="4">Slot 4</option></select>
           <input id="groupName" class="input col-span-2" placeholder="Palette name" maxlength="42">
         </div>
-        <button id="btnWriteGroup" class="btn btn-ghost w-full mt-2" disabled>Write ticked colours to slot</button>
+        <button id="btnWriteGroup" class="btn btn-ghost w-full mt-2" disabled>Write ticked colors to slot</button>
       </div>
     </section>
 
@@ -230,7 +230,7 @@
         <div class="overflow-x-auto max-h-96 overflow-y-auto">
           <table class="w-full text-sm">
             <thead class="text-xs text-slate-500 sticky top-0 bg-white dark:bg-slate-900">
-              <tr><th class="w-6"></th><th class="text-left py-1">Colour</th><th class="text-left">L*</th><th class="text-left">a*</th><th class="text-left">b*</th><th class="text-left hidden sm:table-cell">HEX</th><th class="text-left hidden md:table-cell">When</th><th></th></tr>
+              <tr><th class="w-6"></th><th class="text-left py-1">Color</th><th class="text-left">L*</th><th class="text-left">a*</th><th class="text-left">b*</th><th class="text-left hidden sm:table-cell">HEX</th><th class="text-left hidden md:table-cell">When</th><th></th></tr>
             </thead>
             <tbody id="histBody"></tbody>
           </table>
@@ -266,33 +266,33 @@
   <main id="viewMatch" class="hidden max-w-7xl mx-auto px-3 sm:px-4 py-4">
     <div class="mb-4">
       <h2 class="font-semibold">Print match</h2>
-      <p class="text-sm text-slate-500 mt-1 max-w-4xl">Match a reference colour on your printer: scan it, print a test sheet and scan the patches – repeat
+      <p class="text-sm text-slate-500 mt-1 max-w-4xl">Match a reference color on your printer: scan it, print a test sheet and scan the patches – repeat
         with finer sheets until it is within tolerance.</p>
     </div>
 
-    <!-- Two columns on wide screens: the colour list, settings and tips at the left, the selected colour's workflow and the tools at the right.
-         On narrower screens everything stacks: colours, settings, tips, then the workflow (reference, sheet, scan, result, library, colour space). -->
+    <!-- Two columns on wide screens: the color list, settings and tips at the left, the selected color's workflow and the tools at the right.
+         On narrower screens everything stacks: colors, settings, tips, then the workflow (reference, sheet, scan, result, library, color space). -->
     <div class="grid gap-4 lg:grid-cols-[minmax(0,22rem),minmax(0,1fr)] xl:grid-cols-[minmax(0,24rem),minmax(0,1fr)] items-start">
 
-      <!-- left column: the colours, the settings shared by all colours, and the tips -->
+      <!-- left column: the colors, the settings shared by all colors, and the tips -->
       <div class="flex flex-col gap-4 min-w-0">
-      <!-- colours: pick the one to work on -->
+      <!-- colors: pick the one to work on -->
       <div class="card space-y-3">
         <div class="flex items-center justify-between gap-2">
-          <h3 class="font-semibold">Colours <span id="mColourCount" class="text-sm font-normal text-slate-500"></span></h3>
-          <button id="btnColourAdd" class="btn btn-ghost" title="Match another colour – each has its own sheets, scan and result; select one to work on it">+ Add colour</button>
+          <h3 class="font-semibold">Colors <span id="mColorCount" class="text-sm font-normal text-slate-500"></span></h3>
+          <button id="btnColorAdd" class="btn btn-ghost" title="Match another color – each has its own sheets, scan and result; select one to work on it">+ Add color</button>
         </div>
-        <ul id="mColourList" class="space-y-1.5"></ul>
+        <ul id="mColorList" class="space-y-1.5"></ul>
       </div>
 
-      <!-- settings shared by all colours: the sheet at the top; measuring and matching folded away (open state remembered),
+      <!-- settings shared by all colors: the sheet at the top; measuring and matching folded away (open state remembered),
            its summary line showing the current values -->
       <div class="card space-y-3">
         <h3 class="font-semibold">Settings</h3>
         <div class="grid grid-cols-2 gap-3">
           <div class="col-span-2"><label class="label" for="mMode">Sheet type</label>
             <select id="mMode" class="input">
-              <option value="spot">Spot colours (RIP, L*a*b*)</option>
+              <option value="spot">Spot colors (RIP, L*a*b*)</option>
               <option value="lab">L*a*b* objects</option>
               <option value="cmyk">CMYK numbers</option>
               <option value="rgb">RGB image (raster workflows)</option>
@@ -346,15 +346,15 @@
       </details>
       </div>
 
-      <!-- the selected colour's workflow -->
+      <!-- the selected color's workflow -->
       <div class="flex flex-col gap-4 min-w-0">
         <!-- 1. reference -->
         <div id="mRefCard" class="card space-y-3">
           <h3 class="font-semibold"><span class="text-indigo-500">1.</span> Reference</h3>
-          <div id="mColourEditor" class="flex flex-wrap gap-3 items-stretch">
+          <div id="mColorEditor" class="flex flex-wrap gap-3 items-stretch">
             <div id="mTargetSwatch" class="h-24 w-full sm:w-32 rounded-xl ring-1 ring-black/10 dark:ring-white/10 bg-slate-200 dark:bg-slate-800"></div>
             <div class="flex-1 min-w-[14rem] space-y-2">
-              <div id="mSpotNameWrap"><label class="label" for="mSpotName">Colour / spot colour name <span id="mStatusTarget" class="font-normal text-slate-500"></span></label>
+              <div id="mSpotNameWrap"><label class="label" for="mSpotName">Color / spot color name <span id="mStatusTarget" class="font-normal text-slate-500"></span></label>
                 <input id="mSpotName" class="input" type="text" maxlength="60" placeholder="e.g. Brand Red – exactly as named in your artwork and the RIP" autocomplete="off"></div>
               <div class="grid grid-cols-3 gap-2">
                 <div><label class="label" for="mL">L*</label><input id="mL" class="input font-mono" type="number" step="0.01" min="0" max="100"></div>
@@ -368,7 +368,7 @@
               <p id="mGamut" class="text-xs"></p>
             </div>
           </div>
-          <!-- what the colour space predicts for the reference -->
+          <!-- what the color space predicts for the reference -->
           <div id="mSpacePred" class="hidden rounded-xl border border-slate-200 dark:border-slate-800 p-3 space-y-2"></div>
         </div>
 
@@ -379,11 +379,11 @@
               <h3 class="font-semibold"><span class="text-indigo-500">2.</span> Test sheet <span id="mRoundLabel" class="text-sm font-normal text-slate-500"></span></h3>
               <button id="btnMatchSheet" class="btn btn-primary" disabled>Create sheet</button>
             </div>
-            <div id="mSheetInfo" class="flex-1 flex flex-col text-sm text-slate-500">Set a reference colour first.</div>
+            <div id="mSheetInfo" class="flex-1 flex flex-col text-sm text-slate-500">Set a reference color first.</div>
             <div id="mSheetActions" class="hidden mt-auto flex flex-wrap items-center gap-2">
               <button id="btnMatchPdf" class="btn btn-primary">Download PDF</button>
               <button id="btnMatchRipSheet" class="btn btn-ghost hidden">Sheet library</button>
-              <button id="btnMatchRestart" class="ml-auto px-1 py-2 text-sm text-rose-600 hover:underline dark:text-rose-400" title="Discard this colour's sheets and measurements (its reference is kept)">Start over</button>
+              <button id="btnMatchRestart" class="ml-auto px-1 py-2 text-sm text-rose-600 hover:underline dark:text-rose-400" title="Discard this color's sheets and measurements (its reference is kept)">Start over</button>
             </div>
           </div>
 
@@ -410,47 +410,47 @@
           <div id="mResult" class="space-y-4"></div>
         </div>
 
-        <!-- the tools beside the workflow, side by side on wide screens: the spot library and the colour space -->
+        <!-- the tools beside the workflow, side by side on wide screens: the spot library and the color space -->
         <div class="grid gap-4 xl:grid-cols-2">
-        <!-- spot library: matched colours collected across jobs, exported together as one library file -->
+        <!-- spot library: matched colors collected across jobs, exported together as one library file -->
         <div id="mLibraryCard" class="card min-w-0 space-y-3">
           <h3 class="font-semibold">Spot library <span id="mLibCount" class="text-sm font-normal text-slate-500"></span></h3>
-          <p class="text-xs text-slate-500">Your named colours, downloaded together as one library file for the RIP (format under Settings). Kept in this browser.</p>
+          <p class="text-xs text-slate-500">Your named colors, downloaded together as one library file for the RIP (format under Settings). Kept in this browser.</p>
           <div id="mLibList"></div>
           <p id="mLibNote" class="text-xs text-slate-500"></p>
           <div class="flex flex-wrap items-center gap-2">
             <button id="btnLibDownload" class="btn btn-ghost" disabled>Download library</button>
-            <button id="btnLibImport" class="btn btn-ghost" title="Add the colours of a CxF (.cxf), Adobe Color Book (.acb), Epson Edge Print (.epcc) or VersaWorks (.spot) library – or drop the file anywhere on this page">Import…</button>
+            <button id="btnLibImport" class="btn btn-ghost" title="Add the colors of a CxF (.cxf), Adobe Color Book (.acb), Epson Edge Print (.epcc) or VersaWorks (.spot) library – or drop the file anywhere on this page">Import…</button>
             <input id="libFile" type="file" accept=".cxf,.acb,.spot,.epcc,.xml" class="hidden">
           </div>
-          <!-- add a colour by hand (or from the last measurement), rename the library – folded away -->
+          <!-- add a color by hand (or from the last measurement), rename the library – folded away -->
           <details id="mLibEdit" class="border-t border-slate-200 pt-3 dark:border-slate-800">
-            <summary class="cursor-pointer text-sm font-medium">Add a colour · library name · clear</summary>
+            <summary class="cursor-pointer text-sm font-medium">Add a color · library name · clear</summary>
             <div class="mt-3 space-y-3">
           <div class="max-w-sm"><label class="label" for="mLibName">Library name</label>
             <input id="mLibName" class="input" type="text" maxlength="60" autocomplete="off"></div>
           <form id="libAddForm" class="grid grid-cols-[minmax(0,2fr),repeat(3,minmax(0,1fr))] xl:grid-cols-[minmax(0,2fr),repeat(3,minmax(0,1fr)),auto,auto] gap-2 items-end">
-            <div><label class="label" for="libNewName">Add colour – name</label><input id="libNewName" class="input" type="text" maxlength="60" autocomplete="off" placeholder="Spot colour name"></div>
+            <div><label class="label" for="libNewName">Add color – name</label><input id="libNewName" class="input" type="text" maxlength="60" autocomplete="off" placeholder="Spot color name"></div>
             <div><label class="label" for="libNewL">L*</label><input id="libNewL" class="input font-mono" type="number" step="0.01" min="0" max="100"></div>
             <div><label class="label" for="libNewA">a*</label><input id="libNewA" class="input font-mono" type="number" step="0.01" min="-128" max="127"></div>
             <div><label class="label" for="libNewB">b*</label><input id="libNewB" class="input font-mono" type="number" step="0.01" min="-128" max="127"></div>
             <button id="btnLibAdd" type="submit" class="btn btn-primary col-span-2 xl:col-span-1">Add</button>
             <button id="btnLibFromLast" type="button" class="btn btn-ghost col-span-2 xl:col-span-1" title="Fill L*a*b* from the last measurement (D50 / 2°)">Use last measurement</button>
           </form>
-          <button id="btnLibClear" class="px-1 py-1 text-sm text-rose-600 hover:underline disabled:opacity-40 disabled:no-underline dark:text-rose-400" disabled title="Remove every colour from the spot library">Clear the library</button>
+          <button id="btnLibClear" class="px-1 py-1 text-sm text-rose-600 hover:underline disabled:opacity-40 disabled:no-underline dark:text-rose-400" disabled title="Remove every color from the spot library">Clear the library</button>
             </div>
           </details>
         </div>
 
-        <!-- colour space: a measured map of what the printer really prints – predicts values straight away, learns from every sheet -->
+        <!-- color space: a measured map of what the printer really prints – predicts values straight away, learns from every sheet -->
         <div id="mSpaceCard" class="card min-w-0 space-y-3">
           <div class="flex items-center justify-between gap-2">
-            <h3 class="font-semibold">Colour space</h3>
-            <button id="btnSpaceNew" type="button" class="btn btn-ghost" title="Start a new colour space for this printer, ink, media and settings">+ New</button>
+            <h3 class="font-semibold">Color space</h3>
+            <button id="btnSpaceNew" type="button" class="btn btn-ghost" title="Start a new color space for this printer, ink, media and settings">+ New</button>
           </div>
           <div class="flex gap-2">
-            <select id="mSpace" class="input min-w-0" aria-label="Colour space in use"><option value="">None</option></select>
-            <button id="btnSpaceImport" type="button" class="btn btn-ghost" title="Import a saved colour space (.json) or a CGATS / IT8 measurement file (.txt, .ti3) – or drop the file anywhere on this page">Import…</button>
+            <select id="mSpace" class="input min-w-0" aria-label="Color space in use"><option value="">None</option></select>
+            <button id="btnSpaceImport" type="button" class="btn btn-ghost" title="Import a saved color space (.json) or a CGATS / IT8 measurement file (.txt, .ti3) – or drop the file anywhere on this page">Import…</button>
             <input id="spaceFile" type="file" accept=".json,.txt,.cgats,.cgt,.it8,.ti3" class="hidden">
           </div>
           <div id="mSpaceInfo" class="space-y-2 text-xs text-slate-500"></div>
@@ -460,12 +460,12 @@
             <button id="btnSpaceChart" type="button" class="btn btn-ghost">Create chart</button>
           </div>
           <label class="flex items-center gap-2 text-sm"><input id="mSpaceLearn" type="checkbox" class="h-4 w-4"> Learn from every test sheet I scan</label>
-          <!-- what the colour space holds, and its files – folded away -->
+          <!-- what the color space holds, and its files – folded away -->
           <details id="mSpaceData" class="hidden border-t border-slate-200 pt-3 text-xs dark:border-slate-800">
             <summary class="cursor-pointer text-sm font-medium">Data &amp; files</summary>
             <ul id="mSpaceSessions" class="mt-2 space-y-1"></ul>
             <div id="mSpaceActions" class="mt-3 flex flex-wrap items-center gap-2 hidden">
-              <button id="btnSpaceJson" type="button" class="btn btn-ghost" title="Save the colour space as a file to keep it, move it to another computer or share it">Export</button>
+              <button id="btnSpaceJson" type="button" class="btn btn-ghost" title="Save the color space as a file to keep it, move it to another computer or share it">Export</button>
               <button id="btnSpaceCgats" type="button" class="btn btn-ghost" title="The measurements as a CGATS text file (device values and measured L*a*b*), e.g. for profiling software">CGATS</button>
               <button id="btnSpaceRename" type="button" class="btn btn-ghost">Rename</button>
               <button id="btnSpaceDelete" type="button" class="ml-auto px-1 py-2 text-sm text-rose-600 hover:underline dark:text-rose-400">Delete</button>
@@ -478,20 +478,20 @@
     </div>
   </main>
 
-  <!-- ======================= Colour space view (3-D) ======================= -->
+  <!-- ======================= Color space view (3-D) ======================= -->
   <main id="viewSpace" class="hidden max-w-7xl mx-auto px-3 sm:px-4 py-4">
     <div class="mb-3 flex flex-wrap items-end gap-3">
       <div class="min-w-0 flex-1">
-        <h2 class="font-semibold">Colour space</h2>
-        <p class="text-sm text-slate-500 mt-1">The colours your printer really printed, measured in CIE L*a*b* – drag to turn, scroll to zoom, hover a patch for its values. Colour spaces are made and kept in Print match.</p>
+        <h2 class="font-semibold">Color space</h2>
+        <p class="text-sm text-slate-500 mt-1">The colors your printer really printed, measured in CIE L*a*b* – drag to turn, scroll to zoom, hover a patch for its values. Color spaces are made and kept in Print match.</p>
       </div>
-      <div class="w-56"><label class="label" for="vsSpace">Colour space</label><select id="vsSpace" class="input"></select></div>
+      <div class="w-56"><label class="label" for="vsSpace">Color space</label><select id="vsSpace" class="input"></select></div>
       <div class="w-56"><label class="label" for="vsCompare">Compare with</label><select id="vsCompare" class="input"></select></div>
     </div>
     <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr),17rem] items-start">
       <div class="card !p-0 overflow-hidden">
         <div class="relative w-full aspect-[4/3] max-h-[calc(100vh-13rem)] min-h-[440px]"><!-- as tall as the screen allows, but never taller than 4:3 – zoomed out, a full-height box would be a narrow column -->
-          <canvas id="vsCanvas" class="absolute inset-0 h-full w-full touch-none cursor-grab" aria-label="3-D view of the colour space"></canvas>
+          <canvas id="vsCanvas" class="absolute inset-0 h-full w-full touch-none cursor-grab" aria-label="3-D view of the color space"></canvas>
           <div id="vsTip" class="pointer-events-none absolute hidden max-w-xs rounded-md bg-slate-900/90 px-2 py-1.5 text-xs leading-5 text-white shadow"></div>
           <div id="vsEmpty" class="absolute inset-0 hidden grid place-items-center p-8 text-center text-sm text-slate-500"></div>
         </div>
@@ -501,14 +501,14 @@
           <h3 class="font-semibold">Show</h3>
           <label class="flex items-center gap-2"><input id="vs_surface" type="checkbox" class="h-4 w-4"> Gamut surface</label>
           <label class="flex items-center gap-2"><input id="vs_points" type="checkbox" class="h-4 w-4"> Measured patches</label>
-          <label class="flex items-center gap-2"><input id="vs_refs" type="checkbox" class="h-4 w-4"> Reference colours (Print match)</label>
+          <label class="flex items-center gap-2"><input id="vs_refs" type="checkbox" class="h-4 w-4"> Reference colors (Print match)</label>
           <label class="flex items-center gap-2"><input id="vs_spin" type="checkbox" class="h-4 w-4"> Turn slowly</label>
           <div class="flex flex-wrap gap-2 pt-1">
             <button id="vsTop" type="button" class="btn btn-ghost" title="Look down the L* axis: the a*b* diagram">From above</button>
             <button id="vsSide" type="button" class="btn btn-ghost" title="Lightness up, a* across">From the side</button>
             <button id="vsReset" type="button" class="btn btn-ghost" title="Back to the start view (or double-click the picture)">Reset</button>
           </div>
-          <button id="vsMeasure" type="button" class="btn btn-primary w-full" disabled title="Measure a colour with the SD-10 (or press its button) and see where it lies">Measure a colour</button>
+          <button id="vsMeasure" type="button" class="btn btn-primary w-full" disabled title="Measure a color with the SD-10 (or press its button) and see where it lies">Measure a color</button>
         </div>
         <div id="vsInfo" class="card space-y-2 text-sm"></div>
       </div>
@@ -526,26 +526,26 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-20.46f7796-194217",
-      "./js/transport.js": "./js/transport.js?v=2026-10-20.46f7796-194217",
-      "./js/mock.js": "./js/mock.js?v=2026-10-20.46f7796-194217",
-      "./js/session.js": "./js/session.js?v=2026-10-20.46f7796-194217",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-20.46f7796-194217",
-      "./js/color.js": "./js/color.js?v=2026-10-20.46f7796-194217",
-      "./js/weights.js": "./js/weights.js?v=2026-10-20.46f7796-194217",
-      "./js/storage.js": "./js/storage.js?v=2026-10-20.46f7796-194217",
-      "./js/icc.js": "./js/icc.js?v=2026-10-20.46f7796-194217",
-      "./js/match.js": "./js/match.js?v=2026-10-20.46f7796-194217",
-      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-20.46f7796-194217",
-      "./js/ui.js": "./js/ui.js?v=2026-10-20.46f7796-194217",
-      "./js/match-view.js": "./js/match-view.js?v=2026-10-20.46f7796-194217",
-      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-20.46f7796-194217",
-      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-20.46f7796-194217",
-      "./js/debug.js": "./js/debug.js?v=2026-10-20.46f7796-194217",
-      "./js/space-view.js": "./js/space-view.js?v=2026-10-20.46f7796-194217"
+      "./js/app.js": "./js/app.js?v=2026-10-20.06bc5ee-195835",
+      "./js/transport.js": "./js/transport.js?v=2026-10-20.06bc5ee-195835",
+      "./js/mock.js": "./js/mock.js?v=2026-10-20.06bc5ee-195835",
+      "./js/session.js": "./js/session.js?v=2026-10-20.06bc5ee-195835",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-20.06bc5ee-195835",
+      "./js/color.js": "./js/color.js?v=2026-10-20.06bc5ee-195835",
+      "./js/weights.js": "./js/weights.js?v=2026-10-20.06bc5ee-195835",
+      "./js/storage.js": "./js/storage.js?v=2026-10-20.06bc5ee-195835",
+      "./js/icc.js": "./js/icc.js?v=2026-10-20.06bc5ee-195835",
+      "./js/match.js": "./js/match.js?v=2026-10-20.06bc5ee-195835",
+      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-20.06bc5ee-195835",
+      "./js/ui.js": "./js/ui.js?v=2026-10-20.06bc5ee-195835",
+      "./js/match-view.js": "./js/match-view.js?v=2026-10-20.06bc5ee-195835",
+      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-20.06bc5ee-195835",
+      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-20.06bc5ee-195835",
+      "./js/debug.js": "./js/debug.js?v=2026-10-20.06bc5ee-195835",
+      "./js/space-view.js": "./js/space-view.js?v=2026-10-20.06bc5ee-195835"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-20.46f7796-194217"></script>
+  <script type="module" src="js/app.js?v=2026-10-20.06bc5ee-195835"></script>
 </body>
 </html>

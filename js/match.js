@@ -1,5 +1,5 @@
-// Print colour matching: patch-sheet design, local printer-response model, and solving for the
-// input values (Lab, CMYK or RGB) that reproduce a measured target colour on the user's printer.
+// Print color matching: patch-sheet design, local printer-response model, and solving for the
+// input values (Lab, CMYK or RGB) that reproduce a measured target color on the user's printer.
 //
 // Method (closed loop, per round):
 //   1. Patches = centre guess x0 + a design around it: 16 points (centre ×2, ±step on each axis, 8 corners)
@@ -13,7 +13,7 @@
 import { deltaE2000, deltaECMC, spectrumToLab } from './color.js';
 
 /**
- * Colour difference used to judge a match. lWeight scales lightness in the solver's least squares, so the
+ * Color difference used to judge a match. lWeight scales lightness in the solver's least squares, so the
  * textile formulas (which forgive lightness differences) also aim for hue and chroma first.
  */
 export const DE_FORMULAS = {
@@ -24,7 +24,7 @@ export const DE_FORMULAS = {
 const formulaOf = (key) => DE_FORMULAS[key] ?? DE_FORMULAS.de00;
 
 const LAB = { axes: ['L*', 'a*', 'b*'], min: [0, -127, -127], max: [100, 127, 127], step0: [5, 8, 8], minStep: [1, 1.5, 1.5], maxStep: [10, 16, 16], decimals: 2 };
-// spot: L*a*b* patches written as named spot colours (Separation, Lab alternate) – for RIPs with a named-colour
+// spot: L*a*b* patches written as named spot colors (Separation, Lab alternate) – for RIPs with a named-color
 // library. lab: plain CIE Lab objects. cmyk: DeviceCMYK numbers. rgb: an sRGB raster image (software that only accepts images).
 export const MODES = {
   spot: LAB,
@@ -33,13 +33,13 @@ export const MODES = {
   rgb: { axes: ['R', 'G', 'B'], min: [0, 0, 0], max: [255, 255, 255], step0: [14, 14, 14], minStep: [2, 2, 2], maxStep: [30, 30, 30], decimals: 0 },
 };
 /** Sheet types as the interface names them ("… patches", "… sheets"). */
-export const MODE_NAME = { spot: 'named spot colour', lab: 'L*a*b*', cmyk: 'CMYK', rgb: 'RGB' };
+export const MODE_NAME = { spot: 'named spot color', lab: 'L*a*b*', cmyk: 'CMYK', rgb: 'RGB' };
 
-/** Unique spot colour name of a sheet patch, e.g. SD10-K3P9-R2-07 (job id keeps old libraries from clashing). */
+/** Unique spot color name of a sheet patch, e.g. SD10-K3P9-R2-07 (job id keeps old libraries from clashing). */
 export const patchSpotName = (jobId, round, n) => `SD10-${jobId}-R${round}-${String(n).padStart(2, '0')}`;
 
 // ---------------------------------------------------------------- patch design
-/** Patches per colour: 'full' = 16 (centre ×2, ±step on each axis, 8 corners), 'compact' = 8 (no corners). */
+/** Patches per color: 'full' = 16 (centre ×2, ±step on each axis, 8 corners), 'compact' = 8 (no corners). */
 export const DESIGNS = { full: 16, compact: 8 };
 
 /**
@@ -168,7 +168,7 @@ export const trustRadius = (mode, step) => step.map((s, k) => Math.max(TRUST_STE
 
 /**
  * Analyse a measured round: model, recommendation, best patch, centre check.
- * `earlier`: the colour's previous rounds (with their measured patches and results), so the search remembers what
+ * `earlier`: the color's previous rounds (with their measured patches and results), so the search remembers what
  * already printed best.
  *
  * - The recommendation stays within trustRadius() of the centre: near a gamut edge the printer barely responds, and an
@@ -194,7 +194,7 @@ export function analyseRound(round, target, formula = 'de00', earlier = []) {
   const repeat = centres.length === 2 ? dE(centres[0].lab, centres[1].lab) : null;
   const noise = Math.max(0.5, repeat ?? 0.5); // differences below this are measurement / print variation
 
-  // every patch measured earlier for this colour (same sheet type) – the best of them is the bar to beat
+  // every patch measured earlier for this color (same sheet type) – the best of them is the bar to beat
   const history = earlier.filter((r) => r.mode === round.mode)
     .flatMap((r) => r.patches.filter((p) => p.lab).map((p) => ({ ...p, dE: dE(target, p.lab), round: r.round })));
   const bestEarlier = history.reduce((a, b) => (!a || b.dE < a.dE ? b : a), null);
@@ -245,7 +245,7 @@ export const CHECK_LIGHTS = [
 /**
  * How a match made under D50 holds up under other lights (2° observer), from the measured spectra.
  * For each light: dE = the difference you would see under it; mi = the metamerism index (CIE 15, additive correction:
- * the D50 difference is removed first), i.e. how much the two colours drift apart because their spectra differ.
+ * the D50 difference is removed first), i.e. how much the two colors drift apart because their spectra differ.
  */
 export function metamerism(refSpectrum, smpSpectrum, formula = 'de00') {
   const { fn: dE } = formulaOf(formula);
@@ -277,10 +277,10 @@ function fmtValues(mode, x, kFixed) {
 }
 
 const NOTES = {
-  spot: 'Patches are named spot colours (CIE L*a*b* D50 alternates). Print through the RIP exactly like the final job (spot colour handling, media, profile, intent). If you imported the spot library for this sheet into the RIP, enable it before printing.',
-  lab: 'Patch values are CIE L*a*b* (D50). Lab patches are converted by the RIP / printer colour management - use the same path for the final job.',
-  cmyk: 'Patch values are CMYK percentages (K fixed per colour). If your print dialog offers it, turn colour management off / preserve CMYK numbers - exactly as for the final job.',
-  rgb: 'Patch values are sRGB (0-255). Use the same software, colour settings, substrate and pre-treatment as the final job.',
+  spot: 'Patches are named spot colors (CIE L*a*b* D50 alternates). Print through the RIP exactly like the final job (spot color handling, media, profile, intent). If you imported the spot library for this sheet into the RIP, enable it before printing.',
+  lab: 'Patch values are CIE L*a*b* (D50). Lab patches are converted by the RIP / printer color management - use the same path for the final job.',
+  cmyk: 'Patch values are CMYK percentages (K fixed per color). If your print dialog offers it, turn color management off / preserve CMYK numbers - exactly as for the final job.',
+  rgb: 'Patch values are sRGB (0-255). Use the same software, color settings, substrate and pre-treatment as the final job.',
 };
 
 /** Width of the text column on wide, short media, where the sheet's text sits beside the patches instead of above. */
@@ -289,8 +289,8 @@ const SIDE_MM = 80;
 /**
  * Sheet layout in PDF points (origin bottom-left), shared by the PDF and the PNG.
  * opts: { mode, groups: [{ label, target, patches, kFixed }], round (sheet number), media: [w, h] mm | paper: key,
- *         patchMm, created, title }  – or a single colour as { patches, target, kFixed }.
- * Colours follow each other; each starts on a new row under a heading with its target, and the patches flow onto
+ *         patchMm, created, title }  – or a single color as { patches, target, kFixed }.
+ * Colors follow each other; each starts on a new row under a heading with its target, and the patches flow onto
  * further pages when the media is full. On wide, short media (wider than 1.5 × its height) the title, notes and footer
  * go into a column at the left and the patches use the full height beside it.
  * Returns { W, H, side (true when the text is in the side column), pages: [{ texts, boxes }] }.
@@ -341,7 +341,7 @@ export function sheetLayout(opts) {
   };
   /**
    * The compact text of the side column: a smaller title, the sheet line carrying the page number (no separate
-   * footer), the colour and its target when the sheet holds one colour, then the notes (first page only).
+   * footer), the color and its target when the sheet holds one color, then the notes (first page only).
    */
   const sideLines = (pageNo, width) => {
     const first = pageNo === 1;
@@ -357,7 +357,7 @@ export function sheetLayout(opts) {
   const PAGES = '\u0001'; // page count, filled in once the layout is done
 
   // Side column when the media is wide and short, still leaves room for 4+ patches per row, and the text fits.
-  // It takes the width that the longest colour's single row of patches leaves free (at least SIDE_MM), so the text
+  // It takes the width that the longest color's single row of patches leaves free (at least SIDE_MM), so the text
   // needs few lines and the sheet can be as short as one row of patches.
   const single = groups.length === 1;
   const sideGap = 6 * PT;
@@ -369,7 +369,7 @@ export function sheetLayout(opts) {
   const areaW = side ? usableW - sideW - sideGap : usableW;
   const cols = colsIn(areaW);
   const bottom = side ? margin : margin + footerH; // the side column carries the page number, else a footer line
-  const headInArea = !(side && single); // a single colour's heading is in the side column
+  const headInArea = !(side && single); // a single color's heading is in the side column
   const groupHeadH = headInArea ? headH : 0;
   if (cols < 1 || H - margin - bottom - (side ? 0 : 60) < groupHeadH + rowH) throw new Error(`The media is too small for ${patchMm} mm patches – choose smaller patches or larger media.`);
 
@@ -403,7 +403,7 @@ export function sheetLayout(opts) {
         rowTop = y; y -= rowH; col = 0;
       }
       const x = areaX + col * (size + gap);
-      const k = p.k ?? g.kFixed ?? 0; // a colour space chart varies K per patch
+      const k = p.k ?? g.kFixed ?? 0; // a color space chart varies K per patch
       page.boxes.push({ x, y: rowTop - size, size, patch: p, kFixed: k });
       if (detailed) {
         t(x, rowTop - size - 10, 8, `#${p.n}${p.offset?.every((v) => v === 0) ? ' (centre)' : ''}`, true);
@@ -448,8 +448,8 @@ const LAB_CS = '[/Lab << /WhitePoint [0.9642 1 0.8249] /Range [-128 127 -128 127
 
 /**
  * Build the printable sheet as a PDF (Uint8Array), one page per layout page. Patches are DeviceCMYK (mode 'cmyk'),
- * DeviceRGB (mode 'rgb'), a CIE Lab colour space with a D50 white point (mode 'lab'), or one Separation – a named
- * spot colour – per patch with that Lab colour as its alternate (mode 'spot', patch.name = spot name).
+ * DeviceRGB (mode 'rgb'), a CIE Lab color space with a D50 white point (mode 'lab'), or one Separation – a named
+ * spot color – per patch with that Lab color as its alternate (mode 'spot', patch.name = spot name).
  * Pure PDF 1.4, standard Helvetica fonts.
  */
 export function buildSheetPdf(opts) {
@@ -463,7 +463,7 @@ export function buildSheetPdf(opts) {
       if (mode === 'cmyk') out.push(`${f(p.x[0] / 100)} ${f(p.x[1] / 100)} ${f(p.x[2] / 100)} ${f(kFixed / 100)} k`);
       else if (mode === 'rgb') out.push(`${(p.x[0] / 255).toFixed(4)} ${(p.x[1] / 255).toFixed(4)} ${(p.x[2] / 255).toFixed(4)} rg`);
       else if (mode === 'spot') {
-        // tint 0 = paper (L* 100), tint 1 = the patch colour; the patch prints at 100 % tint
+        // tint 0 = paper (L* 100), tint 1 = the patch color; the patch prints at 100 % tint
         spaces.push(`/SP${p.n} [/Separation ${pdfName(p.name)} ${LAB_CS} << /FunctionType 2 /Domain [0 1] /C0 [100 0 0] /C1 [${p.x.map(f).join(' ')}] /N 1 >>]`);
         out.push(`/SP${p.n} cs 1 scn`);
       } else out.push(`/CS0 cs ${f(p.x[0])} ${f(p.x[1])} ${f(p.x[2])} sc`);
@@ -517,7 +517,7 @@ function pngChunk(type, data) {
 }
 
 /**
- * Tag a PNG as sRGB at `dpi`: drops colour/resolution chunks the encoder wrote (iCCP, sRGB, gAMA, cHRM, pHYs)
+ * Tag a PNG as sRGB at `dpi`: drops color/resolution chunks the encoder wrote (iCCP, sRGB, gAMA, cHRM, pHYs)
  * and inserts sRGB (perceptual) + pHYs right after IHDR.
  */
 export function tagPng(png, dpi = 300) {
@@ -555,7 +555,7 @@ export async function buildSheetPng(opts, dpi = 300) {
     const g = canvas.getContext('2d');
     g.fillStyle = '#ffffff'; g.fillRect(0, 0, canvas.width, canvas.height);
     for (const { x, y, size, patch: p } of boxes) {
-      // whole pixels, so a patch has no blended edge colours
+      // whole pixels, so a patch has no blended edge colors
       const px = Math.round(x * k), py = Math.round((H - y - size) * k), ps = Math.round(size * k);
       g.fillStyle = `rgb(${p.x[0]}, ${p.x[1]}, ${p.x[2]})`; g.fillRect(px, py, ps, ps);
       const lw = Math.max(1, Math.round(0.4 * k));
