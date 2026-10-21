@@ -49,7 +49,7 @@ The demo ([sd-10.com/?demo](https://sd-10.com/?demo)) runs in every modern brows
 **Print match** (in the header, or [sd-10.com/#match](https://sd-10.com/#match)) finds the values to put in your
 artwork or RIP so that your printer reproduces a reference colour. It works in rounds: print a test sheet, scan it,
 and the app works out how your printer responds and which values should hit the colour – then a finer sheet confirms
-it. It needs a computer or tablet (768 px or wider); phones only show the Console. On wide screens the colour list and
+it. With a measured [colour space](#colour-space) of your printer, the first sheet already starts from a prediction. It needs a computer or tablet (768 px or wider); phones only show the Console. On wide screens the colour list and
 settings (with tips on sheet types and printing) sit in a column at the left, next to the selected colour's
 workflow.
 
@@ -105,8 +105,12 @@ that answer, and its centre patches check it. A colour shows **Done** once its v
 **Accept** it to stop making sheets for it.
 
 To keep the search safe, each round only moves as far as the sheet's measurements can be trusted, and the app never
-recommends values predicted to print worse than a patch you have already measured. If a reference is beyond what the
-printer and media can reproduce, it says so and gives the closest values instead of chasing it. (With the demo's
+recommends values predicted to print worse than the best patch measured so far – on this sheet or an earlier one. If a
+sheet comes out worse than an earlier one, the last move is undone: the next sheet goes back to the best patch and
+searches around it in smaller steps. If a reference is beyond what the printer and media can reproduce, it says so and
+gives the closest values instead of chasing it. When the printer profile calls the colour printable but the prints stop
+getting closer, the profile probably doesn't describe how the printer really prints with that ink and media –
+re-profiling helps more than further rounds. (With the demo's
 simulated printer, a first estimate 22 ΔE00 off reaches about 0.2 ΔE00 in three to four rounds; a real RIP usually
 starts much closer.)
 
@@ -125,6 +129,48 @@ multi-ink profiles both work). Each reference is then marked as inside the print
 with the closest printable colour and how far away it is. No amount of matching gets an out-of-gamut colour closer
 than that. The profile stays in this browser and is only used for this check.
 
+### Colour space
+
+A **colour space** is a measured map of what your printer – with its ink, media and RIP settings – really prints.
+Measure it once and every colour gets a prediction straight away, instead of starting from a guess.
+
+1. **Create chart** under *Colour space* (it asks for a name, e.g. the printer, media and settings) and download the
+   chart like a test sheet: **Starter** (200 patches), **Standard** (400) or **Fine** (800). The patches are spread
+   over everything the printer might produce and placed in a mixed order, so uneven printing across the sheet averages
+   out. In the L\*a\*b\* sheet types there is a **Sheet library** for the chart too.
+2. Print it like the final job and scan the patches in number order. Each one goes into the colour space as you scan
+   it, so a chart can be scanned in several sittings – it sits at the top of the colour list until you close it.
+3. Set a reference: the *Reference* card now shows the values the colour space predicts and how close they should
+   print – or, for a colour the printer never reached, the closest it prints. **Create sheet** starts from those
+   values with finer steps, and the usual rounds confirm and refine them.
+
+**It learns.** With *Learn from every test sheet I scan* on, every patch you scan for a colour is added too, so the
+colour space gets more accurate where you actually work. Before a patch counts, it is compared with what the rest of
+the colour space predicts. When a whole sheet prints differently, the app warns that the printer, ink or media has
+probably changed. A **Check** chart (24 patches) tests exactly that. If the change is meant to stay, **Keep only data
+from … on** removes the older measurements. Older measurements also count less over time.
+
+**Measured data** lists every chart, check chart and test sheet in the colour space, and **remove** takes one out
+again – for example a sheet printed on the wrong media. Make a separate colour space for each printer, ink, media and
+RIP setting. A colour space only predicts for the sheet type it was measured with.
+
+**Export** saves the colour space as a file to keep, move to another computer or share; **Import…** (or dropping the
+file on the page) loads it again. **CGATS** writes the measurements as a CGATS.17 text file (device values and
+measured L\*a\*b\*) – the format profiling software reads – and CGATS / IT8 files from other software (CMYK or RGB
+charts with L\*a\*b\* values, including ArgyllCMS `.ti3`) can be imported as a colour space.
+
+How accurate it is depends on the printer and the number of patches; the card shows its own typical accuracy. With the
+demo's simulated printer, a 200-patch chart predicts to about ΔE00 1 and a 400-patch chart to about 0.6.
+
+**See it in 3-D.** The **Colour space** tab in the header shows a colour space as a large, turnable picture in
+L\*a\*b\*. Every measured patch appears in the colour it printed, inside the *gamut surface* – the most colourful
+colours measured at each lightness and hue. Drag to turn it, scroll (or pinch) to zoom, and double-click to reset it.
+**From above** shows the familiar a\*b\* diagram, and hovering a patch shows what was asked for and what printed.
+**Compare with** draws a second colour space as a wireframe – another media, printer or setting – and the panel gives
+both gamut volumes. The Print match reference colours are marked, and the ones outside the surface are flagged.
+**Measure a colour** (or the SD-10's button) adds the colour you measure to the picture, so you can see whether a
+sample is printable at a glance.
+
 ### Spot colour libraries
 
 In the L\*a\*b\* sheet types the app also writes spot colour libraries for your RIP, in the format chosen under
@@ -132,7 +178,7 @@ In the L\*a\*b\* sheet types the app also writes spot colour libraries for your 
 
 | Format | Notes |
 |---|---|
-| **CxF3** (`.cxf`) | The ISO 17972-1 colour exchange standard that many RIPs import |
+| **CxF3** (`.cxf`) | The ISO 17972-1 colour exchange standard that many RIPs import – written in the same form as CadLink Digital Factory's own spot colour exports |
 | **Adobe Color Book** (`.acb`) | Read by Photoshop and by RIPs that import Adobe colour books. It stores L\* in steps of 0.4 and a\*/b\* as whole numbers; the app shows what that rounding costs. |
 | **Epson Edge Print** (`.epcc`) | Edge Print colour collection, values to one decimal |
 | **Roland VersaWorks** (`.spot`) | VersaWorks 6 spot colour library – it imports switched off, so enable it in the library list |
@@ -143,7 +189,8 @@ In the L\*a\*b\* sheet types the app also writes spot colour libraries for your 
   because the RIP finds spot colours by name.
 - The **Spot library** collects colours across jobs and is kept in this browser. You can rename or remove entries,
   type a colour in (or take the last measurement), and **Import library…** any of the formats above – for example one
-  exported from your RIP – to update existing colours. CxF colours are read from their D50 / 2° L\*a\*b\* values or
+  exported from your RIP – to update existing colours. You can also drop library files anywhere on the Print match
+  page, and an `.icc` / `.icm` file dropped there is added as the printer profile. CxF colours are read from their D50 / 2° L\*a\*b\* values or
   computed from their spectra; entries without L\*a\*b\* (such as CMYK) are skipped.
 - **Download library** saves the whole library as one file to import into the RIP. Support for other RIPs' formats
   can be added from a sample library exported by that RIP.
@@ -165,10 +212,11 @@ Open these pages in Chrome – on the live site (e.g. [sd-10.com/test/](https://
 
 | Page | What it checks |
 |---|---|
-| [`test/index.html`](https://sd-10.com/test/index.html) | 99 checks of the core code: command frames against the app's own (emulated) code; L\*a\*b\* and CMYK against its native libraries; ΔE2000, CMC and ΔE00 2:1:1 against reference data; the ICC engine against LittleCMS; Print match convergence, layouts and PDF / PNG sheets; the library formats against real VersaWorks and Edge Print exports, the CxF3 standard and a reference Adobe Color Book encoder; and a full session against the simulated SD-10 |
+| [`test/index.html`](https://sd-10.com/test/index.html) | 112 checks of the core code: command frames against the app's own (emulated) code; L\*a\*b\* and CMYK against its native libraries; ΔE2000, CMC and ΔE00 2:1:1 against reference data; the ICC engine against LittleCMS; Print match convergence, layouts and PDF / PNG sheets; colour space charts, predictions, learning, drift checks and files against simulated printers; the library formats against real VersaWorks and Edge Print exports, the CxF3 standard and a reference Adobe Color Book encoder; and a full session against the simulated SD-10 |
 | [`test/ui-smoke.html`](https://sd-10.com/test/ui-smoke.html) | 34 checks driving the Console against the simulated SD-10: calibrate, measure, compare, line scan, history sync, palettes, settings, custom ICC profiles |
 | [`test/mobile-check.html`](https://sd-10.com/test/mobile-check.html) | The layout at phone width (no sideways scrolling) and the compare / reference flows |
-| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 49 checks driving Print match against the simulated device and printer: matching to within tolerance, several colours at once, media sizes and limits, readings per patch, textile ΔE, metamerism and gamut checks, spot colour sheets and libraries, RGB sheets |
+| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 50 checks driving Print match against the simulated device and printer: matching to within tolerance, several colours at once, media sizes and limits, readings per patch, textile ΔE, metamerism and gamut checks, spot colour sheets and libraries, RGB sheets |
+| [`test/space-smoke.html`](https://sd-10.com/test/space-smoke.html) | 22 checks of the colour space workflow against the simulated device and printer: charts, scanning into the colour space, import / export, predictions, a first sheet that starts from them, learning, the drift check, removing measurements and the 3-D view |
 
 ## Project layout
 
@@ -176,8 +224,9 @@ Open these pages in Chrome – on the live site (e.g. [sd-10.com/test/](https://
 index.html          page and layout
 css/app.css         compiled Tailwind stylesheet (source: css/tailwind.src.css)
 js/app.js           Console view (connection, measuring, history, palettes, settings, log) and start-up
-js/match-view.js    Print match view (reference colours, sheets, scanning, results, spot library)
+js/match-view.js    Print match view (reference colours, sheets, scanning, results, colour space, spot library)
 js/ui.js            DOM and formatting helpers shared by both views
+js/debug.js         debug report: journal of actions, messages and errors; the report file
 js/session.js       SD-10 session: byte routing, command queue with FF / FE acks, handshake, operations
 js/protocol.js      command builders and reply parsers
 js/transport.js     Web Bluetooth GATT transport
@@ -185,6 +234,8 @@ js/mock.js          simulated SD-10 (demo mode and tests)
 js/color.js         spectrum → L*a*b*, ΔE (76 / 94 / 2000 / CMC), sRGB, LRV
 js/weights.js       CIE weighting tables from the app (12 illuminants × 2 observers)
 js/match.js         Print match maths: patch design, printer model, solver, metamerism, PDF / PNG sheet layout
+js/colorspace.js    colour spaces: chart design, prediction from measured patches, learning, drift check, files
+js/space-view.js    Colour space view: the 3-D picture of a colour space (gamut surface, comparison, volume)
 js/rip-export.js    spot colour library files (CxF3, Adobe Color Book, Edge Print, VersaWorks): export and import
 js/printer-sim.js   simulated CMYK printer (demo and tests)
 js/icc.js           ICC engine (L*a*b* → CMYK, and device → L*a*b* for the gamut check); profile storage
@@ -198,6 +249,10 @@ build-css.sh        rebuilds css/app.css
 
 ## Troubleshooting
 
+- **Something isn't working as expected** – press **Save a debug report** at the bottom of the page (you can add a
+  note on what happened) and share the file instead of screenshots. It holds the app's recent actions and messages
+  (kept across reloads), what the page shows, its settings, measurements, colour spaces and libraries, the protocol
+  log, and the device and browser details – no passwords or personal details.
 - **The SD-10 isn't in the device list** – switch on *Show all Bluetooth devices* (▾ next to Connect), and check that
   the SD-10 is switched on and not connected to the phone app.
 - **"Device rejected control"** – another app (such as the Epson app) holds the session; close it and reconnect.

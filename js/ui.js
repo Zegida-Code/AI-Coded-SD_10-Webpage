@@ -1,11 +1,13 @@
 // Small DOM and formatting helpers shared by the Console (app.js) and the Print match view (match-view.js).
 import { labD50ToSrgb, rgbHex } from './color.js';
+import { debugLog } from './debug.js';
 
 export const $ = (id) => document.getElementById(id);
 /** Demo page (?demo): the Connect button drives the simulated SD-10 instead of Web Bluetooth. */
 export const DEMO = new URLSearchParams(location.search).has('demo');
 
 export function toast(msg, kind = 'info') {
+  debugLog('toast', msg, { kind });
   const el = $('toast');
   el.textContent = msg;
   el.className = 'fixed bottom-4 left-4 right-4 sm:left-auto z-20 sm:max-w-sm rounded-lg px-4 py-3 text-sm shadow-lg ' +

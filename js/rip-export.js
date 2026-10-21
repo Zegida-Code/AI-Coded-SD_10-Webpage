@@ -11,43 +11,58 @@ const bookId = (name) => 4000 + ([...String(name)].reduce((h, c) => (h * 31 + c.
 
 export const RIP_EXPORTS = {
   // CxF3 (ISO 17972-1, X-Rite Color Exchange Format) – the open standard for named colour libraries, imported by
-  // many RIPs. Core schema only: one object per colour with its CIELab value, all sharing one D50/2° specification
-  // (element names and enumerations as in the CxF3 schema overview's ColorChecker example).
+  // many RIPs. Written exactly the way CadLink Digital Factory exports its spot colour libraries (UTF-8 with BOM, CRLF,
+  // cc: prefixed core schema, one object per colour with its CIELab value, one shared D50/2° specification), so RIPs
+  // that read Digital Factory's files read these too. Digital Factory also states its measuring device (XRGA, UV
+  // excluded); that is left out, since the values here are not tied to that device. Library name and description
+  // have no place in this form and are not written.
   cxf: {
     label: 'CxF3',
     ext: 'cxf',
     mime: 'application/xml',
-    build({ library, colours, created = new Date(), description = '' }) {
-      const date = created.toISOString().replace(/\.\d{3}Z$/, 'Z');
-      const objects = colours.map(({ name, lab }, i) =>
-        `<Object ObjectType="Standard" Name="${xmlEsc(name)}" Id="c${i + 1}">` +
-        `<CreationDate>${date}</CreationDate>` +
-        '<ColorValues><ColorCIELab ColorSpecification="CSD50-2">' +
-        `<L>${lab[0].toFixed(2)}</L><A>${lab[1].toFixed(2)}</A><B>${lab[2].toFixed(2)}</B>` +
-        '</ColorCIELab></ColorValues></Object>').join('\n      ');
-      return `<?xml version="1.0" encoding="UTF-8"?>
-<CxF xmlns="http://colorexchangeformat.com/CxF3-core" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://colorexchangeformat.com/CxF3-core CxF3_Core.xsd">
-  <FileInformation>
-    <Creator>SD-10 Web Console</Creator>
-    <CreationDate>${date}</CreationDate>
-    <Description>${xmlEsc([library, description].filter(Boolean).join(' – '))}</Description>
-  </FileInformation>
-  <Resources>
-    <ObjectCollection>
-      ${objects}
-    </ObjectCollection>
-    <ColorSpecificationCollection>
-      <ColorSpecification Id="CSD50-2">
-        <TristimulusSpec><Illuminant>D50</Illuminant><Observer>2_Degree</Observer><Method>E308_Table5</Method></TristimulusSpec>
-        <MeasurementSpec>
-          <MeasurementType>Colorimetric_Reflectance</MeasurementType>
-          <GeometryChoice><SingleAngle><SingleAngleConfiguration>Annular</SingleAngleConfiguration><IlluminationAngle>45.0</IlluminationAngle><MeasurementAngle>0.0</MeasurementAngle></SingleAngle></GeometryChoice>
-        </MeasurementSpec>
-      </ColorSpecification>
-    </ColorSpecificationCollection>
-  </Resources>
-</CxF>
-`;
+    build({ colours }) {
+      const num = (v) => String(Math.round(v * 100) / 100 + 0); // 42, 26.4, -31.65 (never "-0")
+      const objects = colours.map(({ name, lab }, i) => [
+        `      <cc:Object ObjectType="Standard" Name="${xmlEsc(name)}" Id="EXC_${i + 1}">`,
+        '        <cc:ColorValues>',
+        '          <cc:ColorCIELab ColorSpecification="CS0">',
+        `            <cc:L>${num(lab[0])}</cc:L>`,
+        `            <cc:A>${num(lab[1])}</cc:A>`,
+        `            <cc:B>${num(lab[2])}</cc:B>`,
+        '          </cc:ColorCIELab>',
+        '        </cc:ColorValues>',
+        '      </cc:Object>',
+      ]).flat();
+      const lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<cc:CxF xmlns:cc="http://colorexchangeformat.com/CxF3-core">',
+        '  <cc:Resources>',
+        '    <cc:ObjectCollection>',
+        ...objects,
+        '    </cc:ObjectCollection>',
+        '    <cc:ColorSpecificationCollection>',
+        '      <cc:ColorSpecification Id="CS0">',
+        '        <cc:TristimulusSpec>',
+        '          <cc:Illuminant>D50</cc:Illuminant>',
+        '          <cc:Observer>2_Degree</cc:Observer>',
+        '          <cc:Method>E308_Table6</cc:Method>',
+        '        </cc:TristimulusSpec>',
+        '        <cc:MeasurementSpec>',
+        '          <cc:MeasurementType>Spectrum_Reflectance</cc:MeasurementType>',
+        '          <cc:GeometryChoice>',
+        '            <cc:SingleAngle>',
+        '              <cc:SingleAngleConfiguration>Annular</cc:SingleAngleConfiguration>',
+        '              <cc:IlluminationAngle>45</cc:IlluminationAngle>',
+        '              <cc:MeasurementAngle>0.0</cc:MeasurementAngle>',
+        '            </cc:SingleAngle>',
+        '          </cc:GeometryChoice>',
+        '        </cc:MeasurementSpec>',
+        '      </cc:ColorSpecification>',
+        '    </cc:ColorSpecificationCollection>',
+        '  </cc:Resources>',
+        '</cc:CxF>',
+      ];
+      return '﻿' + lines.join('\r\n');
     },
   },
 
@@ -140,7 +155,11 @@ export function readLibrary(bytes, fileName = '') {
   const doc = new DOMParser().parseFromString(text, 'application/xml');
   if (doc.querySelector('parsererror')) throw notALibrary();
   const root = doc.documentElement.localName;
-  if (root === 'CxF') return readCxf(doc);
+  if (root === 'CxF') {
+    // CxF often carries no library name (Digital Factory's files don't): use the file name
+    const lib = readCxf(doc);
+    return { ...lib, library: lib.library || fileName.replace(/^.*[\\/]/, '').replace(/\.[^.]*$/, '') };
+  }
   if (root === 'SpotColorLibraryList') return readVersaWorks(doc);
   throw notALibrary(` (root element <${root}>)`);
 }

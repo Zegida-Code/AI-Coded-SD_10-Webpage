@@ -227,7 +227,7 @@
       $('btnLibDownload').click();
       const cxfFile = files.find((f) => f.name === 'House colours.cxf');
       const cxfText = cxfFile ? await readFile(cxfFile) : '';
-      log(/<Object ObjectType="Standard" Name="Brand Red" Id="c1">/.test(cxfText) && /<Object ObjectType="Standard" Name="Brand Blue" Id="c2">/.test(cxfText) && /<Description>House colours/.test(cxfText), 'CxF3 library file named after the library, both colours inside');
+      log(/<cc:Object ObjectType="Standard" Name="Brand Red" Id="EXC_1">/.test(cxfText) && /<cc:Object ObjectType="Standard" Name="Brand Blue" Id="EXC_2">/.test(cxfText), 'CxF3 library file named after the library, both colours inside');
       setSel('mRipFormat', 'acb');
       // a colour that 8-bit storage visibly rounds (a* 10.5 -> 11), so the note shows whatever the simulated results are
       $('libNewName').value = 'Rounding'; $('libNewL').value = '50.2'; $('libNewA').value = '10.5'; $('libNewB').value = '-10.5';
@@ -255,6 +255,25 @@
       await until(() => libRows().length === 2);
       const navy = JSON.parse(w.localStorage.getItem('sd10.spotLibrary')).colours.find((c) => c.name === 'Brand Navy');
       log(libRows().join() === 'Brand Navy,Lime' && navy?.lab.join() === '20,5,-40' && /1 added, 1 replaced/.test($('toast').textContent), `import adds new colours and replaces clashes (${$('toast').textContent})`);
+      // drag & drop a CxF in Digital Factory's form (BOM, cc: prefix, CRLF) onto the page; the page highlights while dragging
+      const dfCxf = '﻿<?xml version="1.0" encoding="UTF-8"?>\r\n<cc:CxF xmlns:cc="http://colorexchangeformat.com/CxF3-core">\r\n  <cc:Resources>\r\n    <cc:ObjectCollection>\r\n' +
+        '      <cc:Object ObjectType="Standard" Name="Dropped" Id="EXC_1">\r\n        <cc:ColorValues>\r\n          <cc:ColorCIELab ColorSpecification="CS0">\r\n' +
+        '            <cc:L>42</cc:L>\r\n            <cc:A>0</cc:A>\r\n            <cc:B>69</cc:B>\r\n          </cc:ColorCIELab>\r\n        </cc:ColorValues>\r\n      </cc:Object>\r\n' +
+        '    </cc:ObjectCollection>\r\n    <cc:ColorSpecificationCollection>\r\n      <cc:ColorSpecification Id="CS0">\r\n        <cc:TristimulusSpec>\r\n' +
+        '          <cc:Illuminant>D50</cc:Illuminant>\r\n          <cc:Observer>2_Degree</cc:Observer>\r\n        </cc:TristimulusSpec>\r\n      </cc:ColorSpecification>\r\n' +
+        '    </cc:ColorSpecificationCollection>\r\n  </cc:Resources>\r\n</cc:CxF>';
+      const ddt = new w.DataTransfer();
+      ddt.items.add(new w.File([dfCxf], 'Digital Factory.cxf', { type: 'application/xml' }));
+      const dropOn = $('mResult');
+      dropOn.dispatchEvent(new w.DragEvent('dragenter', { bubbles: true, dataTransfer: ddt }));
+      const lit = $('viewMatch').classList.contains('outline-dashed');
+      const over = new w.DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: ddt });
+      dropOn.dispatchEvent(over);
+      dropOn.dispatchEvent(new w.DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: ddt }));
+      await until(() => libRows().length === 3);
+      const dropped = JSON.parse(w.localStorage.getItem('sd10.spotLibrary')).colours.find((c) => c.name === 'Dropped');
+      log(lit && over.defaultPrevented && !$('viewMatch').classList.contains('outline-dashed') && dropped?.lab.join() === '42,0,69', 'a CxF file dropped on the page is imported (Digital Factory form)');
+      d.querySelector('#mLibList tr[data-lib="2"] [data-lib-act=del]').click();
       $('libNewName').value = 'Hand Typed'; $('libNewL').value = '55'; $('libNewA').value = '10'; $('libNewB').value = '-12.5';
       $('btnLibAdd').click();
       log(libRows().join() === 'Brand Navy,Lime,Hand Typed' && $('libNewName').value === '', 'a colour can be typed into the library');
@@ -292,6 +311,25 @@
       // switching views keeps the connection
       d.querySelector('[data-view=console]').click();
       log(!$('viewConsole').classList.contains('hidden') && /simulated/.test($('connPill').textContent), 'switch to Console keeps the device connected');
+      // debug report: one file with the journal, the screen, stored data, device and browser
+      d.querySelector('[data-view=match]').click();
+      w.prompt = () => 'Result looked wrong';
+      const nReports = files.length;
+      $('btnDebugReport').click();
+      await until(() => files.length > nReports);
+      const repFile = files.slice(nReports).find((f) => /^sd10-debug-\d{8}-\d{4}\.json$/.test(f.name));
+      const rep = repFile ? JSON.parse(await readFile(repFile)) : {};
+      const kinds = new Set((rep.journal ?? []).map((e) => e.kind));
+      const measured = (rep.journal ?? []).find((e) => e.kind === 'measure');
+      const repChecks = { format: rep.format === 'sd10-debug-report', note: rep.note === 'Result looked wrong', version: /^\d{4}-\d{2}-\d{2}/.test(rep.app?.version ?? ''), device: !!(rep.app?.connected && rep.app.device?.model),
+        protocol: rep.app?.protocolLog?.length > 50, kinds: ['start', 'click', 'change', 'toast', 'task', 'match', 'measure', 'result'].every((k) => kinds.has(k)), measure: measured?.data?.lab?.length === 3,
+        storage: !!(rep.storage?.['sd10.match']?.colours?.length >= 1 && rep.storage['sd10.spotLibrary'] && !rep.storage['sd10.debugJournal']),
+        screen: rep.screen?.view === 'viewMatch' && rep.screen.cards.some((c) => /Settings/.test(c.title)), browser: !!rep.browser?.userAgent };
+      log(Object.values(repChecks).every(Boolean) && rep.format === 'sd10-debug-report' && rep.note === 'Result looked wrong' && /^\d{4}-\d{2}-\d{2}/.test(rep.app?.version ?? '') && rep.app.connected && rep.app.device?.model &&
+        rep.app.protocolLog?.length > 50 && ['start', 'click', 'change', 'toast', 'task', 'match', 'measure', 'result'].every((k) => kinds.has(k)) && measured?.data?.lab?.length === 3 &&
+        rep.storage['sd10.match']?.colours?.length >= 1 && rep.storage['sd10.spotLibrary'] && !rep.storage['sd10.debugJournal'] &&
+        rep.screen?.view === 'viewMatch' && rep.screen.cards.some((c) => /Settings/.test(c.title)) && rep.browser?.userAgent,
+        `debug report saved ${Object.entries(repChecks).filter(([, v]) => !v).map(([k]) => 'MISSING ' + k).join(' ')}(${repFile?.name}: ${rep.journal?.length} journal entries – ${[...kinds].join(', ')}; ${rep.screen?.cards?.length} cards of screen text)`);
       log(errors.length === 0, `no JS errors ${errors.join(' | ')}`);
       const pass = lines.filter((l) => l.startsWith('PASS')).length;
       out.textContent += `\n${pass}/${lines.length}`;

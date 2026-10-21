@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <link rel="stylesheet" href="css/app.css?v=2026-10-19.522b8c2-193208">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-20.ede3cf8-174823">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -17,12 +17,14 @@
         </div>
       </div>
       <!-- View switcher (desktop / tablet only – Print match needs files and RIP software, so phones get the Console):
-           both views share the same device connection -->
+           the views share the same device connection; Colour space shows a measured colour space in 3-D -->
       <nav class="seg-group hidden md:inline-flex md:ml-3" aria-label="Views">
         <button type="button" class="seg" data-view="console" aria-current="page">
           <svg class="hidden lg:block h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M3 4.75A1.75 1.75 0 0 1 4.75 3h10.5A1.75 1.75 0 0 1 17 4.75v7.5A1.75 1.75 0 0 1 15.25 14H11.5v1.5h2a.75.75 0 0 1 0 1.5h-7a.75.75 0 0 1 0-1.5h2V14H4.75A1.75 1.75 0 0 1 3 12.25v-7.5Z"/></svg>Console</button>
         <button type="button" class="seg" data-view="match">
           <svg class="hidden lg:block h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M5 2.75A.75.75 0 0 1 5.75 2h8.5a.75.75 0 0 1 .75.75V6h.25A2.75 2.75 0 0 1 18 8.75v4.5A1.75 1.75 0 0 1 16.25 15H15v2.25a.75.75 0 0 1-.75.75h-8.5a.75.75 0 0 1-.75-.75V15H3.75A1.75 1.75 0 0 1 2 13.25v-4.5A2.75 2.75 0 0 1 4.75 6H5V2.75ZM13.5 6V3.5h-7V6h7Zm-7 7v3.5h7V13h-7Z" clip-rule="evenodd"/></svg>Print match</button>
+        <button type="button" class="seg" data-view="space">
+          <svg class="hidden lg:block h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10.4 1.6a.75.75 0 0 0-.8 0l-6.75 4A.75.75 0 0 0 2.5 6.25v7.5c0 .27.14.51.37.65l6.75 4a.75.75 0 0 0 .76 0l6.75-4a.75.75 0 0 0 .37-.65v-7.5a.75.75 0 0 0-.37-.65l-6.75-4ZM10 3.12l5.27 3.13L10 9.38 4.73 6.25 10 3.12ZM4 7.57l5.25 3.11v5.83L4 13.4V7.57Zm6.75 8.94v-5.83L16 7.57v5.83l-5.25 3.11Z"/></svg>Colour space</button>
       </nav>
       <div class="hidden md:block flex-1"></div>
       <span id="connPill" class="chip max-w-[45%] truncate bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300">● Disconnected</span>
@@ -266,7 +268,8 @@
       <h2 class="font-semibold">Print match</h2>
       <p class="text-sm text-slate-500 mt-1 max-w-4xl">Find the values that make your printer reproduce a reference colour: scan the reference, print a
         test sheet and scan its patches – the app models how your printer responds and calculates the best values. Repeat with a
-        finer sheet until the colour is within tolerance. Several colours can be in progress at once.</p>
+        finer sheet until the colour is within tolerance. Several colours can be in progress at once. With a measured colour space of
+        your printer, the values are predicted straight away.</p>
     </div>
 
     <!-- Two columns on wide screens: the colour list and job settings at the left, the selected colour's workflow at the right.
@@ -328,8 +331,38 @@
         </div>
       </div>
 
+      <!-- colour space: a measured map of what the printer really prints – predicts values straight away, learns from every sheet -->
+      <div id="mSpaceCard" class="card space-y-3 lg:col-start-1 lg:row-start-3">
+        <div class="flex items-center justify-between gap-2">
+          <h3 class="font-semibold">Colour space</h3>
+          <button id="btnSpaceNew" type="button" class="btn btn-ghost" title="Start a new colour space for this printer, ink, media and settings">+ New</button>
+        </div>
+        <div class="flex gap-2">
+          <select id="mSpace" class="input min-w-0" aria-label="Colour space in use"><option value="">None</option></select>
+          <button id="btnSpaceImport" type="button" class="btn btn-ghost" title="Import a saved colour space (.json) or a CGATS / IT8 measurement file (.txt, .ti3) – or drop the file anywhere on this page">Import…</button>
+          <input id="spaceFile" type="file" accept=".json,.txt,.cgats,.cgt,.it8,.ti3" class="hidden">
+        </div>
+        <div id="mSpaceInfo" class="space-y-2 text-xs text-slate-500"></div>
+        <div class="flex flex-wrap items-end gap-2">
+          <div class="flex-1 min-w-[10rem]"><label class="label" for="mChartSize">Chart</label>
+            <select id="mChartSize" class="input"></select></div>
+          <button id="btnSpaceChart" type="button" class="btn btn-primary">Create chart</button>
+        </div>
+        <label class="flex items-center gap-2 text-sm"><input id="mSpaceLearn" type="checkbox" class="h-4 w-4"> Learn from every test sheet I scan</label>
+        <details id="mSpaceData" class="text-xs hidden">
+          <summary class="cursor-pointer text-slate-500">Measured data</summary>
+          <ul id="mSpaceSessions" class="mt-2 space-y-1"></ul>
+        </details>
+        <div id="mSpaceActions" class="flex flex-wrap gap-2 hidden">
+          <button id="btnSpaceJson" type="button" class="btn btn-ghost" title="Save the colour space as a file to keep it, move it to another computer or share it">Export</button>
+          <button id="btnSpaceCgats" type="button" class="btn btn-ghost" title="The measurements as a CGATS text file (device values and measured L*a*b*), e.g. for profiling software">CGATS</button>
+          <button id="btnSpaceRename" type="button" class="btn btn-ghost">Rename</button>
+          <button id="btnSpaceDelete" type="button" class="btn btn-danger">Delete</button>
+        </div>
+      </div>
+
       <!-- tips: the sheet type explained and printing advice – reference text, out of the way of the workflow; collapsed state is remembered -->
-      <details id="mTipsBox" class="card order-last lg:order-none lg:col-start-1 lg:row-start-3" open>
+      <details id="mTipsBox" class="card order-last lg:order-none lg:col-start-1 lg:row-start-4" open>
         <summary class="cursor-pointer font-semibold">Tips</summary>
         <div class="mt-3 space-y-2 text-xs text-slate-600 dark:text-slate-400 [&_b]:font-semibold [&_b]:text-slate-800 dark:[&_b]:text-slate-200">
           <p id="mModeHelp"></p>
@@ -338,9 +371,9 @@
       </details>
 
       <!-- the selected colour's workflow -->
-      <div class="space-y-4 lg:col-start-2 lg:row-start-1 lg:row-span-4 min-w-0">
+      <div class="space-y-4 lg:col-start-2 lg:row-start-1 lg:row-span-5 min-w-0">
         <!-- 1. reference -->
-        <div class="card space-y-3">
+        <div id="mRefCard" class="card space-y-3">
           <h3 class="font-semibold"><span class="text-indigo-500">1.</span> Reference</h3>
           <div id="mColourEditor" class="flex flex-wrap gap-3 items-stretch">
             <div id="mTargetSwatch" class="h-24 w-full sm:w-32 rounded-xl ring-1 ring-black/10 dark:ring-white/10 bg-slate-200 dark:bg-slate-800"></div>
@@ -359,6 +392,8 @@
               <p id="mGamut" class="text-xs"></p>
             </div>
           </div>
+          <!-- what the colour space predicts for the reference -->
+          <div id="mSpacePred" class="hidden rounded-xl border border-slate-200 dark:border-slate-800 p-3 space-y-2"></div>
         </div>
 
         <!-- 2. sheet and 3. scan: side by side on wide screens -->
@@ -405,7 +440,7 @@
             <h3 class="font-semibold">Spot library <span id="mLibCount" class="text-sm font-normal text-slate-500"></span></h3>
             <div class="flex flex-wrap gap-2">
               <button id="btnLibDownload" class="btn btn-primary" disabled>Download library</button>
-              <button id="btnLibImport" class="btn btn-ghost" title="Add the colours of a CxF (.cxf), Adobe Color Book (.acb), Epson Edge Print (.epcc) or VersaWorks (.spot) library">Import library…</button>
+              <button id="btnLibImport" class="btn btn-ghost" title="Add the colours of a CxF (.cxf), Adobe Color Book (.acb), Epson Edge Print (.epcc) or VersaWorks (.spot) library – or drop the file anywhere on this page">Import library…</button>
               <button id="btnLibClear" class="btn btn-danger" disabled>Clear</button>
               <input id="libFile" type="file" accept=".cxf,.acb,.spot,.epcc,.xml" class="hidden">
             </div>
@@ -430,28 +465,74 @@
     </div>
   </main>
 
+  <!-- ======================= Colour space view (3-D) ======================= -->
+  <main id="viewSpace" class="hidden max-w-7xl mx-auto px-3 sm:px-4 py-4">
+    <div class="mb-3 flex flex-wrap items-end gap-3">
+      <div class="min-w-0 flex-1">
+        <h2 class="font-semibold">Colour space</h2>
+        <p class="text-sm text-slate-500 mt-1">The colours your printer really printed, measured in CIE L*a*b* – drag to turn, scroll to zoom, hover a patch for its values. Colour spaces are made and kept in Print match.</p>
+      </div>
+      <div class="w-56"><label class="label" for="vsSpace">Colour space</label><select id="vsSpace" class="input"></select></div>
+      <div class="w-56"><label class="label" for="vsCompare">Compare with</label><select id="vsCompare" class="input"></select></div>
+    </div>
+    <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr),17rem] items-start">
+      <div class="card !p-0 overflow-hidden">
+        <div class="relative h-[calc(100vh-13rem)] min-h-[440px]">
+          <canvas id="vsCanvas" class="absolute inset-0 h-full w-full touch-none cursor-grab" aria-label="3-D view of the colour space"></canvas>
+          <div id="vsTip" class="pointer-events-none absolute hidden max-w-xs rounded-md bg-slate-900/90 px-2 py-1.5 text-xs leading-5 text-white shadow"></div>
+          <div id="vsEmpty" class="absolute inset-0 hidden grid place-items-center p-8 text-center text-sm text-slate-500"></div>
+        </div>
+      </div>
+      <div class="space-y-4">
+        <div class="card space-y-2 text-sm">
+          <h3 class="font-semibold">Show</h3>
+          <label class="flex items-center gap-2"><input id="vs_surface" type="checkbox" class="h-4 w-4"> Gamut surface</label>
+          <label class="flex items-center gap-2"><input id="vs_points" type="checkbox" class="h-4 w-4"> Measured patches</label>
+          <label class="flex items-center gap-2"><input id="vs_refs" type="checkbox" class="h-4 w-4"> Reference colours (Print match)</label>
+          <label class="flex items-center gap-2"><input id="vs_spin" type="checkbox" class="h-4 w-4"> Turn slowly</label>
+          <div class="flex flex-wrap gap-2 pt-1">
+            <button id="vsTop" type="button" class="btn btn-ghost" title="Look down the L* axis: the a*b* diagram">From above</button>
+            <button id="vsSide" type="button" class="btn btn-ghost" title="Lightness up, a* across">From the side</button>
+            <button id="vsReset" type="button" class="btn btn-ghost" title="Back to the start view (or double-click the picture)">Reset</button>
+          </div>
+          <button id="vsMeasure" type="button" class="btn btn-primary w-full" disabled title="Measure a colour with the SD-10 (or press its button) and see where it lies">Measure a colour</button>
+        </div>
+        <div id="vsInfo" class="card space-y-2 text-sm"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- debug report: one file to share instead of screenshots (see js/debug.js) -->
+  <footer class="max-w-7xl mx-auto px-3 sm:px-4 pb-6 pt-2 text-xs text-slate-500">
+    Something not working as expected? <button id="btnDebugReport" type="button" class="font-medium text-indigo-600 hover:underline dark:text-indigo-400">Save a debug report</button>
+    – one file with the app’s recent actions, messages, what it shows, settings and data, to share instead of screenshots.
+  </footer>
+
   <!-- Cache busting for GitHub Pages (files are cached for 10 min): every module URL carries the release
        version, so a page always loads scripts from the same release. Bump with: ./bump-version.sh -->
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-19.522b8c2-193208",
-      "./js/transport.js": "./js/transport.js?v=2026-10-19.522b8c2-193208",
-      "./js/mock.js": "./js/mock.js?v=2026-10-19.522b8c2-193208",
-      "./js/session.js": "./js/session.js?v=2026-10-19.522b8c2-193208",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-19.522b8c2-193208",
-      "./js/color.js": "./js/color.js?v=2026-10-19.522b8c2-193208",
-      "./js/weights.js": "./js/weights.js?v=2026-10-19.522b8c2-193208",
-      "./js/storage.js": "./js/storage.js?v=2026-10-19.522b8c2-193208",
-      "./js/icc.js": "./js/icc.js?v=2026-10-19.522b8c2-193208",
-      "./js/match.js": "./js/match.js?v=2026-10-19.522b8c2-193208",
-      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-19.522b8c2-193208",
-      "./js/ui.js": "./js/ui.js?v=2026-10-19.522b8c2-193208",
-      "./js/match-view.js": "./js/match-view.js?v=2026-10-19.522b8c2-193208",
-      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-19.522b8c2-193208"
+      "./js/app.js": "./js/app.js?v=2026-10-20.ede3cf8-174823",
+      "./js/transport.js": "./js/transport.js?v=2026-10-20.ede3cf8-174823",
+      "./js/mock.js": "./js/mock.js?v=2026-10-20.ede3cf8-174823",
+      "./js/session.js": "./js/session.js?v=2026-10-20.ede3cf8-174823",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-20.ede3cf8-174823",
+      "./js/color.js": "./js/color.js?v=2026-10-20.ede3cf8-174823",
+      "./js/weights.js": "./js/weights.js?v=2026-10-20.ede3cf8-174823",
+      "./js/storage.js": "./js/storage.js?v=2026-10-20.ede3cf8-174823",
+      "./js/icc.js": "./js/icc.js?v=2026-10-20.ede3cf8-174823",
+      "./js/match.js": "./js/match.js?v=2026-10-20.ede3cf8-174823",
+      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-20.ede3cf8-174823",
+      "./js/ui.js": "./js/ui.js?v=2026-10-20.ede3cf8-174823",
+      "./js/match-view.js": "./js/match-view.js?v=2026-10-20.ede3cf8-174823",
+      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-20.ede3cf8-174823",
+      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-20.ede3cf8-174823",
+      "./js/debug.js": "./js/debug.js?v=2026-10-20.ede3cf8-174823",
+      "./js/space-view.js": "./js/space-view.js?v=2026-10-20.ede3cf8-174823"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-19.522b8c2-193208"></script>
+  <script type="module" src="js/app.js?v=2026-10-20.ede3cf8-174823"></script>
 </body>
 </html>

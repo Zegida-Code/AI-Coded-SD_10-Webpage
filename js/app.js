@@ -1,5 +1,6 @@
 // SD-10 Web Console – Console view (device connection, measuring, history, palettes, settings, log) and start-up.
-// The Print match view is in match-view.js; shared DOM helpers are in ui.js.
+// The Print match view is in match-view.js (which also switches views), the 3-D Colour space view in space-view.js,
+// the debug report in debug.js; shared DOM helpers are in ui.js.
 import { BleTransport } from './transport.js';
 import { MockTransport, SAMPLES } from './mock.js';
 import { SD10Session, DeviceError } from './session.js';
@@ -9,9 +10,12 @@ import {
 } from './protocol.js';
 import { deltaE, describeSpectrum, meanSpectrum, medianLab, spectrumToLab, wavelengthColor, labToLch } from './color.js';
 import { history as historyStore, prefs as prefStore } from './storage.js';
-import { CMYK_PROFILES, CUSTOM_PREFIX, customProfiles, loadProfile } from './icc.js';
+import { CMYK_PROFILES, CUSTOM_PREFIX, customProfiles, loadProfile, printerProfiles } from './icc.js';
 import { $, DEMO, NEEDS_CALIBRATION, displayHex, downloadFile, escapeHtml, fmt, onFilePicked, readFlag, toast, writeFlag } from './ui.js';
 import { initMatch, matchControls, onMatchButton } from './match-view.js';
+import { buildDebugReport, debugLog, installDebugCapture } from './debug.js';
+
+installDebugCapture(); // before anything else, so start-up errors are in the debug report too
 
 /** The app's default CMYK output profile (as in the Android app). */
 const DEFAULT_CMYK_PROFILE = 'EpsonWideCMYK_Ver2';
@@ -25,7 +29,7 @@ const state = {
   statusDirty: false, // a status-changed event arrived while busy; refreshed once idle
   info: null, // { model, serial, firmware } from the handshake
   settings: null, // device settings as last read
-  view: 'console', // 'console' | 'match'
+  view: 'console', // 'console' | 'match' | 'space'
   mode: 'spot', // Console measuring mode: 'spot' | 'compare' | 'line'
   last: null, // result on screen: { spectrum, lab, d, strip, itemId, cmyk }
   lastLabD50: null, // newest colour measured or shown (Lab D50/2°), for "Use last measurement" in Print match …
@@ -59,8 +63,12 @@ async function task(label, fn) {
   if (state.busy) { toast('Device is busy…'); return; }
   state.busy = true;
   updateControls(label);
+  const started = performance.now();
+  debugLog('task', `${label} started`);
   try {
-    return await fn();
+    const result = await fn();
+    debugLog('task', `${label} done`, { ms: Math.round(performance.now() - started) });
+    return result;
   } catch (e) {
     console.error(e);
     logLine('err', `${label}: ${e.message}`);
@@ -89,6 +97,7 @@ function logLine(cls, text) {
   line.className = cls;
   line.textContent = `${ts}  ${text}`;
   logEl.appendChild(line);
+  if (cls === 'err') debugLog('device', text);
   if (++logCount > 3000) { logEl.firstChild.remove(); logCount--; }
   $('logCount').textContent = `(${logCount})`;
   if ($('logAutoscroll').checked) logEl.scrollTop = logEl.scrollHeight;
@@ -101,6 +110,30 @@ function attachLog(session) {
     logLine(isEvent ? 'ev' : dir, `${dir === 'tx' ? 'TX →' : isEvent ? 'EV ←' : 'RX ←'}  ${hex(bytes)}${note ? '   ; ' + note : ''}`);
   });
   session.addEventListener('raw', (e) => { if ($('logRaw').checked) logLine('raw', `   chunk ← ${hex(e.detail.bytes)}`); });
+}
+
+/**
+ * Save a debug report (see debug.js) with the Console's side of things: connection, device, its status and settings,
+ * the result on screen, the stored ICC profiles and the protocol log.
+ */
+async function saveDebugReport() {
+  const note = prompt('What happened, or what did you expect? (optional)\n\nThe report holds this page’s recent actions and messages, what it shows, its settings, measurements and colour data, and the device and browser details – no passwords or personal details.', '');
+  if (note === null) return;
+  const names = async (store) => { try { return await store.list(); } catch { return []; } };
+  const report = buildDebugReport({
+    note: note.trim(),
+    app: {
+      view: state.view, demo: state.demo, connected: !!state.session?.connected, busy: state.busy, consoleMode: state.mode,
+      device: state.info, deviceStatus: state.status, deviceSettings: state.settings, settings: settingsFromUI(),
+      lastResult: state.last && { lab: state.last.lab, cmyk: state.last.cmyk, spectrum: state.last.spectrum },
+      iccProfiles: { cmyk: await names(customProfiles), printer: await names(printerProfiles) },
+      protocolLog: [...logEl.children].slice(-1500).map((l) => l.textContent),
+    },
+  });
+  const now = new Date(), two = (v) => String(v).padStart(2, '0');
+  const stamp = `${now.getFullYear()}${two(now.getMonth() + 1)}${two(now.getDate())}-${two(now.getHours())}${two(now.getMinutes())}`; // local time
+  downloadFile(JSON.stringify(report, null, 1), 'application/json', `sd10-debug-${stamp}.json`);
+  toast('Debug report saved – share the file to get help.', 'ok');
 }
 
 // ------------------------------------------------------------------ connection
@@ -311,7 +344,7 @@ async function onDeviceEvent(code) {
     return;
   }
   if (code !== EVENT.BUTTON || state.busy) return;
-  if (state.view === 'match') { onMatchButton(); return; }
+  if (state.view !== 'console') { onMatchButton(); return; } // Print match / Colour space
   // Console: the app reads the device's mode; group modes come from the device, otherwise use the UI mode.
   const mode = await state.session.getMode().catch(() => null);
   if (mode?.method === METHOD.CALIBRATION) return task('Calibrating', doCalibrate);
@@ -746,6 +779,7 @@ function init() {
     $('bleWarning').classList.add('hidden');
   }
   $('btnCopyLog').onclick = () => navigator.clipboard?.writeText(logEl.innerText).then(() => toast('Log copied'));
+  $('btnDebugReport').onclick = saveDebugReport;
 
   $('demoSample').onchange = (e) => state.transport?.setSample?.(e.target.value);
   $('demoShutter').onclick = () => state.transport?.setShutter?.(state.status?.shutterStatus !== 1);

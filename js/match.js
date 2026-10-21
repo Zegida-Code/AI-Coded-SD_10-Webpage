@@ -32,6 +32,8 @@ export const MODES = {
   cmyk: { axes: ['C', 'M', 'Y'], min: [0, 0, 0], max: [100, 100, 100], step0: [8, 8, 8], minStep: [1.5, 1.5, 1.5], maxStep: [15, 15, 15], decimals: 2 },
   rgb: { axes: ['R', 'G', 'B'], min: [0, 0, 0], max: [255, 255, 255], step0: [14, 14, 14], minStep: [2, 2, 2], maxStep: [30, 30, 30], decimals: 0 },
 };
+/** Sheet types as the interface names them ("… patches", "… sheets"). */
+export const MODE_NAME = { spot: 'named spot colour', lab: 'L*a*b*', cmyk: 'CMYK', rgb: 'RGB' };
 
 /** Unique spot colour name of a sheet patch, e.g. SD10-K3P9-R2-07 (job id keeps old libraries from clashing). */
 export const patchSpotName = (jobId, round, n) => `SD10-${jobId}-R${round}-${String(n).padStart(2, '0')}`;
@@ -63,8 +65,8 @@ const round2 = (v) => Math.round(v * 100) / 100;
 const roundTo = (v, decimals) => (decimals ? Math.round(v * 10 ** decimals) / 10 ** decimals : Math.round(v));
 
 // ---------------------------------------------------------------- linear algebra helpers
-function solve(A, b) {
-  // Gaussian elimination with partial pivoting; returns null if singular.
+/** Solve A·x = b (Gaussian elimination with partial pivoting); null if A is singular. */
+export function solve(A, b) {
   const n = A.length;
   const M = A.map((row, i) => [...row, b[i]]);
   for (let c = 0; c < n; c++) {
@@ -166,37 +168,68 @@ export const trustRadius = (mode, step) => step.map((s, k) => Math.max(TRUST_STE
 
 /**
  * Analyse a measured round: model, recommendation, best patch, centre check.
- * The recommendation stays within trustRadius() of the centre (near a gamut edge the printer barely responds, and an
- * unbounded solve would jump to the ends of the range), and it is never predicted worse than the best patch actually
- * measured – then that patch is recommended instead (source 'best-patch'). `formula` is a DE_FORMULAS key.
+ * `earlier`: the colour's previous rounds (with their measured patches and results), so the search remembers what
+ * already printed best.
+ *
+ * - The recommendation stays within trustRadius() of the centre: near a gamut edge the printer barely responds, and an
+ *   unbounded solve would jump to the ends of the range.
+ * - It is never predicted worse than the best patch measured so far, in any round – then that patch is recommended
+ *   (source 'best-patch' for this sheet, 'best-earlier' for an earlier one). Among patches that printed about as well
+ *   (within the measuring noise), the one whose values are closest to the reference is chosen: beyond the gamut many
+ *   inputs print alike, and extreme ones only look better by chance.
+ * - If this sheet's centre – the previous recommendation – printed clearly worse than an earlier patch, the last move
+ *   failed (`regressed`): the search goes back to the best patch. After such a round, or one flagged gamut-limited, it
+ *   moves at most one patch step and only follows the model for a clear predicted gain (`cautious`).
+ * `formula` is a DE_FORMULAS key.
  */
-export function analyseRound(round, target, formula = 'de00') {
+export function analyseRound(round, target, formula = 'de00', earlier = []) {
   const { min, max } = MODES[round.mode];
   const { fn: dE, lWeight } = formulaOf(formula);
   const model = fitModel(round.patches, round.centre);
-  const R = trustRadius(round.mode, round.step);
-  const lo = round.centre.map((c, k) => Math.max(min[k], c - R[k]));
-  const hi = round.centre.map((c, k) => Math.min(max[k], c + R[k]));
-  const sol = solveForTarget(round.mode, model, round.centre, target, { lo, hi, weights: [lWeight, 1, 1], dE });
   const measured = round.patches.filter((p) => p.lab);
-  const scored = measured.map((p) => ({ ...p, dE: dE(target, p.lab) }));
+  const scored = measured.map((p) => ({ ...p, dE: dE(target, p.lab), round: round.round }));
   const best = scored.reduce((a, b) => (b.dE < a.dE ? b : a));
   const centres = scored.filter((p) => p.offset.every((v) => v === 0));
   const centreDE = centres.length ? centres.reduce((s, p) => s + p.dE, 0) / centres.length : null;
   const repeat = centres.length === 2 ? dE(centres[0].lab, centres[1].lab) : null;
+  const noise = Math.max(0.5, repeat ?? 0.5); // differences below this are measurement / print variation
+
+  // every patch measured earlier for this colour (same sheet type) – the best of them is the bar to beat
+  const history = earlier.filter((r) => r.mode === round.mode)
+    .flatMap((r) => r.patches.filter((p) => p.lab).map((p) => ({ ...p, dE: dE(target, p.lab), round: r.round })));
+  const bestEarlier = history.reduce((a, b) => (!a || b.dE < a.dE ? b : a), null);
+  const regressed = !!bestEarlier && centreDE != null && centreDE > bestEarlier.dE + noise;
+  const cautious = regressed || !!earlier[earlier.length - 1]?.result?.gamutLimited;
+
+  const R = cautious ? round.step : trustRadius(round.mode, round.step);
+  const lo = round.centre.map((c, k) => Math.max(min[k], c - R[k]));
+  const hi = round.centre.map((c, k) => Math.min(max[k], c + R[k]));
+  const sol = solveForTarget(round.mode, model, round.centre, target, { lo, hi, weights: [lWeight, 1, 1], dE });
   // the solve stopped at the edge of the trusted box (not at the mode's own limits): it wants to go further
   const trustLimited = sol.x.some((v, k) => (lo[k] > min[k] && v <= lo[k] + 1e-6) || (hi[k] < max[k] && v >= hi[k] - 1e-6));
+
+  // the best patch of all rounds, and – among those that printed about as well – the one closest to the reference
+  const pool = [...scored, ...history];
+  const bestEver = pool.reduce((a, b) => (b.dE < a.dE ? b : a));
+  const isLab = round.mode === 'spot' || round.mode === 'lab';
+  const pick = !isLab ? bestEver : pool.filter((p) => p.dE <= bestEver.dE + noise / 2)
+    .reduce((a, b) => (Math.hypot(...b.x.map((v, k) => v - target[k])) < Math.hypot(...a.x.map((v, k) => v - target[k])) ? b : a));
+
   let rec = { ...sol, source: 'model' };
-  if (best.dE <= sol.predictedDeltaE) {
-    rec = { x: [...best.x], predicted: best.lab, predictedDeltaE: best.dE, clamped: best.x.some((v, k) => v <= min[k] || v >= max[k]), source: 'best-patch' };
+  if (regressed || bestEver.dE <= sol.predictedDeltaE + (cautious ? noise / 2 : 0)) {
+    rec = { x: [...pick.x], predicted: pick.lab, predictedDeltaE: pick.dE, clamped: pick.x.some((v, k) => v <= min[k] || v >= max[k]),
+      source: pick.round === round.round ? 'best-patch' : 'best-earlier', pickRound: pick.round, pickN: pick.n };
   }
-  const correction = rec.x.map((v, k) => v - round.centre[k]);
+  // how far the recommendation moves from this sheet's centre; going back to a measured patch refines around it
+  // (finer steps next sheet) rather than counting as a step outwards
+  const correction = rec.source === 'model' ? rec.x.map((v, k) => v - round.centre[k]) : [0, 0, 0];
   // The model is only trustworthy inside the sheet's patch range; beyond it the prediction is a rough estimate.
   const extrapolated = rec.source === 'model' && correction.some((c, k) => Math.abs(c) > round.step[k] * 1.05);
   // Nothing within reach is predicted to get close: the reference is probably outside the printable gamut.
   // (the model's own optimum is inside the trusted box, or it predicts nothing better than a patch already measured)
-  const gamutLimited = rec.predictedDeltaE > 2 && (rec.source === 'best-patch' || !trustLimited);
-  return { model, ...rec, best, centreDE, repeatability: repeat, correction, extrapolated, trustLimited: trustLimited && rec.source === 'model', gamutLimited };
+  const gamutLimited = rec.predictedDeltaE > 2 && (rec.source !== 'model' || !trustLimited);
+  return { model, ...rec, best, bestEver, centreDE, repeatability: repeat, correction, extrapolated,
+    trustLimited: trustLimited && rec.source === 'model', gamutLimited, regressed };
 }
 
 
@@ -294,7 +327,7 @@ export function sheetLayout(opts) {
   const notes = `${NOTES[mode]} Print at 100% / actual size. Let the ink dry - transferred or cured prints: process like production, then scan.`;
   const headingText = (g, cont) => {
     const lab = g.target ? `target L* ${g.target[0].toFixed(2)}  a* ${g.target[1].toFixed(2)}  b* ${g.target[2].toFixed(2)} (D50/2 deg)` : '';
-    return `${g.label ? g.label + (cont ? ' (continued)' : '') + ' - ' : ''}${lab}`;
+    return [g.label ? g.label + (cont ? ' (continued)' : '') : '', lab].filter(Boolean).join(' - ');
   };
   /** The text above the patches (normal layout): [{ pt, str, bold, lead }]; lead = height the line takes. */
   const headerLines = (firstPage, width) => {
@@ -370,10 +403,11 @@ export function sheetLayout(opts) {
         rowTop = y; y -= rowH; col = 0;
       }
       const x = areaX + col * (size + gap);
-      page.boxes.push({ x, y: rowTop - size, size, patch: p, kFixed: g.kFixed ?? 0 });
+      const k = p.k ?? g.kFixed ?? 0; // a colour space chart varies K per patch
+      page.boxes.push({ x, y: rowTop - size, size, patch: p, kFixed: k });
       if (detailed) {
-        t(x, rowTop - size - 10, 8, `#${p.n}${p.offset.every((v) => v === 0) ? ' (centre)' : ''}`, true);
-        t(x, rowTop - size - 19, 6.5, fmtValues(mode, p.x, g.kFixed ?? 0));
+        t(x, rowTop - size - 10, 8, `#${p.n}${p.offset?.every((v) => v === 0) ? ' (centre)' : ''}`, true);
+        t(x, rowTop - size - 19, 6.5, fmtValues(mode, p.x, k));
         if (mode === 'spot') t(x, rowTop - size - 26, 6.5, p.name ?? '');
       } else t(x, rowTop - size - 9, 7, String(p.n), true);
       col++;

@@ -35,6 +35,7 @@ git add -A && git commit -m "Release" && git push
 ## Tests
 
 Serve the folder as above and open `test/index.html` (core code), `test/ui-smoke.html` (Console),
-`test/mobile-check.html` (phone layout) and `test/match-smoke.html` (Print match). Each page sets its title to
+`test/mobile-check.html` (phone layout), `test/match-smoke.html` (Print match) and `test/space-smoke.html` (colour
+space). Each page sets its title to
 `ALL PASS` when every check passes, so they can also run headless, e.g.
 `chrome --headless=new --dump-dom http://localhost:8765/test/index.html`.

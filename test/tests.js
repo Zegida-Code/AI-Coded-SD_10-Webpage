@@ -179,6 +179,35 @@ async function matchCheck() {
     check(`print match stays bounded for an out-of-gamut reference and flags it [${log.join('; ')}]`, !runaway && finalDE <= bestEver + 0.5 && res.gamutLimited && res.predictedDeltaE > 2);
   }
 
+  // a printer at its limits, like a dark purple on vinyl: it never prints darker than L* 30, and asking for more chroma
+  // than it has makes the colour duller and bluer. Over 8 rounds the search must remember its best patch, undo moves
+  // that made it worse, and never recommend values that print far off – before this, rounds jumped to ΔE 15–25.
+  {
+    const printed = ([L, a, b]) => {
+      const C = Math.hypot(a, b), h = Math.atan2(b, a);
+      const Cp = C <= 40 ? C * 0.9 : Math.max(10, 36 - (C - 40) * 0.4);
+      const hp = h - (C > 40 ? (C - 40) * 0.012 : 0);
+      return [Math.max(30, L * 0.8 + 9), Cp * Math.cos(hp), Cp * Math.sin(hp)];
+    };
+    const target = [26.4, 28.8, -31.6];
+    let centre = [...target], step = [...MODES.spot.step0];
+    const rounds = [], recs = [];
+    let regressions = 0, bestSeen = Infinity;
+    for (let round = 1; round <= 8; round++) {
+      const r = { round, mode: 'spot', centre, step, patches: designPatches('spot', centre, step).map((p) => ({ ...p, lab: printed(p.x) })) };
+      r.result = analyseRound(r, target, 'de00', rounds);
+      rounds.push(r);
+      bestSeen = Math.min(bestSeen, r.result.bestEver.dE);
+      if (r.result.regressed) regressions++;
+      recs.push(deltaE2000(target, printed(r.result.x)));
+      step = nextStep('spot', step, r.result.correction);
+      centre = r.result.x;
+    }
+    const worst = Math.max(...recs);
+    check(`at the gamut edge the search keeps its best patch and undoes failed moves (recommendations print ΔE00 ${recs.map((v) => v.toFixed(1)).join(', ')}; best ${bestSeen.toFixed(2)})`,
+      worst < 6 && recs[recs.length - 1] <= bestSeen + 0.5 && regressions >= 1 && rounds[rounds.length - 1].result.gamutLimited);
+  }
+
   // PDF structure
   const pdfBytes = buildSheetPdf({ mode: 'cmyk', patches: designPatches('cmyk', [20, 60, 70], [6, 6, 6]), target: [55, 40, 50], round: 1, kFixed: 5 });
   const txt = new TextDecoder('latin1').decode(pdfBytes);
@@ -203,19 +232,18 @@ async function matchCheck() {
   const vwEsc = RIP_EXPORTS.versaworks.build({ library: 'A&B', colours: [{ name: 'Red "1" <x>', lab: [50.123, -3.456, 7.891] }] });
   check('VersaWorks export escapes names and rounds to 2 decimals', vwEsc.includes('name="A&amp;B"') && vwEsc.includes('name="Red &quot;1&quot; &lt;x&gt;"') && vwEsc.includes('<a VALUE="-3.46"/>') && new DOMParser().parseFromString(vwEsc, 'application/xml').querySelector('parsererror') === null);
 
-  // CxF3: well-formed, core namespace, one object per colour referencing a D50/2° colour specification
-  const cxf = RIP_EXPORTS.cxf.build({ library: 'Lib', description: 'x', created: new Date('2026-10-18T10:00:00Z'), colours: [{ name: 'Brand Red', lab: [45.678, 60.123, 30] }, { name: 'A&B', lab: [90, -1, 2] }] });
-  const cdoc = new DOMParser().parseFromString(cxf, 'application/xml');
+  // CxF3: written exactly like a Digital Factory export of the same three colours (that file minus the lines that
+  // describe Digital Factory's measuring device), and still a well-formed core-namespace file with escaped names
+  const DF_CXF = "\ufeff<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<cc:CxF xmlns:cc=\"http://colorexchangeformat.com/CxF3-core\">\r\n  <cc:Resources>\r\n    <cc:ObjectCollection>\r\n      <cc:Object ObjectType=\"Standard\" Name=\"Color 1\" Id=\"EXC_1\">\r\n        <cc:ColorValues>\r\n          <cc:ColorCIELab ColorSpecification=\"CS0\">\r\n            <cc:L>42</cc:L>\r\n            <cc:A>0</cc:A>\r\n            <cc:B>69</cc:B>\r\n          </cc:ColorCIELab>\r\n        </cc:ColorValues>\r\n      </cc:Object>\r\n      <cc:Object ObjectType=\"Standard\" Name=\"color2\" Id=\"EXC_2\">\r\n        <cc:ColorValues>\r\n          <cc:ColorCIELab ColorSpecification=\"CS0\">\r\n            <cc:L>69</cc:L>\r\n            <cc:A>42</cc:A>\r\n            <cc:B>0</cc:B>\r\n          </cc:ColorCIELab>\r\n        </cc:ColorValues>\r\n      </cc:Object>\r\n      <cc:Object ObjectType=\"Standard\" Name=\"cololooloooolor 3\" Id=\"EXC_3\">\r\n        <cc:ColorValues>\r\n          <cc:ColorCIELab ColorSpecification=\"CS0\">\r\n            <cc:L>50</cc:L>\r\n            <cc:A>50</cc:A>\r\n            <cc:B>50</cc:B>\r\n          </cc:ColorCIELab>\r\n        </cc:ColorValues>\r\n      </cc:Object>\r\n    </cc:ObjectCollection>\r\n    <cc:ColorSpecificationCollection>\r\n      <cc:ColorSpecification Id=\"CS0\">\r\n        <cc:TristimulusSpec>\r\n          <cc:Illuminant>D50</cc:Illuminant>\r\n          <cc:Observer>2_Degree</cc:Observer>\r\n          <cc:Method>E308_Table6</cc:Method>\r\n        </cc:TristimulusSpec>\r\n        <cc:MeasurementSpec>\r\n          <cc:MeasurementType>Spectrum_Reflectance</cc:MeasurementType>\r\n          <cc:GeometryChoice>\r\n            <cc:SingleAngle>\r\n              <cc:SingleAngleConfiguration>Annular</cc:SingleAngleConfiguration>\r\n              <cc:IlluminationAngle>45</cc:IlluminationAngle>\r\n              <cc:MeasurementAngle>0.0</cc:MeasurementAngle>\r\n            </cc:SingleAngle>\r\n          </cc:GeometryChoice>\r\n        </cc:MeasurementSpec>\r\n      </cc:ColorSpecification>\r\n    </cc:ColorSpecificationCollection>\r\n  </cc:Resources>\r\n</cc:CxF>";
+  const cxf = RIP_EXPORTS.cxf.build({ library: 'Lib', colours: [{ name: 'Color 1', lab: [42, 0, 69] }, { name: 'color2', lab: [69, 42, 0] }, { name: 'cololooloooolor 3', lab: [50, 50, 50] }] });
+  check('CxF3 export is identical to a Digital Factory-exported library (BOM, CRLF, cc: prefix)', cxf === DF_CXF, JSON.stringify(cxf.slice(0, 200)));
+  const cxf2 = RIP_EXPORTS.cxf.build({ colours: [{ name: 'A&B "1"', lab: [45.678, -0.001, 26.4] }] });
+  const cdoc = new DOMParser().parseFromString(cxf2.replace(/^﻿/, ''), 'application/xml');
   const NS = 'http://colorexchangeformat.com/CxF3-core';
-  const objs = [...cdoc.getElementsByTagNameNS(NS, 'Object')];
-  const lab0 = objs[0] && ['L', 'A', 'B'].map((t) => objs[0].getElementsByTagNameNS(NS, t)[0]?.textContent);
-  const spec = cdoc.getElementsByTagNameNS(NS, 'ColorSpecification')[0];
-  const cxfOk = !cdoc.querySelector('parsererror') && cdoc.documentElement.localName === 'CxF' && cdoc.documentElement.namespaceURI === NS &&
-    objs.length === 2 && objs[0].getAttribute('Name') === 'Brand Red' && objs[1].getAttribute('Name') === 'A&B' && objs[0].getAttribute('ObjectType') === 'Standard' &&
-    lab0.join() === '45.68,60.12,30.00' && objs[0].getElementsByTagNameNS(NS, 'ColorCIELab')[0].getAttribute('ColorSpecification') === spec?.getAttribute('Id') &&
-    spec.getElementsByTagNameNS(NS, 'Illuminant')[0].textContent === 'D50' && spec.getElementsByTagNameNS(NS, 'Observer')[0].textContent === '2_Degree' &&
-    objs[0].getElementsByTagNameNS(NS, 'CreationDate')[0].textContent === '2026-10-18T10:00:00Z';
-  check('CxF3 export: well-formed core-namespace file, named objects with CIELab D50/2°', cxfOk, cxf.slice(0, 300));
+  const obj = cdoc.getElementsByTagNameNS(NS, 'Object')[0];
+  const lab0 = obj && ['L', 'A', 'B'].map((t) => obj.getElementsByTagNameNS(NS, t)[0]?.textContent);
+  check('CxF3 export: well-formed, names escaped, values in shortest form to 2 decimals (no "-0")', !cdoc.querySelector('parsererror') && cdoc.documentElement.namespaceURI === NS &&
+    obj?.getAttribute('Name') === 'A&B "1"' && lab0.join() === '45.68,0,26.4', cxf2);
 
   // Adobe Color Book: byte layout of the reference ACB encoder (Lab book, 8-bit components, 'spflspot' trailer)
   const acb = RIP_EXPORTS.acb.build({ library: 'Test', description: 'd', id: 4242, colours: [{ name: 'Brand Red', lab: [45.6, 60.4, -30.4] }, { name: 'Grey', lab: [50, 0, 0] }] });
@@ -231,7 +259,7 @@ async function matchCheck() {
     return [f, readLibrary(typeof out === 'string' ? new TextEncoder().encode(out) : out, `x.${f}`)];
   }));
   const close = (lib, tol) => lib.colours.length === 2 && lib.colours.every((c, i) => c.name === sample[i].name && c.lab.every((v, k) => Math.abs(v - sample[i].lab[k]) <= tol));
-  check('import reads CxF3, VersaWorks and Adobe Color Book files back (names, L*a*b*, library name)', close(back.cxf, 0.005) && close(back.versaworks, 0.005) && close(back.acb, 0.51) && close(back.epcc, 0.051) && back.cxf.library === 'House' && back.versaworks.library === 'House' && back.acb.library === 'House' && back.acb.format === 'acb', JSON.stringify(back));
+  check('import reads CxF3, VersaWorks and Adobe Color Book files back (names, L*a*b*, library name – CxF has none, so the file name)', close(back.cxf, 0.005) && close(back.versaworks, 0.005) && close(back.acb, 0.51) && close(back.epcc, 0.051) && back.cxf.library === 'x' && back.versaworks.library === 'House' && back.acb.library === 'House' && back.acb.format === 'acb', JSON.stringify(back));
   const sp = Array.from({ length: 36 }, (_, i) => (0.2 + 0.5 * Math.exp(-(((380 + 10 * i - 600) / 60) ** 2))).toFixed(4)).join(' ');
   const cxfIn = `<?xml version="1.0"?><CxF xmlns="http://colorexchangeformat.com/CxF3-core"><Resources><ObjectCollection>
     <Object ObjectType="Standard" Name="Spectral" Id="a"><CreationDate>2026-01-01</CreationDate><ColorValues><ReflectanceSpectrum ColorSpecification="S" StartWL="380">${sp}</ReflectanceSpectrum></ColorValues></Object>
@@ -480,6 +508,105 @@ async function e2e() {
   check('e2e release control on disconnect', tx.some((l) => l.dir === 'tx' && l.bytes[2] === CMD.CONTROL && l.bytes[10] === 2));
 }
 
+async function spaceCheck() {
+  const { CHART_SIZES, designChart, driftOf, invert, keepFrom, learn, newSpace, pointX, readSpaceFile, removeSession, spaceFromCgats, spaceStats, spaceToCgats, spaceToJson } = await import('../js/colorspace.js');
+  const { designPatches } = await import('../js/match.js');
+  const { printSpectrum } = await import('../js/printer-sim.js');
+  let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const noise = (lab, s = 0.3) => lab.map((v) => v + (rnd() - 0.5) * 2 * s);
+  // a printer that compresses chroma towards its gamut edge (C* 48–76 depending on hue), lifts the blacks and turns hues
+  const printer = ([L, a, b]) => {
+    const C = Math.hypot(a, b), h = Math.atan2(b, a), Cmax = 62 + 14 * Math.cos(h - 1);
+    const Cp = Cmax * Math.tanh(C / Cmax), hp = h + 0.1 * Math.sin(2 * h);
+    return [Math.min(96, 6 + 0.9 * L), Cp * Math.cos(hp), Cp * Math.sin(hp)];
+  };
+
+  // charts
+  const chart = designChart('spot', 400, 3);
+  const keys = new Set(chart.map((p) => p.x.join()));
+  const mixed = chart.slice(1, 40).filter((p, i) => Math.abs(p.x[0] - chart[i].x[0]) > 20).length > 5;
+  check('colour space chart: distinct L*a*b* patches in range, a neutral ramp, reproducible from its seed, mixed order on the sheet',
+    chart.length === 400 && keys.size === 400 && chart.every((p, i) => p.n === i + 1 && p.x[0] >= 3 && p.x[0] <= 98 && Math.abs(p.x[1]) <= 127 && Math.abs(p.x[2]) <= 127) &&
+    chart.filter((p) => p.x[1] === 0 && p.x[2] === 0).length >= 20 && JSON.stringify(designChart('spot', 400, 3)) === JSON.stringify(chart) &&
+    JSON.stringify(designChart('spot', 400, 4)) !== JSON.stringify(chart) && mixed && Object.values(CHART_SIZES).every((s) => designChart('lab', s.n, 1).length === s.n));
+  const cm = designChart('cmyk', 200, 1), rg = designChart('rgb', 200, 1);
+  check('CMYK and RGB charts: K per patch, device corners, the whole range',
+    cm.length === 200 && cm.every((p) => p.x.length === 3 && p.k >= 0 && p.k <= 100 && p.x.every((v) => v >= 0 && v <= 100)) && cm.some((p) => p.k === 100) &&
+    rg.length === 200 && rg.every((p) => p.x.every((v) => Number.isInteger(v) && v >= 0 && v <= 255)) && rg.some((p) => p.x.join() === '255,255,255'));
+
+  // a space from a 400-patch chart
+  const T0 = Date.parse('2026-01-01T00:00:00Z'), DAY = 864e5;
+  const space = newSpace({ name: 'Test printer', mode: 'spot', now: T0 });
+  for (const p of chart) learn(space, { session: 'chart:1', kind: 'chart', label: 'Chart 1', n: p.n, x: p.x, lab: noise(printer(p.x)), now: T0 });
+  const st = spaceStats(space);
+  check(`colour space accuracy (each patch predicted from the others): median ΔE00 ${st.accuracy.median.toFixed(2)}, 90 % within ${st.accuracy.p90.toFixed(2)}`,
+    st.points === 400 && st.accuracy.median < 1.5 && st.accuracy.p90 < 3 && st.spacing > 0);
+  const inside = [[52, 28, -22], [70, -30, 25], [35, 10, 30], [85, 2, 40]];
+  const errs = inside.map((t) => { const r = invert(space, t); return { got: deltaE2000(t, printer(r.x)), pred: r.predictedDeltaE }; });
+  check(`colour space prediction: in-gamut references print within ΔE00 ${errs.map((e) => e.got.toFixed(2)).join(', ')} straight away`, errs.every((e) => e.got < 1.5 && e.pred < 1));
+  const outT = [50, 90, 10];
+  const ro = invert(space, outT);
+  let bestBrute = Infinity;
+  for (let L = 30; L <= 80; L += 2) for (let a = -120; a <= 120; a += 4) for (let b = -60; b <= 60; b += 4) bestBrute = Math.min(bestBrute, deltaE2000(outT, printer([L, a, b])));
+  const outGot = deltaE2000(outT, printer(ro.x));
+  check(`out of gamut: predicted ΔE00 ${ro.predictedDeltaE.toFixed(2)}, the values print ${outGot.toFixed(2)}, the best this printer can do is ${bestBrute.toFixed(2)}`,
+    ro.predictedDeltaE > 2 && Math.abs(outGot - ro.predictedDeltaE) < 1.5 && outGot < bestBrute + 1.5);
+
+  // learning from test sheets
+  const t = [44, 38, -34];
+  const before = deltaE2000(t, printer(invert(space, t).x));
+  for (let round = 1; round <= 2; round++) {
+    const r0 = invert(space, t);
+    for (const p of designPatches('spot', r0.x, [3, 4, 4])) learn(space, { session: `sheet:R${round}`, kind: 'sheet', label: `Sheet ${round}`, n: p.n, x: p.x, lab: noise(printer(p.x)), now: T0 + round * DAY });
+  }
+  const after = deltaE2000(t, printer(invert(space, t).x));
+  const d1 = driftOf(space, 'sheet:R1');
+  check(`learning: two test sheets near a reference refine the space there (prints ΔE00 ${before.toFixed(2)} -> ${after.toFixed(2)}) and match its prediction (no drift, median ${d1?.median.toFixed(2)})`,
+    after < 1 && after <= Math.max(before, 0.5) + 0.05 && d1 && !d1.drift);
+
+  // drift: the printer changed (darker, duller, yellower)
+  const changed = (x) => { const [L, a, b] = printer(x); return [L - 4, a * 0.9, b * 0.9 + 3]; };
+  const check24 = designChart('spot', 24, 9);
+  for (const p of check24) learn(space, { session: 'check:1', kind: 'check', label: 'Check 1', n: p.n, x: p.x, lab: noise(changed(p.x)), now: T0 + 10 * DAY });
+  const dr = driftOf(space, 'check:1');
+  const n0 = space.points.length;
+  learn(space, { session: 'check:1', kind: 'check', label: 'Check 1', n: 1, x: check24[0].x, lab: printer(check24[0].x), now: T0 + 10 * DAY });
+  const replaced = space.points.length === n0;
+  removeSession(space, 'check:1');
+  check(`drift: a check chart from a changed printer is flagged (median ΔE00 ${dr?.median.toFixed(2)} > ${dr?.limit.toFixed(2)}); a re-measured patch replaces its point; removing a session removes its patches`,
+    dr?.drift && replaced && space.points.length === n0 - 24 && !space.sessions.some((s) => s.id === 'check:1'));
+
+  // files
+  const json = readSpaceFile(new TextEncoder().encode(spaceToJson(space)), 'Test printer.json');
+  const same = json.id === space.id && json.name === space.name && json.mode === 'spot' && json.points.length === space.points.length && json.sessions.length === 3 &&
+    invert(json, t).x.join() === invert(space, t).x.join();
+  const removed = keepFrom(json, T0 + DAY);
+  check('colour space JSON file reads back exactly; "keep only newer data" drops the older sessions', same && removed === 1 && json.points.every((p) => p.s.startsWith('sheet:')));
+  const cg = spaceToCgats(space, new Date(T0));
+  const cgBack = spaceFromCgats(cg, 'x.txt');
+  check('CGATS export: declared requested-L*a*b* fields, reads back (sheet type, values, name)',
+    /^CGATS\.17\r\n/.test(cg) && /KEYWORD\t"REQ_L"/.test(cg) && /\r\nSAMPLE_ID\tREQ_L\tREQ_A\tREQ_B\tLAB_L\tLAB_A\tLAB_B\r\n/.test(cg) && cgBack.mode === 'spot' && cgBack.name === 'Test printer' &&
+    cgBack.points.length === space.points.length && cgBack.points.every((p, i) => p.x.concat(p.lab).every((v, k) => Math.abs(v - space.points[i].x.concat(space.points[i].lab)[k]) < 0.006)));
+
+  // CMYK: K is a fourth input; standard CMYK_ fields; ArgyllCMS .ti3 RGB in 0–100
+  const cmykPrint = (x) => spectrumToLab(printSpectrum(x), 0, 2);
+  const cs = newSpace({ name: 'CMYK printer', mode: 'cmyk', now: T0 });
+  for (const p of designChart('cmyk', 400, 2)) learn(cs, { session: 'chart', kind: 'chart', label: 'Chart', n: p.n, x: pointX('cmyk', p.x, p.k), lab: noise(cmykPrint([...p.x, p.k]), 0.2), now: T0 });
+  const ct = cmykPrint([35, 55, 15, 10]);
+  const cFree = invert(cs, ct), cK = invert(cs, ct, { kFixed: 10 });
+  const eFree = deltaE2000(ct, cmykPrint([...cFree.x, cFree.k])), eK = deltaE2000(ct, cmykPrint([...cK.x, 10]));
+  const cmykCg = spaceFromCgats(spaceToCgats(cs), 'c.txt');
+  check(`CMYK space: references print within ΔE00 ${eFree.toFixed(2)} (K chosen) / ${eK.toFixed(2)} (K 10 kept); CGATS CMYK_ fields`,
+    eFree < 2 && eK < 2 && cK.k === 10 && cmykCg.mode === 'cmyk' && cmykCg.points[0].x.length === 4);
+  const ti3 = 'CTI3\nDESCRIPTOR "Argyll chart"\nNUMBER_OF_FIELDS 7\nBEGIN_DATA_FORMAT\nSAMPLE_ID RGB_R RGB_G RGB_B LAB_L LAB_A LAB_B\nEND_DATA_FORMAT\nNUMBER_OF_SETS 2\nBEGIN_DATA\n1 100 100 100 95.1 0.2 -1\n2 0 50 100 40 10 -50\nEND_DATA\n';
+  const ti = spaceFromCgats(ti3, 'chart.ti3');
+  let bad = '';
+  try { readSpaceFile(new TextEncoder().encode('hello'), 'notes.txt'); } catch (e) { bad = e.message; }
+  check('CGATS import: charts measured with other software (ArgyllCMS .ti3 RGB 0–100 -> 0–255); other files are rejected',
+    ti.mode === 'rgb' && ti.name === 'Argyll chart' && ti.points[0].x.join() === '255,255,255' && ti.points[1].x.join() === '0,128,255' && ti.points[1].lab.join() === '40,10,-50' && /not a CGATS/.test(bad), bad);
+}
+
 function report() {
   const pass = results.filter((r) => r.ok).length;
   const out = document.getElementById('out');
@@ -491,4 +618,5 @@ function report() {
 cmykCheck().catch((e) => check('CMYK check (exception)', false, e.stack || e.message))
   .then(() => iccV4Check()).catch((e) => check('ICC v4 check (exception)', false, e.stack || e.message))
   .then(() => matchCheck()).catch((e) => check('print match (exception)', false, e.stack || e.message))
+  .then(() => spaceCheck()).catch((e) => check('colour space (exception)', false, e.stack || e.message))
   .then(() => e2e()).catch((e) => check('e2e (exception)', false, e.stack || e.message)).finally(report);
