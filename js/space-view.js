@@ -126,9 +126,10 @@ function project([a, L, b]) {
   const X = x * cy - z * sy, Z0 = x * sy + z * cy;
   const Y = y * cp + Z0 * sp, Z = -y * sp + Z0 * cp;
   const R = scene?.R ?? 130; // fits ±R in a*/b* and L* 0–100
-  const scale = Math.min(W / (2.2 * R), H / Math.max(1.85 * R, 135)) * cam.zoom;
+  const scale = Math.min(W / (2.2 * R), H / Math.max(2 * R, 145)) * cam.zoom;
   const s = (scale * 700) / (700 + Z);
-  return { x: W / 2 + X * s, y: H / 2 - Y * s, z: Z, s };
+  // a little above the middle: the floor rings and axis labels reach further down than the top of the L* axis goes up
+  return { x: W / 2 + X * s, y: H * 0.46 - Y * s, z: Z, s };
 }
 
 /** Colours of the axes, labels, wireframe and markers for the light or dark page. */

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <link rel="stylesheet" href="css/app.css?v=2026-10-20.e58955e-193425">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-20.46f7796-194217">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -490,7 +490,7 @@
     </div>
     <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr),17rem] items-start">
       <div class="card !p-0 overflow-hidden">
-        <div class="relative h-[calc(100vh-13rem)] min-h-[440px]">
+        <div class="relative w-full aspect-[4/3] max-h-[calc(100vh-13rem)] min-h-[440px]"><!-- as tall as the screen allows, but never taller than 4:3 – zoomed out, a full-height box would be a narrow column -->
           <canvas id="vsCanvas" class="absolute inset-0 h-full w-full touch-none cursor-grab" aria-label="3-D view of the colour space"></canvas>
           <div id="vsTip" class="pointer-events-none absolute hidden max-w-xs rounded-md bg-slate-900/90 px-2 py-1.5 text-xs leading-5 text-white shadow"></div>
           <div id="vsEmpty" class="absolute inset-0 hidden grid place-items-center p-8 text-center text-sm text-slate-500"></div>
@@ -526,26 +526,26 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-20.e58955e-193425",
-      "./js/transport.js": "./js/transport.js?v=2026-10-20.e58955e-193425",
-      "./js/mock.js": "./js/mock.js?v=2026-10-20.e58955e-193425",
-      "./js/session.js": "./js/session.js?v=2026-10-20.e58955e-193425",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-20.e58955e-193425",
-      "./js/color.js": "./js/color.js?v=2026-10-20.e58955e-193425",
-      "./js/weights.js": "./js/weights.js?v=2026-10-20.e58955e-193425",
-      "./js/storage.js": "./js/storage.js?v=2026-10-20.e58955e-193425",
-      "./js/icc.js": "./js/icc.js?v=2026-10-20.e58955e-193425",
-      "./js/match.js": "./js/match.js?v=2026-10-20.e58955e-193425",
-      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-20.e58955e-193425",
-      "./js/ui.js": "./js/ui.js?v=2026-10-20.e58955e-193425",
-      "./js/match-view.js": "./js/match-view.js?v=2026-10-20.e58955e-193425",
-      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-20.e58955e-193425",
-      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-20.e58955e-193425",
-      "./js/debug.js": "./js/debug.js?v=2026-10-20.e58955e-193425",
-      "./js/space-view.js": "./js/space-view.js?v=2026-10-20.e58955e-193425"
+      "./js/app.js": "./js/app.js?v=2026-10-20.46f7796-194217",
+      "./js/transport.js": "./js/transport.js?v=2026-10-20.46f7796-194217",
+      "./js/mock.js": "./js/mock.js?v=2026-10-20.46f7796-194217",
+      "./js/session.js": "./js/session.js?v=2026-10-20.46f7796-194217",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-20.46f7796-194217",
+      "./js/color.js": "./js/color.js?v=2026-10-20.46f7796-194217",
+      "./js/weights.js": "./js/weights.js?v=2026-10-20.46f7796-194217",
+      "./js/storage.js": "./js/storage.js?v=2026-10-20.46f7796-194217",
+      "./js/icc.js": "./js/icc.js?v=2026-10-20.46f7796-194217",
+      "./js/match.js": "./js/match.js?v=2026-10-20.46f7796-194217",
+      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-20.46f7796-194217",
+      "./js/ui.js": "./js/ui.js?v=2026-10-20.46f7796-194217",
+      "./js/match-view.js": "./js/match-view.js?v=2026-10-20.46f7796-194217",
+      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-20.46f7796-194217",
+      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-20.46f7796-194217",
+      "./js/debug.js": "./js/debug.js?v=2026-10-20.46f7796-194217",
+      "./js/space-view.js": "./js/space-view.js?v=2026-10-20.46f7796-194217"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-20.e58955e-193425"></script>
+  <script type="module" src="js/app.js?v=2026-10-20.46f7796-194217"></script>
 </body>
 </html>
