@@ -1517,9 +1517,9 @@ function wireSettings() {
   $('btnPrinterIccRemove').onclick = removePrinterProfile;
   refreshPrinterProfiles().then(() => { if (state.view === 'match') renderMatch(); });
   $('mRipFormat').onchange = () => { match.ripFormat = $('mRipFormat').value; commit(); };
-  // folded sections remember whether they were open; Tips start closed
-  for (const [id, key] of [['mTipsBox', 'sd10.tipsOpen'], ['mMoreSettings', 'sd10.moreSettingsOpen'], ['mLibEdit', 'sd10.libEditOpen']]) {
-    $(id).open = readFlag(key);
+  // folded sections remember whether they were open; Data & files (beside the color space's controls) starts open
+  for (const [id, key, open] of [['mTipsBox', 'sd10.tipsOpen'], ['mMoreSettings', 'sd10.moreSettingsOpen'], ['mLibEdit', 'sd10.libEditOpen'], ['mSpaceData', 'sd10.spaceDataOpen', true]]) {
+    $(id).open = readFlag(key, open);
     $(id).ontoggle = () => writeFlag(key, $(id).open);
   }
 }

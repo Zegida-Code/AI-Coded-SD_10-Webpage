@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <link rel="stylesheet" href="css/app.css?v=2026-10-21.1e0e373-224717">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-21.11c9c43-230242">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -270,11 +270,11 @@
         with finer sheets until it is within tolerance.</p>
     </div>
 
-    <!-- Two columns on wide screens: the color list, settings and tips at the left, the selected color's workflow and the tools at the right.
-         On narrower screens everything stacks: colors, settings, tips, then the workflow (reference, sheet, scan, result, library, color space). -->
+    <!-- Two columns on wide screens: the color list, settings and spot library at the left, the selected color's workflow and the
+         color space at the right, the tips across both. On narrower screens everything stacks in that order. -->
     <div class="grid gap-4 lg:grid-cols-[minmax(0,22rem),minmax(0,1fr)] xl:grid-cols-[minmax(0,24rem),minmax(0,1fr)] items-start">
 
-      <!-- left column: the colors, the settings shared by all colors, and the tips -->
+      <!-- left column: the colors, the settings shared by all colors, and the spot library -->
       <div class="flex flex-col gap-4 min-w-0">
       <!-- colors: pick the one to work on -->
       <div class="card space-y-3">
@@ -336,14 +336,35 @@
         </details>
       </div>
 
-      <!-- tips: the sheet type explained and printing advice – reference text, closed until opened (state remembered) -->
-      <details id="mTipsBox" class="card">
-        <summary class="cursor-pointer font-semibold">Tips</summary>
-        <div class="mt-3 space-y-2 text-xs text-slate-600 dark:text-slate-400 [&_b]:font-semibold [&_b]:text-slate-800 dark:[&_b]:text-slate-200">
-          <p id="mModeHelp"></p>
-          <div id="mPrintTips" class="space-y-2"></div>
+      <!-- spot library: matched colors collected across jobs, exported together as one library file -->
+      <div id="mLibraryCard" class="card min-w-0 space-y-3">
+        <h3 class="font-semibold">Spot library <span id="mLibCount" class="text-sm font-normal text-slate-500"></span></h3>
+        <p class="text-xs text-slate-500">Your named colors, downloaded together as one library file for the RIP (format under Settings). Kept in this browser.</p>
+        <div id="mLibList"></div>
+        <p id="mLibNote" class="text-xs text-slate-500"></p>
+        <div class="flex flex-wrap items-center gap-2">
+          <button id="btnLibDownload" class="btn btn-ghost" disabled>Download library</button>
+          <button id="btnLibImport" class="btn btn-ghost" title="Add the colors of a CxF (.cxf), Adobe Color Book (.acb), Epson Edge Print (.epcc) or VersaWorks (.spot) library – or drop the file anywhere on this page">Import…</button>
+          <input id="libFile" type="file" accept=".cxf,.acb,.spot,.epcc,.xml" class="hidden">
         </div>
-      </details>
+        <!-- add a color by hand (or from the last measurement), rename the library – folded away -->
+        <details id="mLibEdit" class="border-t border-slate-200 pt-3 dark:border-slate-800">
+          <summary class="cursor-pointer text-sm font-medium">Add a color · library name · clear</summary>
+          <div class="mt-3 space-y-3">
+          <div class="max-w-sm"><label class="label" for="mLibName">Library name</label>
+            <input id="mLibName" class="input" type="text" maxlength="60" autocomplete="off"></div>
+          <form id="libAddForm" class="grid grid-cols-[minmax(0,2fr),repeat(3,minmax(0,1fr))] gap-2 items-end">
+            <div><label class="label" for="libNewName">Add color – name</label><input id="libNewName" class="input" type="text" maxlength="60" autocomplete="off" placeholder="Spot color name"></div>
+            <div><label class="label" for="libNewL">L*</label><input id="libNewL" class="input font-mono" type="number" step="0.01" min="0" max="100"></div>
+            <div><label class="label" for="libNewA">a*</label><input id="libNewA" class="input font-mono" type="number" step="0.01" min="-128" max="127"></div>
+            <div><label class="label" for="libNewB">b*</label><input id="libNewB" class="input font-mono" type="number" step="0.01" min="-128" max="127"></div>
+            <button id="btnLibAdd" type="submit" class="btn btn-primary col-span-2">Add</button>
+            <button id="btnLibFromLast" type="button" class="btn btn-ghost col-span-2" title="Fill L*a*b* from the last measurement (D50 / 2°)">Use last measurement</button>
+          </form>
+          <button id="btnLibClear" class="px-1 py-1 text-sm text-rose-600 hover:underline disabled:opacity-40 disabled:no-underline dark:text-rose-400" disabled title="Remove every color from the spot library">Clear the library</button>
+          </div>
+        </details>
+      </div>
       </div>
 
       <!-- the selected color's workflow -->
@@ -413,62 +434,32 @@
           <div id="mResult" class="space-y-4"></div>
         </div>
 
-        <!-- the tools beside the workflow, side by side on wide screens: the spot library and the color space -->
-        <div class="grid gap-4 xl:grid-cols-2">
-        <!-- spot library: matched colors collected across jobs, exported together as one library file -->
-        <div id="mLibraryCard" class="card min-w-0 space-y-3">
-          <h3 class="font-semibold">Spot library <span id="mLibCount" class="text-sm font-normal text-slate-500"></span></h3>
-          <p class="text-xs text-slate-500">Your named colors, downloaded together as one library file for the RIP (format under Settings). Kept in this browser.</p>
-          <div id="mLibList"></div>
-          <p id="mLibNote" class="text-xs text-slate-500"></p>
-          <div class="flex flex-wrap items-center gap-2">
-            <button id="btnLibDownload" class="btn btn-ghost" disabled>Download library</button>
-            <button id="btnLibImport" class="btn btn-ghost" title="Add the colors of a CxF (.cxf), Adobe Color Book (.acb), Epson Edge Print (.epcc) or VersaWorks (.spot) library – or drop the file anywhere on this page">Import…</button>
-            <input id="libFile" type="file" accept=".cxf,.acb,.spot,.epcc,.xml" class="hidden">
-          </div>
-          <!-- add a color by hand (or from the last measurement), rename the library – folded away -->
-          <details id="mLibEdit" class="border-t border-slate-200 pt-3 dark:border-slate-800">
-            <summary class="cursor-pointer text-sm font-medium">Add a color · library name · clear</summary>
-            <div class="mt-3 space-y-3">
-          <div class="max-w-sm"><label class="label" for="mLibName">Library name</label>
-            <input id="mLibName" class="input" type="text" maxlength="60" autocomplete="off"></div>
-          <form id="libAddForm" class="grid grid-cols-[minmax(0,2fr),repeat(3,minmax(0,1fr))] xl:grid-cols-[minmax(0,2fr),repeat(3,minmax(0,1fr)),auto,auto] gap-2 items-end">
-            <div><label class="label" for="libNewName">Add color – name</label><input id="libNewName" class="input" type="text" maxlength="60" autocomplete="off" placeholder="Spot color name"></div>
-            <div><label class="label" for="libNewL">L*</label><input id="libNewL" class="input font-mono" type="number" step="0.01" min="0" max="100"></div>
-            <div><label class="label" for="libNewA">a*</label><input id="libNewA" class="input font-mono" type="number" step="0.01" min="-128" max="127"></div>
-            <div><label class="label" for="libNewB">b*</label><input id="libNewB" class="input font-mono" type="number" step="0.01" min="-128" max="127"></div>
-            <button id="btnLibAdd" type="submit" class="btn btn-primary col-span-2 xl:col-span-1">Add</button>
-            <button id="btnLibFromLast" type="button" class="btn btn-ghost col-span-2 xl:col-span-1" title="Fill L*a*b* from the last measurement (D50 / 2°)">Use last measurement</button>
-          </form>
-          <button id="btnLibClear" class="px-1 py-1 text-sm text-rose-600 hover:underline disabled:opacity-40 disabled:no-underline dark:text-rose-400" disabled title="Remove every color from the spot library">Clear the library</button>
-            </div>
-          </details>
-        </div>
-
         <!-- color space: a measured map of what the printer really prints – predicts values straight away, learns from every sheet -->
-        <div id="mSpaceCard" class="card min-w-0 space-y-3">
-          <div class="flex items-center justify-between gap-2">
-            <h3 class="font-semibold">Color space</h3>
-            <button id="btnSpaceNew" type="button" class="btn btn-ghost" title="Start a new color space for this printer, ink, media and settings">+ New</button>
+        <div id="mSpaceCard" class="card min-w-0 grid gap-x-6 gap-y-3 xl:grid-cols-2 items-start">
+          <div class="min-w-0 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="font-semibold">Color space</h3>
+              <button id="btnSpaceNew" type="button" class="btn btn-ghost" title="Start a new color space for this printer, ink, media and settings">+ New</button>
+            </div>
+            <div class="flex gap-2">
+              <select id="mSpace" class="input min-w-0" aria-label="Color space in use"><option value="">None</option></select>
+              <button id="btnSpaceImport" type="button" class="btn btn-ghost" title="Import a saved color space (.json) or a CGATS / IT8 measurement file (.txt, .ti3) – or drop the file anywhere on this page">Import…</button>
+              <input id="spaceFile" type="file" accept=".json,.txt,.cgats,.cgt,.it8,.ti3" class="hidden">
+            </div>
+            <div id="mSpaceInfo" class="space-y-2 text-xs text-slate-500"></div>
+            <div class="flex flex-wrap items-end gap-2">
+              <div class="flex-1 min-w-[10rem]"><label class="label" for="mChartSize">Chart</label>
+                <select id="mChartSize" class="input"></select></div>
+              <button id="btnSpaceChart" type="button" class="btn btn-ghost">Create chart</button>
+            </div>
+            <label class="flex items-center gap-2 text-sm"><input id="mSpaceLearn" type="checkbox" class="h-4 w-4"> Learn from every test sheet I scan</label>
+            <div class="flex items-center gap-2 text-sm"><label for="mFillIn" class="flex-1">Fill-in patches on each test sheet</label>
+              <select id="mFillIn" class="input !w-40" title="Extra patches where the color space has measured least – some near the color being matched. They are marked on the sheet and only feed the color space. “Fill the free space” uses the empty slots of the pages the sheet already needs, so they cost no extra media."><option value="0">None</option><option value="4">4</option><option value="8">8</option><option value="auto">Fill the free space</option></select></div>
           </div>
-          <div class="flex gap-2">
-            <select id="mSpace" class="input min-w-0" aria-label="Color space in use"><option value="">None</option></select>
-            <button id="btnSpaceImport" type="button" class="btn btn-ghost" title="Import a saved color space (.json) or a CGATS / IT8 measurement file (.txt, .ti3) – or drop the file anywhere on this page">Import…</button>
-            <input id="spaceFile" type="file" accept=".json,.txt,.cgats,.cgt,.it8,.ti3" class="hidden">
-          </div>
-          <div id="mSpaceInfo" class="space-y-2 text-xs text-slate-500"></div>
-          <div class="flex flex-wrap items-end gap-2">
-            <div class="flex-1 min-w-[10rem]"><label class="label" for="mChartSize">Chart</label>
-              <select id="mChartSize" class="input"></select></div>
-            <button id="btnSpaceChart" type="button" class="btn btn-ghost">Create chart</button>
-          </div>
-          <label class="flex items-center gap-2 text-sm"><input id="mSpaceLearn" type="checkbox" class="h-4 w-4"> Learn from every test sheet I scan</label>
-          <div class="flex items-center gap-2 text-sm"><label for="mFillIn" class="flex-1">Fill-in patches on each test sheet</label>
-            <select id="mFillIn" class="input !w-40" title="Extra patches where the color space has measured least – some near the color being matched. They are marked on the sheet and only feed the color space. “Fill the free space” uses the empty slots of the pages the sheet already needs, so they cost no extra media."><option value="0">None</option><option value="4">4</option><option value="8">8</option><option value="auto">Fill the free space</option></select></div>
-          <!-- what the color space holds, and its files – folded away -->
-          <details id="mSpaceData" class="hidden border-t border-slate-200 pt-3 text-xs dark:border-slate-800">
+          <!-- what the color space holds, and its files – beside the controls on wide screens, below them otherwise; folded away -->
+          <details id="mSpaceData" class="hidden min-w-0 border-t border-slate-200 pt-3 text-xs dark:border-slate-800 xl:border-t-0 xl:border-l xl:pt-0 xl:pl-6">
             <summary class="cursor-pointer text-sm font-medium">Data &amp; files</summary>
-            <ul id="mSpaceSessions" class="mt-2 space-y-1"></ul>
+            <ul id="mSpaceSessions" class="mt-2 max-h-96 space-y-1 overflow-y-auto"></ul>
             <div id="mSpaceActions" class="mt-3 flex flex-wrap items-center gap-2 hidden">
               <button id="btnSpaceJson" type="button" class="btn btn-ghost" title="Save the color space as a file to keep it, move it to another computer or share it">Export</button>
               <button id="btnSpaceCgats" type="button" class="btn btn-ghost" title="The measurements as a CGATS text file (device values and measured L*a*b*), e.g. for profiling software">CGATS</button>
@@ -477,9 +468,16 @@
             </div>
           </details>
         </div>
-        </div>
       </div>
 
+      <!-- tips across the whole width: the sheet type explained and printing advice – reference text, closed until opened (state remembered) -->
+      <details id="mTipsBox" class="card lg:col-span-2">
+        <summary class="cursor-pointer font-semibold">Tips</summary>
+        <div class="mt-3 space-y-2 text-xs text-slate-600 dark:text-slate-400 [&_b]:font-semibold [&_b]:text-slate-800 dark:[&_b]:text-slate-200">
+          <p id="mModeHelp"></p>
+          <div id="mPrintTips" class="space-y-2"></div>
+        </div>
+      </details>
     </div>
   </main>
 
@@ -557,26 +555,26 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-21.1e0e373-224717",
-      "./js/transport.js": "./js/transport.js?v=2026-10-21.1e0e373-224717",
-      "./js/mock.js": "./js/mock.js?v=2026-10-21.1e0e373-224717",
-      "./js/session.js": "./js/session.js?v=2026-10-21.1e0e373-224717",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-21.1e0e373-224717",
-      "./js/color.js": "./js/color.js?v=2026-10-21.1e0e373-224717",
-      "./js/weights.js": "./js/weights.js?v=2026-10-21.1e0e373-224717",
-      "./js/storage.js": "./js/storage.js?v=2026-10-21.1e0e373-224717",
-      "./js/icc.js": "./js/icc.js?v=2026-10-21.1e0e373-224717",
-      "./js/match.js": "./js/match.js?v=2026-10-21.1e0e373-224717",
-      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-21.1e0e373-224717",
-      "./js/ui.js": "./js/ui.js?v=2026-10-21.1e0e373-224717",
-      "./js/match-view.js": "./js/match-view.js?v=2026-10-21.1e0e373-224717",
-      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-21.1e0e373-224717",
-      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-21.1e0e373-224717",
-      "./js/debug.js": "./js/debug.js?v=2026-10-21.1e0e373-224717",
-      "./js/space-view.js": "./js/space-view.js?v=2026-10-21.1e0e373-224717"
+      "./js/app.js": "./js/app.js?v=2026-10-21.11c9c43-230242",
+      "./js/transport.js": "./js/transport.js?v=2026-10-21.11c9c43-230242",
+      "./js/mock.js": "./js/mock.js?v=2026-10-21.11c9c43-230242",
+      "./js/session.js": "./js/session.js?v=2026-10-21.11c9c43-230242",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-21.11c9c43-230242",
+      "./js/color.js": "./js/color.js?v=2026-10-21.11c9c43-230242",
+      "./js/weights.js": "./js/weights.js?v=2026-10-21.11c9c43-230242",
+      "./js/storage.js": "./js/storage.js?v=2026-10-21.11c9c43-230242",
+      "./js/icc.js": "./js/icc.js?v=2026-10-21.11c9c43-230242",
+      "./js/match.js": "./js/match.js?v=2026-10-21.11c9c43-230242",
+      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-21.11c9c43-230242",
+      "./js/ui.js": "./js/ui.js?v=2026-10-21.11c9c43-230242",
+      "./js/match-view.js": "./js/match-view.js?v=2026-10-21.11c9c43-230242",
+      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-21.11c9c43-230242",
+      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-21.11c9c43-230242",
+      "./js/debug.js": "./js/debug.js?v=2026-10-21.11c9c43-230242",
+      "./js/space-view.js": "./js/space-view.js?v=2026-10-21.11c9c43-230242"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-21.1e0e373-224717"></script>
+  <script type="module" src="js/app.js?v=2026-10-21.11c9c43-230242"></script>
 </body>
 </html>
