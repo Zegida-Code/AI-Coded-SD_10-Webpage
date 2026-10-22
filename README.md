@@ -10,8 +10,6 @@ On top of that, **Print match** helps you get a printer to reproduce a color.
 
 - Nothing to install
 - Your measurements stay in your browser
-- The SD-10 protocol was reverse-engineered from the Android app – see [docs/PROTOCOL.md](docs/PROTOCOL.md) and
-  [docs/FEATURES.md](docs/FEATURES.md)
 
 > Unofficial project – not affiliated with or endorsed by Epson.
 
@@ -297,7 +295,8 @@ lightness and hue.
 | Take out a stray patch (a smudge or a mis-scan) | Right-click it → **Remove from the color space** – the test sheet keeps its measurement |
 
 When you center on a color, the picture glides there and zooms in; turning, spinning and zooming then happen around
-that color, so you can look closely at the colors around it.
+that color, so you can look closely at the colors around it. Patches between you and that color fade out (and let
+the pointer through to what is behind them), so it and its neighbors stay in sight from every side.
 
 **Reference colors.** The Print match reference colors are marked in the picture, and the ones outside the surface
 are flagged. The list beside the picture shows for every reference:
@@ -364,7 +363,7 @@ Open these pages in Chrome – on the live site (e.g. [sd-10.com/test/](https://
 | [`test/ui-smoke.html`](https://sd-10.com/test/ui-smoke.html) | 34 | The Console against the simulated SD-10: calibrate, measure, compare, line scan, history sync, palettes, settings, custom ICC profiles |
 | [`test/mobile-check.html`](https://sd-10.com/test/mobile-check.html) | – | The layout at phone width (no sideways scrolling) and the compare / reference flows |
 | [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 50 | Print match against the simulated device and printer: matching to within tolerance, several colors at once, media sizes and limits, readings per patch, textile ΔE, metamerism and gamut checks, spot color sheets and libraries, RGB sheets |
-| [`test/space-smoke.html`](https://sd-10.com/test/space-smoke.html) | 34 | The color space workflow against the simulated device and printer (see below) |
+| [`test/space-smoke.html`](https://sd-10.com/test/space-smoke.html) | 35 | The color space workflow against the simulated device and printer (see below) |
 
 **`test/index.html` checks**
 
@@ -384,7 +383,7 @@ Open these pages in Chrome – on the live site (e.g. [sd-10.com/test/](https://
 - predictions, and a first sheet that starts from them
 - learning, the drift check, removing measurements, undoing a scan
 - fill-in patches and fill-gaps charts
-- the 3-D view with its reference list, centering, full screen and right-click removal
+- the 3-D view with its reference list, centering (and fading what is in front), full screen and right-click removal
 - taking over data saved under the old "colour" spelling
 
 ## Project layout

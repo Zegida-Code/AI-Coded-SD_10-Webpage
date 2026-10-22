@@ -192,6 +192,9 @@
       $('vsFull').click();
       await until(() => !d.fullscreenElement && !$('vsStage').classList.contains('!fixed'));
       log($('vsFull').textContent === 'Full screen', 'and leaves it again');
+      // (animation frames do not run in this headless page – a timer stands in, so the picture redraws as it would)
+      const raf = w.requestAnimationFrame;
+      w.requestAnimationFrame = (cb) => w.setTimeout(() => cb(w.performance.now()), 16);
       // right-click a measured patch: a menu removes it from the color space (a plain click never does)
       const vsSpaceId = $('vsSpace').value, countIn = () => stored().find((s) => s.id === vsSpaceId).points.length;
       const before3d = countIn();
@@ -206,18 +209,37 @@
       const menuText = text('vsMenu');
       $('vsMenuRemove').click();
       await until(() => countIn() === before3d - 1);
-      // double-click a patch: the view centers on it
+      await new Promise((r) => setTimeout(r, 200)); // the picture redraws without it
+      // double-click a patch (not the removed one): the view centers on it
       let dbl = null;
       for (let y = 20; y < box.height && !dbl; y += 6) {
         for (let x = 20; x < box.width && !dbl; x += 6) {
           cv.dispatchEvent(new w.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: box.left + x, clientY: box.top + y }));
-          if (!$('vsMenu').classList.contains('hidden') && !$('vsMenuRemove').classList.contains('hidden')) dbl = { x, y };
+          if (patchMenu() && !menuText.includes(text('vsMenuTitle'))) dbl = { x, y };
         }
       }
       d.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' }));
       cv.dispatchEvent(new w.MouseEvent('dblclick', { bubbles: true, clientX: box.left + dbl.x, clientY: box.top + dbl.y }));
       await until(() => !$('vsFocus').classList.contains('hidden'));
       log(/Centered on .*patch #\d+/.test(text('vsFocus')), `double-clicking a patch centers the view on it (${text('vsFocus').trim().slice(0, 60)})`);
+      // patches in front of it fade and let the pointer through: from any side, the centered patch is the one in the middle
+      const focusName = $('vsFocusName').textContent;
+      let reachable = true;
+      const middle = new Set(), turned = new Set(); // the color drawn in the middle of the picture, from each side – and off it (the picture did turn)
+      cv.dispatchEvent(new w.WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -1000 })); // zoomed right in
+      for (const [dx, dy] of [[0, 0], [200, 0], [200, 60], [200, -120], [200, 0]]) { // turn a quarter at a time, tilting
+        const drag = (type, x, y) => cv.dispatchEvent(new w.PointerEvent(type, { bubbles: true, pointerId: 7, clientX: box.left + x, clientY: box.top + y }));
+        drag('pointerdown', 20, 200); drag('pointermove', 20 + dx, 200 + dy); drag('pointerup', 20 + dx, 200 + dy);
+        await new Promise((r) => setTimeout(r, 500)); // the glide, then the next frame
+        cv.dispatchEvent(new w.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: box.left + box.width / 2, clientY: box.top + box.height * 0.46 }));
+        if (!text('vsMenuTitle').startsWith(focusName)) reachable = false;
+        d.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' }));
+        const k = cv.width / box.width, px = cv.getContext('2d').getImageData(Math.round((box.width / 2) * k), Math.round(box.height * 0.46 * k), 1, 1).data;
+        middle.add(`${px[0]},${px[1]},${px[2]}`);
+        const q = cv.getContext('2d').getImageData(Math.round(box.width * 0.4 * k), Math.round(box.height * 0.4 * k), 1, 1).data; turned.add(`${q[0]},${q[1]},${q[2]}`);
+      }
+      w.requestAnimationFrame = raf;
+      log(reachable && middle.size === 1 && turned.size > 1, `the centered patch stays on top from every side (${focusName}; middle ${[...middle].join(' / ')})`);
       $('vsReset').click();
       log(/patch #\d+ · printed L/.test(menuText) && countIn() === before3d - 1 && $('vsMenu').classList.contains('hidden') && /removed from the color space/.test($('toast').textContent),
         `right-click → Remove takes one patch out of the color space (${menuText.slice(0, 70)})`);

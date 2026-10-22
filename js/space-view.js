@@ -22,7 +22,7 @@ const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(p
 // view is centered on), pitch tilts towards a view from above; zoom 1 fits the L*a*b* range
 const HOME = { yaw: -0.65, pitch: 0.38, zoom: 1, target: [0, 50, 0] };
 let cam = { ...HOME };
-let focus = null; // { name } of the color the view is centered on – null in the middle
+let focus = null; // { name, pos } of the color the view is centered on – null in the middle
 let glide = null; // { from, to, start } while the centre moves to a new color
 let visible = false, frame = 0, lastTime = 0, dirty = true;
 // rebuilt when the data changes: { R (picture radius), space, other (compared with), shell, otherShell,
@@ -217,10 +217,34 @@ function depthItems() {
   return items.sort((a, b) => b.z - a.z);
 }
 
+/** A patch's radius: it grows with the square root of the zoom, not the zoom itself, so zoomed in there are gaps. */
+const patchRadius = (p) => Math.max(2, (1.9 * p.s) / Math.sqrt(cam.zoom));
+
+// While the view is centered on a color, patches in front of it that cover it on screen fade out – the more, the
+// nearer they are to the camera and to it on screen – so it and its neighbors stay visible from any side.
+const FADE_DEPTH = 15; // ΔE in front of the centered color at which a covering patch has faded fully
+const FADE_MIN = 0.12; // opacity of a fully faded patch
+const FADE_PICK = 0.5; // patches fainter than this let the pointer through to what is behind them
+
+/** Opacity (FADE_MIN–1) of a patch at screen position `p` with radius `r`; `f` is the centered color on screen. */
+function fadeFor(p, r, f) {
+  const near = Math.min(1, Math.max(0, (f.z - p.z) / FADE_DEPTH));
+  if (!near) return 1;
+  const win = Math.max(36, 5 * f.r); // the window kept clear around the centered color
+  const gap = Math.max(0, Math.hypot(p.x - f.x, p.y - f.y) - r - f.r);
+  const over = gap < win ? 1 : Math.max(0, 2 - gap / win);
+  return 1 - (1 - FADE_MIN) * near * over;
+}
+
+const samePos = (a, b) => a && b && a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
+
 /** Draw the depth-sorted items; remembers where the patches landed, for hovering. */
-function drawItems(items, { wire }) {
+function drawItems(items, { wire, text }) {
   projected = [];
   const faceAlpha = prefs.points ? 0.22 : 0.55; // the surface is see-through while the patches show
+  const f = focus && project(focus.pos);
+  if (f) f.r = patchRadius(f);
+  let centered = null; // the centered patch, drawn last so nothing covers it
   for (const it of items) {
     if (it.kind === 'face') {
       const q = it.quad.map(project);
@@ -230,12 +254,23 @@ function drawItems(items, { wire }) {
     } else if (it.kind === 'wire') {
       line(it.a, it.b, wire);
     } else {
-      const p = project(it.pt.pos), r = Math.max(2, 1.9 * p.s);
+      const p = project(it.pt.pos), r = patchRadius(p);
+      if (f && samePos(it.pt.pos, focus.pos)) { centered = { p, r, pt: it.pt }; continue; }
+      const alpha = f ? fadeFor(p, r, f) : 1;
+      ctx.globalAlpha = alpha;
       ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 2 * Math.PI);
       ctx.fillStyle = it.pt.hex; ctx.fill();
       ctx.lineWidth = 0.6; ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.stroke();
-      projected.push({ x: p.x, y: p.y, r, pt: it.pt });
+      ctx.globalAlpha = 1;
+      if (alpha >= FADE_PICK) projected.push({ x: p.x, y: p.y, r, pt: it.pt });
     }
+  }
+  if (centered) {
+    const { p, r, pt } = centered;
+    ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, 2 * Math.PI);
+    ctx.fillStyle = pt.hex; ctx.fill();
+    ctx.lineWidth = 2.5; ctx.strokeStyle = text; ctx.stroke();
+    projected.push({ x: p.x, y: p.y, r, pt });
   }
 }
 
@@ -480,7 +515,7 @@ function startGlide(to) {
 function centerOn(pos, name) {
   startGlide(pos);
   cam.zoom = Math.max(cam.zoom, 3);
-  focus = { name };
+  focus = { name, pos: [...pos] };
   $('vsFocusName').textContent = name;
   $('vsFocus').classList.remove('hidden');
   kick();
@@ -542,7 +577,7 @@ function wire() {
   const canvas = $('vsCanvas');
   canvas.addEventListener('pointerdown', (e) => {
     pointers.set(e.pointerId, e);
-    canvas.setPointerCapture(e.pointerId);
+    try { canvas.setPointerCapture(e.pointerId); } catch { /* a pointer that is already gone */ }
     if (pointers.size === 2) {
       const [a, b] = [...pointers.values()];
       drag = { pinch: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), zoom: cam.zoom };
