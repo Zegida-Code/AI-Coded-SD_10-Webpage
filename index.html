@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <link rel="stylesheet" href="css/app.css?v=2026-10-22.7066bca-062109">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-22.3bb302b-062417">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -356,7 +356,11 @@
       <div id="mLibraryCard" class="card min-w-0 flex-1 flex flex-col gap-3">
         <h3 class="font-semibold">Spot library <span id="mLibCount" class="text-sm font-normal text-slate-500"></span></h3>
         <p class="text-xs text-slate-500">Your named colors, downloaded together as one library file for the RIP (format under Settings). Kept in this browser.</p>
-        <div id="mLibList"></div>
+        <!-- the colors: on wide screens the list fills the card's spare height and scrolls (so the card follows the column
+             beside it rather than growing); an empty state while there are none -->
+        <div class="relative min-h-0 lg:min-h-[10rem] lg:flex-1">
+          <div id="mLibList" class="max-h-96 overflow-y-auto lg:absolute lg:inset-0 lg:max-h-none"></div>
+        </div>
         <p id="mLibNote" class="text-xs text-slate-500"></p>
         <!-- the card's actions, at its bottom edge (any extra height of the stretched card goes above them) -->
         <div class="mt-auto border-t border-slate-200 pt-3 dark:border-slate-800">
@@ -595,26 +599,26 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-22.7066bca-062109",
-      "./js/transport.js": "./js/transport.js?v=2026-10-22.7066bca-062109",
-      "./js/mock.js": "./js/mock.js?v=2026-10-22.7066bca-062109",
-      "./js/session.js": "./js/session.js?v=2026-10-22.7066bca-062109",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-22.7066bca-062109",
-      "./js/color.js": "./js/color.js?v=2026-10-22.7066bca-062109",
-      "./js/weights.js": "./js/weights.js?v=2026-10-22.7066bca-062109",
-      "./js/storage.js": "./js/storage.js?v=2026-10-22.7066bca-062109",
-      "./js/icc.js": "./js/icc.js?v=2026-10-22.7066bca-062109",
-      "./js/match.js": "./js/match.js?v=2026-10-22.7066bca-062109",
-      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-22.7066bca-062109",
-      "./js/ui.js": "./js/ui.js?v=2026-10-22.7066bca-062109",
-      "./js/match-view.js": "./js/match-view.js?v=2026-10-22.7066bca-062109",
-      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-22.7066bca-062109",
-      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-22.7066bca-062109",
-      "./js/debug.js": "./js/debug.js?v=2026-10-22.7066bca-062109",
-      "./js/space-view.js": "./js/space-view.js?v=2026-10-22.7066bca-062109"
+      "./js/app.js": "./js/app.js?v=2026-10-22.3bb302b-062417",
+      "./js/transport.js": "./js/transport.js?v=2026-10-22.3bb302b-062417",
+      "./js/mock.js": "./js/mock.js?v=2026-10-22.3bb302b-062417",
+      "./js/session.js": "./js/session.js?v=2026-10-22.3bb302b-062417",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-22.3bb302b-062417",
+      "./js/color.js": "./js/color.js?v=2026-10-22.3bb302b-062417",
+      "./js/weights.js": "./js/weights.js?v=2026-10-22.3bb302b-062417",
+      "./js/storage.js": "./js/storage.js?v=2026-10-22.3bb302b-062417",
+      "./js/icc.js": "./js/icc.js?v=2026-10-22.3bb302b-062417",
+      "./js/match.js": "./js/match.js?v=2026-10-22.3bb302b-062417",
+      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-22.3bb302b-062417",
+      "./js/ui.js": "./js/ui.js?v=2026-10-22.3bb302b-062417",
+      "./js/match-view.js": "./js/match-view.js?v=2026-10-22.3bb302b-062417",
+      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-22.3bb302b-062417",
+      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-22.3bb302b-062417",
+      "./js/debug.js": "./js/debug.js?v=2026-10-22.3bb302b-062417",
+      "./js/space-view.js": "./js/space-view.js?v=2026-10-22.3bb302b-062417"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-22.7066bca-062109"></script>
+  <script type="module" src="js/app.js?v=2026-10-22.3bb302b-062417"></script>
 </body>
 </html>

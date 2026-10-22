@@ -1056,8 +1056,14 @@ function renderLibrary() {
   $('btnLibDownload').classList.toggle('btn-ghost', !n);
   $('btnLibClear').disabled = !n;
   $('mLibList').innerHTML = !n
-    ? '<p class="text-sm text-slate-500">No colors yet – add a finished match, type one in with + Add a color, or import a library.</p>'
-    : `<table class="w-full text-sm"><thead class="text-xs text-slate-500"><tr><th class="text-left font-normal">Name</th><th class="text-right font-normal">L*</th><th class="text-right font-normal">a*</th><th class="text-right font-normal">b*</th><th class="text-right font-normal">Pred. ΔE00</th><th></th></tr></thead><tbody>
+    ? `<div class="grid h-full place-items-center py-6 text-center">
+        <div class="max-w-xs space-y-2">
+          <svg class="mx-auto h-10 w-10 text-slate-300 dark:text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="6" height="18" rx="1.5"/><path d="M9 8.5l4.6-2.7a1.5 1.5 0 0 1 2 .5l1.6 2.8a1.5 1.5 0 0 1-.5 2L9 15.5"/><path d="M9 21h10.5a1.5 1.5 0 0 0 1.5-1.5v-3a1.5 1.5 0 0 0-1.5-1.5H14"/><circle cx="6" cy="17.5" r="1"/></svg>
+          <p class="text-sm font-medium text-slate-700 dark:text-slate-200">No colors yet</p>
+          <p class="text-xs text-slate-500">Add a finished match from its result, type one in with + Add a color, or import a library from your RIP.</p>
+        </div>
+      </div>`
+    : `<table class="w-full text-sm"><thead class="sticky top-0 bg-white text-xs text-slate-500 dark:bg-slate-900"><tr><th class="text-left font-normal">Name</th><th class="text-right font-normal">L*</th><th class="text-right font-normal">a*</th><th class="text-right font-normal">b*</th><th class="text-right font-normal">Pred. ΔE00</th><th></th></tr></thead><tbody>
       ${spotLib.colors.map((c, i) => `<tr class="border-t border-slate-200 dark:border-slate-800" data-lib="${i}">
         <td class="py-1.5"><button data-lib-act="rename" class="flex items-center gap-2 text-left hover:underline" title="Rename"><span class="h-5 w-5 flex-none rounded ring-1 ring-black/10" style="background:${displayHex(c.lab)}"></span><span class="font-medium">${escapeHtml(c.name)}</span></button></td>
         <td class="text-right font-mono tabular-nums">${c.lab[0].toFixed(2)}</td><td class="text-right font-mono tabular-nums">${c.lab[1].toFixed(2)}</td><td class="text-right font-mono tabular-nums">${c.lab[2].toFixed(2)}</td>
