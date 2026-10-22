@@ -245,14 +245,6 @@
         `right-click → Remove takes one patch out of the color space (${menuText.slice(0, 70)})`);
       d.querySelector('[data-view=match]').click();
       await until(() => !$('viewMatch').classList.contains('hidden'));
-      // the color space card's preview names the space in use and opens it in the 3-D view
-      const miniNote = text('mSpaceMiniNote');
-      $('mSpaceMiniCanvas').click();
-      await until(() => !$('viewSpace').classList.contains('hidden'));
-      log(miniNote.startsWith($('mSpace').selectedOptions[0].textContent) && $('vsSpace').value === $('mSpace').value,
-        `the color space card's preview opens its color space in the 3-D view (${miniNote})`);
-      d.querySelector('[data-view=match]').click();
-      await until(() => !$('viewMatch').classList.contains('hidden'));
 
       // ---- other sheet types do not use it
       setSel('mMode', 'rgb');

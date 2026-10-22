@@ -274,10 +274,6 @@ imported as a color space too.
 > **Make a separate color space for each printer, ink, media and RIP setting.** A color space only predicts for the
 > sheet type it was measured with.
 
-When the card has room to spare, it shows a small, slowly turning preview of the color space with your reference
-colors (ringed red when outside it) – click it to open the full [3-D view](#see-it-in-3-d). Without a color space it
-shows an example shape.
-
 #### See it in 3-D
 
 The **Color space** tab in the header shows a color space as a large, turnable picture in L\*a\*b\*. Every measured
@@ -343,9 +339,6 @@ In the L\*a\*b\* sheet types the app also writes spot color libraries for your R
   (such as CMYK) are skipped.
 - **Download library** saves the whole library as one file to import into the RIP.
 
-When the Spot library card has room to spare, it shows your recent Console measurements as swatches – click one to
-put its L\*a\*b\* into **Add a color**.
-
 Support for other RIPs' formats can be added from a sample library exported by that RIP.
 
 ## Color accuracy
@@ -370,7 +363,7 @@ Open these pages in Chrome – on the live site (e.g. [sd-10.com/test/](https://
 | [`test/ui-smoke.html`](https://sd-10.com/test/ui-smoke.html) | 34 | The Console against the simulated SD-10: calibrate, measure, compare, line scan, history sync, palettes, settings, custom ICC profiles |
 | [`test/mobile-check.html`](https://sd-10.com/test/mobile-check.html) | – | The layout at phone width (no sideways scrolling) and the compare / reference flows |
 | [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 50 | Print match against the simulated device and printer: matching to within tolerance, several colors at once, media sizes and limits, readings per patch, textile ΔE, metamerism and gamut checks, spot color sheets and libraries, RGB sheets |
-| [`test/space-smoke.html`](https://sd-10.com/test/space-smoke.html) | 36 | The color space workflow against the simulated device and printer (see below) |
+| [`test/space-smoke.html`](https://sd-10.com/test/space-smoke.html) | 35 | The color space workflow against the simulated device and printer (see below) |
 
 **`test/index.html` checks**
 
@@ -390,7 +383,6 @@ Open these pages in Chrome – on the live site (e.g. [sd-10.com/test/](https://
 - predictions, and a first sheet that starts from them
 - learning, the drift check, removing measurements, undoing a scan
 - fill-in patches and fill-gaps charts
-- the color space card's preview, which opens the 3-D view
 - the 3-D view with its reference list, centering (and fading what is in front), full screen and right-click removal
 - taking over data saved under the old "colour" spelling
 
@@ -403,7 +395,6 @@ css/app.css         compiled Tailwind stylesheet (source: css/tailwind.src.css)
 js/app.js           Console view (connection, measuring, history, palettes, settings, log) and start-up
 js/match-view.js    Print match view (reference colors, sheets, scanning, results, color space, spot library)
 js/space-view.js    Color space view: the 3-D picture of a color space (gamut surface, comparison, volume)
-js/mini-space.js    small turning preview of a color space for the Print match color space card
 js/ui.js            DOM and formatting helpers shared by the views
 js/debug.js         debug report: journal of actions, messages and errors; the report file
 

@@ -26,8 +26,7 @@ import {
 } from './colorspace.js';
 import { printSpectrum } from './printer-sim.js';
 import { debugLog } from './debug.js';
-import { chooseSpace, hideSpaceView, initSpaceView, showSpaceView } from './space-view.js';
-import { createMiniSpace } from './mini-space.js';
+import { hideSpaceView, initSpaceView, showSpaceView } from './space-view.js';
 
 // From the Console (set by initMatch): shared state, the busy-guarded task runner, the Console's settings (for the
 // CMYK profile), the control refresh and white calibration.
@@ -1046,39 +1045,7 @@ function downloadRipLibrary(what, rip = match.ripFormat) {
 }
 
 // ---------------------------------------------------------------- spot library
-/** The spare room of the library card shows recent measurements when it is at least this tall (px), up to this many. */
-const LIB_WALL_MIN = 76, LIB_WALL_MAX = 48;
-
-/** Recent measurements (D50 / 2°, newest first, repeats left out) as swatches to add to the library. */
-function renderLibraryWall() {
-  const seen = new Set(), tiles = [];
-  for (const it of state.history ?? []) {
-    if (tiles.length >= LIB_WALL_MAX) break;
-    if (!it.spectrum?.length) continue;
-    const lab = spectrumToLab(it.spectrum, 0, 2).map(round2);
-    if (seen.has(lab.join())) continue;
-    seen.add(lab.join());
-    tiles.push(`<button type="button" data-wall-lab="${lab.join()}" class="aspect-square rounded-lg ring-1 ring-black/10 transition hover:scale-105 hover:ring-2 hover:ring-indigo-500 dark:ring-white/10" style="background:${displayHex(lab)}" title="${labText(lab)} · ${new Date(it.time).toLocaleString()} – click to add it to the library"></button>`);
-  }
-  $('mLibWallTiles').innerHTML = tiles.join('') || '<p class="col-span-full text-xs text-slate-500">Colors you measure in the Console appear here, one click from the library.</p>';
-}
-
-/** Show the wall when there is room for it, with only the rows of swatches that fit whole. */
-function fitLibraryWall() {
-  const wall = $('mLibWall'), grid = $('mLibWallTiles');
-  wall.classList.toggle('invisible', wall.clientHeight < LIB_WALL_MIN);
-  const tiles = [...grid.querySelectorAll('[data-wall-lab]')];
-  tiles.forEach((t) => t.classList.remove('hidden'));
-  if (!tiles.length) return;
-  const gap = parseFloat(getComputedStyle(grid).rowGap) || 0, size = tiles[0].offsetHeight + gap;
-  const cols = Math.max(1, Math.round((grid.clientWidth + gap) / (tiles[0].offsetWidth + gap)));
-  const rows = Math.max(1, Math.floor((wall.clientHeight - grid.offsetTop + gap) / size));
-  tiles.slice(cols * rows).forEach((t) => t.classList.add('hidden'));
-}
-
 function renderLibrary() {
-  renderLibraryWall();
-  fitLibraryWall();
   const ex = RIP_EXPORTS[match.ripFormat] ?? RIP_EXPORTS.cxf;
   const n = spotLib.colors.length;
   $('mLibCount').textContent = n ? `(${n})` : '';
@@ -1227,17 +1194,6 @@ function spacePredictionHtml(c) {
 }
 
 /** The Color space card: the space in use, what it holds and how well it predicts, drift warnings, its data. */
-/** The color space card's preview: the space's patches and the reference colors (the example shape without a space). */
-let miniSpace = null, miniKey = '';
-function updateMiniSpace(s) {
-  const refs = match.colors.filter((c) => c.target).map((c) => ({ id: c.id, lab: c.target }));
-  const selected = activeColor()?.id ?? null;
-  const key = JSON.stringify([s?.id, s?.updated, s?.points.length, s?.name, refs, selected]);
-  if (!miniSpace || key === miniKey) return;
-  miniKey = key;
-  miniSpace.set({ labs: s ? s.points.map((p) => p.lab) : null, refs, selected, name: s?.name ?? '' });
-}
-
 function renderSpaceCard() {
   const s = activeSpace();
   $('mSpace').innerHTML = '<option value="">None</option>' + spaces.map((q) => `<option value="${escapeHtml(q.id)}">${escapeHtml(q.name)}${q.mode !== match.mode ? ` (${MODE_NAME[q.mode]} sheets)` : ''}</option>`).join('');
@@ -1254,12 +1210,8 @@ function renderSpaceCard() {
   $('btnSpaceChart').classList.toggle('btn-ghost', !needsChart);
   $('mSpaceData').classList.toggle('hidden', !s);
   $('mSpaceData').classList.toggle('flex', !!s);
-  // wide screens: with Data & files beside them, the controls stack in the first column above the preview, which takes
-  // the spare height; without it, the controls sit side by side and the preview spans both columns below them
-  $('mSpaceCard').classList.toggle('xl:grid-rows-[auto_auto_1fr]', !!s);
-  $('mSpaceCard').classList.toggle('xl:grid-rows-[auto_1fr]', !s);
-  $('mSpaceMini').classList.toggle('xl:col-span-2', !s);
-  updateMiniSpace(s);
+  // without Data & files beside it, the space and its intro take the card's whole width
+  $('mSpaceMain').classList.toggle('xl:col-span-2', !s);
   if (!s) {
     $('mSpaceInfo').innerHTML = `<p>A color space is a measured map of what your printer really prints: scan a chart once, and every color starts from a prediction instead of a guess.</p>
       <ol class="list-decimal space-y-1 pl-4">
@@ -1639,15 +1591,6 @@ function wireLibrary() {
     state.lastLabD50.forEach((v, i) => { $(['libNewL', 'libNewA', 'libNewB'][i]).value = v.toFixed(2); });
     $('libNewName').focus();
   };
-  // recent measurements in the card's spare room: a click puts one into the "Add a color" form
-  $('mLibWallTiles').onclick = (e) => {
-    const tile = e.target.closest('[data-wall-lab]');
-    if (!tile) return;
-    $('mLibEdit').open = true;
-    tile.dataset.wallLab.split(',').forEach((v, i) => { $(['libNewL', 'libNewA', 'libNewB'][i]).value = Number(v).toFixed(2); });
-    $('libNewName').focus();
-  };
-  new ResizeObserver(fitLibraryWall).observe($('mLibWall'));
 }
 
 /** Called once by app.js with the Console's state and helpers; wires Print match and the Color space view, opens the view in the URL. */
@@ -1662,9 +1605,6 @@ export function initMatch(app) {
   wireDrop();
   initSpaceView(spaceViewData, { removePoint: removeSpacePoint });
   $('vsMeasure').onclick = measureForSpaceView;
-  miniSpace = createMiniSpace($('mSpaceMini'), $('mSpaceMiniCanvas'), $('mSpaceMiniNote'), {
-    onOpen: () => { chooseSpace(match.space); setView('space'); },
-  });
   setView(location.hash.slice(1) || 'console');
   WIDE.addEventListener('change', () => { if (!WIDE.matches && state.view !== 'console') setView('console'); });
 }

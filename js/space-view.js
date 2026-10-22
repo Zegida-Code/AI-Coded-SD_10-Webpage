@@ -32,14 +32,13 @@ let projected = []; // screen positions of the points drawn last, for hovering
 let projectedRefs = []; // … and of the reference markers
 
 // ---------------------------------------------------------------- gamut surface
-const L_STEP = 5;
-export const HUES = 36;
+const L_STEP = 5, HUES = 36;
 /**
  * The gamut surface of measured L*a*b* values: for rings every 5 L* and every 10° of hue, the largest chroma measured
  * nearby (holes filled from the neighbours, lightly smoothed), closed at the darkest and lightest patch.
  * Returns { rings: [{ L, r: [HUES radii] }], bottom, top } or null for too few points.
  */
-export function gamutShell(labs) {
+function gamutShell(labs) {
   if (labs.length < 20) return null;
   const Ls = labs.map((l) => l[0]);
   const bottom = Math.min(...Ls), top = Math.max(...Ls);
@@ -76,7 +75,7 @@ export function gamutShell(labs) {
 }
 
 /** Chroma of the surface at L*, hue (degrees) – 0 beyond its lightest and darkest point. */
-export function shellChroma(shell, L, hue) {
+function shellChroma(shell, L, hue) {
   const { rings } = shell;
   if (L <= shell.bottom || L >= shell.top) return 0;
   const at = (ring) => {
@@ -674,12 +673,6 @@ export function showSpaceView() {
   renderRefList();
   updateFullButton();
   kick();
-}
-
-/** Show the color space `id` the next time the view opens (e.g. after a click on the Print match preview). */
-export function chooseSpace(id) {
-  prefs.space = id;
-  savePrefs();
 }
 
 export function hideSpaceView() {
