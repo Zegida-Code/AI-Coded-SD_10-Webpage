@@ -1056,7 +1056,7 @@ function renderLibrary() {
   $('btnLibDownload').classList.toggle('btn-ghost', !n);
   $('btnLibClear').disabled = !n;
   $('mLibList').innerHTML = !n
-    ? '<p class="text-sm text-slate-500">No colors yet – add a finished match, type one in below, or import a library.</p>'
+    ? '<p class="text-sm text-slate-500">No colors yet – add a finished match, type one in with + Add a color, or import a library.</p>'
     : `<table class="w-full text-sm"><thead class="text-xs text-slate-500"><tr><th class="text-left font-normal">Name</th><th class="text-right font-normal">L*</th><th class="text-right font-normal">a*</th><th class="text-right font-normal">b*</th><th class="text-right font-normal">Pred. ΔE00</th><th></th></tr></thead><tbody>
       ${spotLib.colors.map((c, i) => `<tr class="border-t border-slate-200 dark:border-slate-800" data-lib="${i}">
         <td class="py-1.5"><button data-lib-act="rename" class="flex items-center gap-2 text-left hover:underline" title="Rename"><span class="h-5 w-5 flex-none rounded ring-1 ring-black/10" style="background:${displayHex(c.lab)}"></span><span class="font-medium">${escapeHtml(c.name)}</span></button></td>
@@ -1118,7 +1118,9 @@ function addLibraryColorByHand(e) {
   const lab = ['libNewL', 'libNewA', 'libNewB'].map((id) => parseFloat($(id).value));
   if (!name) { toast('Enter the spot color name – exactly as it is named in your artwork and the RIP.', 'error'); $('libNewName').focus(); return; }
   if (!lab.every(Number.isFinite) || lab[0] < 0 || lab[0] > 100 || Math.abs(lab[1]) > 128 || Math.abs(lab[2]) > 128) { toast('Enter L* (0–100), a* and b* (−128–127).', 'error'); return; }
-  if (putInLibrary({ name, lab })) for (const id of ['libNewName', 'libNewL', 'libNewA', 'libNewB']) $(id).value = '';
+  if (!putInLibrary({ name, lab })) return;
+  for (const id of ['libNewName', 'libNewL', 'libNewA', 'libNewB']) $(id).value = '';
+  if ($('mLibDialog').open) $('mLibDialog').close();
 }
 
 async function importLibraryFile(file) {
@@ -1212,14 +1214,21 @@ function renderSpaceCard() {
   $('mSpaceData').classList.toggle('flex', !!s);
   // without Data & files beside it, the space and its intro take the card's whole width
   $('mSpaceMain').classList.toggle('xl:col-span-2', !s);
+  const bar = $('mSpaceChartBar');
+  if (bar.parentElement !== (s ? $('mSpaceMain') : $('mSpaceCard'))) (s ? $('mSpaceMain') : $('mSpaceCard')).append(bar);
+  bar.classList.toggle('mt-auto', !!s);
+  bar.classList.toggle('xl:grid-cols-2', !s);
+  $('mSpaceInfo').classList.toggle('flex-1', !s);
+  $('mSpaceInfo').classList.toggle('content-center', !s);
+  $('mSpaceInfo').classList.toggle('grid', !s);
   if (!s) {
-    $('mSpaceInfo').innerHTML = `<p>A color space is a measured map of what your printer really prints: scan a chart once, and every color starts from a prediction instead of a guess.</p>
-      <ol class="list-decimal space-y-1 pl-4">
-        <li><b class="font-medium text-slate-700 dark:text-slate-300">+ New</b> – name it after the printer, ink, media and settings.</li>
-        <li><b class="font-medium text-slate-700 dark:text-slate-300">Create chart</b> – print it like the final job and scan the patches in number order.</li>
-        <li>Set a reference: it shows the values the color space predicts, and the first test sheet starts from them.</li>
-        <li>With <i>Learn</i> on, every test sheet you scan makes it more accurate.</li>
-      </ol>`;
+    // an empty state in the middle of the card: what a color space is, and the one step to start
+    $('mSpaceInfo').innerHTML = `<div class="mx-auto max-w-md space-y-3 py-6 text-center">
+        <svg class="mx-auto h-10 w-10 text-slate-300 dark:text-slate-600" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10.4 1.6a.75.75 0 0 0-.8 0l-6.75 4A.75.75 0 0 0 2.5 6.25v7.5c0 .27.14.51.37.65l6.75 4a.75.75 0 0 0 .76 0l6.75-4a.75.75 0 0 0 .37-.65v-7.5a.75.75 0 0 0-.37-.65l-6.75-4ZM10 3.12l5.27 3.13L10 9.38 4.73 6.25 10 3.12ZM4 7.57l5.25 3.11v5.83L4 13.4V7.57Zm6.75 8.94v-5.83L16 7.57v5.83l-5.25 3.11Z"/></svg>
+        <p class="text-sm font-medium text-slate-700 dark:text-slate-200">No color space yet</p>
+        <p>A color space is a measured map of what your printer really prints. Measure a chart once, and every color starts from a prediction instead of a guess.</p>
+        <button type="button" data-space-start class="btn btn-primary">+ New color space</button>
+      </div>`;
     return;
   }
   const st = spaceStats(s);
@@ -1388,6 +1397,7 @@ function onChartComplete(c) {
 
 /** Buttons inside the Color space card's text: continue the chart, remove a set of measurements, keep only newer data. */
 function onSpaceClick(e) {
+  if (e.target.closest('[data-space-start]')) { $('btnSpaceNew').click(); return; }
   const b = e.target.closest('[data-space-act]'), s = activeSpace();
   if (!b || !s) return;
   const act = b.dataset.spaceAct;
@@ -1526,10 +1536,17 @@ function wireSettings() {
   $('btnPrinterIccRemove').onclick = removePrinterProfile;
   refreshPrinterProfiles().then(() => { if (state.view === 'match') renderMatch(); });
   $('mRipFormat').onchange = () => { match.ripFormat = $('mRipFormat').value; commit(); };
-  // folded sections remember whether they were open; Tips start closed
-  for (const [id, key] of [['mTipsBox', 'sd10.tipsOpen'], ['mMoreSettings', 'sd10.moreSettingsOpen'], ['mLibEdit', 'sd10.libEditOpen']]) {
-    $(id).open = readFlag(key);
-    $(id).ontoggle = () => writeFlag(key, $(id).open);
+  // Tips remember whether they were open (closed at first)
+  $('mTipsBox').open = readFlag('sd10.tipsOpen');
+  $('mTipsBox').ontoggle = () => writeFlag('sd10.tipsOpen', $('mTipsBox').open);
+  // the dialogs: Measuring & matching, Add a color – closed by their ✕ / Done, Esc, or a click on the backdrop
+  $('btnMoreSettings').onclick = () => $('mMoreDialog').showModal();
+  for (const dialog of [$('mMoreDialog'), $('mLibDialog')]) {
+    dialog.addEventListener('click', (e) => {
+      if (e.target.closest('[data-close-dialog]')) { dialog.close(); return; }
+      const r = dialog.getBoundingClientRect();
+      if (e.target === dialog && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) dialog.close();
+    });
   }
 }
 
@@ -1585,6 +1602,8 @@ function wireLibrary() {
   $('btnLibClear').onclick = () => { if (confirm('Remove all colors from the spot library?')) { spotLib.colors = []; saveLib(); renderMatch(); } };
   $('mLibName').onchange = () => { spotLib.name = $('mLibName').value.trim() || DEFAULT_LIBRARY_NAME; saveLib(); renderMatch(); };
   $('mLibList').onclick = onLibraryClick;
+  // "Add a color" (and the library's name, Clear) in a dialog – closing is wired with the other dialogs
+  $('btnLibAddOpen').onclick = () => { $('mLibDialog').showModal(); $('libNewName').focus(); };
   $('libAddForm').onsubmit = addLibraryColorByHand;
   $('btnLibFromLast').onclick = () => {
     if (!state.lastLabD50) { toast('Measure a color first (in the Console or here in Print match).', 'error'); return; }

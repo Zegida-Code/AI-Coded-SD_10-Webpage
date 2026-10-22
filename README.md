@@ -70,7 +70,7 @@ With a measured [color space](#color-space) of your printer, the first sheet alr
 - On wide screens, the color list, settings and tips sit in a column at the left; the selected color's workflow, the
   spot library and the color space are at the right.
 - Settings you change less often – readings per patch, M-factor, ΔE formula, tolerance, printer profile and library
-  format – are folded under **Measuring & matching**, whose closed line shows their current values.
+  format – open in a dialog from the **Measuring & matching** line, which shows their current values.
 
 ### 1. Reference colors
 
@@ -328,7 +328,7 @@ In the L\*a\*b\* sheet types the app also writes spot color libraries for your R
 - **Add to spot library** – stores a finished match under the color's name. Use exactly the name from your artwork,
   because the RIP finds spot colors by name.
 - **Spot library** – collects colors across jobs and is kept in this browser. You can rename or remove entries, or
-  type a color in (or take the last measurement) under **Add a color**.
+  type a color in (or take the last measurement) with **+ Add a color**, which also renames or clears the library.
 
 **Getting files in and out**
 
