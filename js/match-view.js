@@ -1209,8 +1209,19 @@ function renderSpaceCard() {
   $('btnSpaceChart').classList.toggle('btn-primary', needsChart);
   $('btnSpaceChart').classList.toggle('btn-ghost', !needsChart);
   $('mSpaceData').classList.toggle('hidden', !s);
+  $('mSpaceData').classList.toggle('flex', !!s);
+  // with Data & files beside them, the controls stack in the first column and any extra height goes below them; without
+  // it, the rows stay at the top of a stretched card
+  $('mSpaceCard').classList.toggle('xl:grid-rows-[auto_1fr]', !!s);
+  $('mSpaceCard').classList.toggle('content-start', !s);
   if (!s) {
-    $('mSpaceInfo').innerHTML = '<p>A color space is a measured map of what your printer really prints: scan a chart once, and every color starts from a prediction instead of a guess.</p>';
+    $('mSpaceInfo').innerHTML = `<p>A color space is a measured map of what your printer really prints: scan a chart once, and every color starts from a prediction instead of a guess.</p>
+      <ol class="list-decimal space-y-1 pl-4">
+        <li><b class="font-medium text-slate-700 dark:text-slate-300">+ New</b> – name it after the printer, ink, media and settings.</li>
+        <li><b class="font-medium text-slate-700 dark:text-slate-300">Create chart</b> – print it like the final job and scan the patches in number order.</li>
+        <li>Set a reference: it shows the values the color space predicts, and the first test sheet starts from them.</li>
+        <li>With <i>Learn</i> on, every test sheet you scan makes it more accurate.</li>
+      </ol>`;
     return;
   }
   const st = spaceStats(s);
@@ -1238,7 +1249,7 @@ function renderSpaceCard() {
     parts.push(`<p class="text-emerald-600">${escapeHtml(last.q.label)} (${fmtDate(last.q.time)}): the printer still prints as predicted (typically ΔE00 ${last.d.median.toFixed(2)} off).</p>`);
   }
   $('mSpaceInfo').innerHTML = parts.join('');
-  $('mSpaceData').querySelector('summary').textContent = `Data & files${s.sessions.length ? ` · ${s.sessions.length} set${s.sessions.length === 1 ? '' : 's'} of measurements` : ''}`;
+  $('mSpaceDataTitle').textContent = `Data & files${s.sessions.length ? ` · ${s.sessions.length} set${s.sessions.length === 1 ? '' : 's'} of measurements` : ''}`;
   $('mSpaceSessions').innerHTML = !s.sessions.length ? '<li class="text-slate-500">No measurements yet – scan a chart.</li>' : [...s.sessions].sort((a, b) => b.time - a.time).map((q) => {
     const d = driftOf(s, q.id);
     return `<li data-session="${escapeHtml(q.id)}" class="flex items-center gap-2 border-t border-slate-200 pt-1 dark:border-slate-800">
@@ -1517,9 +1528,9 @@ function wireSettings() {
   $('btnPrinterIccRemove').onclick = removePrinterProfile;
   refreshPrinterProfiles().then(() => { if (state.view === 'match') renderMatch(); });
   $('mRipFormat').onchange = () => { match.ripFormat = $('mRipFormat').value; commit(); };
-  // folded sections remember whether they were open; Data & files (beside the color space's controls) starts open
-  for (const [id, key, open] of [['mTipsBox', 'sd10.tipsOpen'], ['mMoreSettings', 'sd10.moreSettingsOpen'], ['mLibEdit', 'sd10.libEditOpen'], ['mSpaceData', 'sd10.spaceDataOpen', true]]) {
-    $(id).open = readFlag(key, open);
+  // folded sections remember whether they were open; Tips start closed
+  for (const [id, key] of [['mTipsBox', 'sd10.tipsOpen'], ['mMoreSettings', 'sd10.moreSettingsOpen'], ['mLibEdit', 'sd10.libEditOpen']]) {
+    $(id).open = readFlag(key);
     $(id).ontoggle = () => writeFlag(key, $(id).open);
   }
 }

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <link rel="stylesheet" href="css/app.css?v=2026-10-21.11c9c43-230242">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-21.c577fa1-231041">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -271,8 +271,9 @@
     </div>
 
     <!-- Two columns on wide screens: the color list, settings and spot library at the left, the selected color's workflow and the
-         color space at the right, the tips across both. On narrower screens everything stacks in that order. -->
-    <div class="grid gap-4 lg:grid-cols-[minmax(0,22rem),minmax(0,1fr)] xl:grid-cols-[minmax(0,24rem),minmax(0,1fr)] items-start">
+         color space at the right, the tips across both. The last card of each column stretches to the bottom of the row, so
+         neither column leaves a gap. On narrower screens everything stacks in that order. -->
+    <div class="grid gap-4 lg:grid-cols-[minmax(0,22rem),minmax(0,1fr)] xl:grid-cols-[minmax(0,24rem),minmax(0,1fr)]">
 
       <!-- left column: the colors, the settings shared by all colors, and the spot library -->
       <div class="flex flex-col gap-4 min-w-0">
@@ -337,7 +338,7 @@
       </div>
 
       <!-- spot library: matched colors collected across jobs, exported together as one library file -->
-      <div id="mLibraryCard" class="card min-w-0 space-y-3">
+      <div id="mLibraryCard" class="card min-w-0 flex-1 space-y-3">
         <h3 class="font-semibold">Spot library <span id="mLibCount" class="text-sm font-normal text-slate-500"></span></h3>
         <p class="text-xs text-slate-500">Your named colors, downloaded together as one library file for the RIP (format under Settings). Kept in this browser.</p>
         <div id="mLibList"></div>
@@ -435,7 +436,9 @@
         </div>
 
         <!-- color space: a measured map of what the printer really prints – predicts values straight away, learns from every sheet -->
-        <div id="mSpaceCard" class="card min-w-0 grid gap-x-6 gap-y-3 xl:grid-cols-2 items-start">
+        <!-- Wide screens: two halves. With Data & files at the right, the controls stack at the left; without it (no color space
+             chosen) the chart controls move into the right half instead of leaving it empty. -->
+        <div id="mSpaceCard" class="card min-w-0 flex-1 grid items-start gap-x-6 gap-y-3 xl:grid-cols-2">
           <div class="min-w-0 space-y-3">
             <div class="flex items-center justify-between gap-2">
               <h3 class="font-semibold">Color space</h3>
@@ -447,6 +450,8 @@
               <input id="spaceFile" type="file" accept=".json,.txt,.cgats,.cgt,.it8,.ti3" class="hidden">
             </div>
             <div id="mSpaceInfo" class="space-y-2 text-xs text-slate-500"></div>
+          </div>
+          <div class="min-w-0 space-y-3">
             <div class="flex flex-wrap items-end gap-2">
               <div class="flex-1 min-w-[10rem]"><label class="label" for="mChartSize">Chart</label>
                 <select id="mChartSize" class="input"></select></div>
@@ -456,17 +461,20 @@
             <div class="flex items-center gap-2 text-sm"><label for="mFillIn" class="flex-1">Fill-in patches on each test sheet</label>
               <select id="mFillIn" class="input !w-40" title="Extra patches where the color space has measured least – some near the color being matched. They are marked on the sheet and only feed the color space. “Fill the free space” uses the empty slots of the pages the sheet already needs, so they cost no extra media."><option value="0">None</option><option value="4">4</option><option value="8">8</option><option value="auto">Fill the free space</option></select></div>
           </div>
-          <!-- what the color space holds, and its files – beside the controls on wide screens, below them otherwise; folded away -->
-          <details id="mSpaceData" class="hidden min-w-0 border-t border-slate-200 pt-3 text-xs dark:border-slate-800 xl:border-t-0 xl:border-l xl:pt-0 xl:pl-6">
-            <summary class="cursor-pointer text-sm font-medium">Data &amp; files</summary>
-            <ul id="mSpaceSessions" class="mt-2 max-h-96 space-y-1 overflow-y-auto"></ul>
+          <!-- what the color space holds, and its files – beside the controls on wide screens, its list filling the card's
+               height (so the card ends with the column beside it); below the controls otherwise -->
+          <div id="mSpaceData" class="hidden min-w-0 flex-col border-t border-slate-200 pt-3 text-xs dark:border-slate-800 xl:col-start-2 xl:row-span-2 xl:row-start-1 xl:self-stretch xl:border-t-0 xl:border-l xl:pt-0 xl:pl-6">
+            <h4 id="mSpaceDataTitle" class="text-sm font-medium">Data &amp; files</h4>
+            <div class="relative mt-2 xl:min-h-[12rem] xl:flex-1">
+              <ul id="mSpaceSessions" class="max-h-96 space-y-1 overflow-y-auto xl:absolute xl:inset-0 xl:max-h-none"></ul>
+            </div>
             <div id="mSpaceActions" class="mt-3 flex flex-wrap items-center gap-2 hidden">
               <button id="btnSpaceJson" type="button" class="btn btn-ghost" title="Save the color space as a file to keep it, move it to another computer or share it">Export</button>
               <button id="btnSpaceCgats" type="button" class="btn btn-ghost" title="The measurements as a CGATS text file (device values and measured L*a*b*), e.g. for profiling software">CGATS</button>
               <button id="btnSpaceRename" type="button" class="btn btn-ghost">Rename</button>
               <button id="btnSpaceDelete" type="button" class="ml-auto px-1 py-2 text-sm text-rose-600 hover:underline dark:text-rose-400">Delete</button>
             </div>
-          </details>
+          </div>
         </div>
       </div>
 
@@ -555,26 +563,26 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-21.11c9c43-230242",
-      "./js/transport.js": "./js/transport.js?v=2026-10-21.11c9c43-230242",
-      "./js/mock.js": "./js/mock.js?v=2026-10-21.11c9c43-230242",
-      "./js/session.js": "./js/session.js?v=2026-10-21.11c9c43-230242",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-21.11c9c43-230242",
-      "./js/color.js": "./js/color.js?v=2026-10-21.11c9c43-230242",
-      "./js/weights.js": "./js/weights.js?v=2026-10-21.11c9c43-230242",
-      "./js/storage.js": "./js/storage.js?v=2026-10-21.11c9c43-230242",
-      "./js/icc.js": "./js/icc.js?v=2026-10-21.11c9c43-230242",
-      "./js/match.js": "./js/match.js?v=2026-10-21.11c9c43-230242",
-      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-21.11c9c43-230242",
-      "./js/ui.js": "./js/ui.js?v=2026-10-21.11c9c43-230242",
-      "./js/match-view.js": "./js/match-view.js?v=2026-10-21.11c9c43-230242",
-      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-21.11c9c43-230242",
-      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-21.11c9c43-230242",
-      "./js/debug.js": "./js/debug.js?v=2026-10-21.11c9c43-230242",
-      "./js/space-view.js": "./js/space-view.js?v=2026-10-21.11c9c43-230242"
+      "./js/app.js": "./js/app.js?v=2026-10-21.c577fa1-231041",
+      "./js/transport.js": "./js/transport.js?v=2026-10-21.c577fa1-231041",
+      "./js/mock.js": "./js/mock.js?v=2026-10-21.c577fa1-231041",
+      "./js/session.js": "./js/session.js?v=2026-10-21.c577fa1-231041",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-21.c577fa1-231041",
+      "./js/color.js": "./js/color.js?v=2026-10-21.c577fa1-231041",
+      "./js/weights.js": "./js/weights.js?v=2026-10-21.c577fa1-231041",
+      "./js/storage.js": "./js/storage.js?v=2026-10-21.c577fa1-231041",
+      "./js/icc.js": "./js/icc.js?v=2026-10-21.c577fa1-231041",
+      "./js/match.js": "./js/match.js?v=2026-10-21.c577fa1-231041",
+      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-21.c577fa1-231041",
+      "./js/ui.js": "./js/ui.js?v=2026-10-21.c577fa1-231041",
+      "./js/match-view.js": "./js/match-view.js?v=2026-10-21.c577fa1-231041",
+      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-21.c577fa1-231041",
+      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-21.c577fa1-231041",
+      "./js/debug.js": "./js/debug.js?v=2026-10-21.c577fa1-231041",
+      "./js/space-view.js": "./js/space-view.js?v=2026-10-21.c577fa1-231041"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-21.11c9c43-230242"></script>
+  <script type="module" src="js/app.js?v=2026-10-21.c577fa1-231041"></script>
 </body>
 </html>

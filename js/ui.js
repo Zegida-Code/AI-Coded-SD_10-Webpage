@@ -55,5 +55,5 @@ export function onFilePicked(id, handler) {
 }
 
 // Remembered on/off UI choices (best effort: storage may be blocked).
-export function readFlag(key, fallback = false) { try { const v = localStorage.getItem(key); return v == null ? fallback : v === '1'; } catch { return fallback; } }
+export function readFlag(key) { try { return localStorage.getItem(key) === '1'; } catch { return false; } }
 export function writeFlag(key, on) { try { localStorage.setItem(key, on ? '1' : '0'); } catch { /* ignore */ } }
