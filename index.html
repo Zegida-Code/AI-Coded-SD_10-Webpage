@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <link rel="stylesheet" href="css/app.css?v=2026-10-21.c577fa1-231041">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-21.fd446bb-232136">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -338,7 +338,7 @@
       </div>
 
       <!-- spot library: matched colors collected across jobs, exported together as one library file -->
-      <div id="mLibraryCard" class="card min-w-0 flex-1 space-y-3">
+      <div id="mLibraryCard" class="card min-w-0 flex-1 flex flex-col space-y-3">
         <h3 class="font-semibold">Spot library <span id="mLibCount" class="text-sm font-normal text-slate-500"></span></h3>
         <p class="text-xs text-slate-500">Your named colors, downloaded together as one library file for the RIP (format under Settings). Kept in this browser.</p>
         <div id="mLibList"></div>
@@ -347,6 +347,13 @@
           <button id="btnLibDownload" class="btn btn-ghost" disabled>Download library</button>
           <button id="btnLibImport" class="btn btn-ghost" title="Add the colors of a CxF (.cxf), Adobe Color Book (.acb), Epson Edge Print (.epcc) or VersaWorks (.spot) library – or drop the file anywhere on this page">Import…</button>
           <input id="libFile" type="file" accept=".cxf,.acb,.spot,.epcc,.xml" class="hidden">
+        </div>
+        <!-- spare room (when the card is taller than its content): recent measurements, one click from the library -->
+        <div id="mLibWall" class="invisible relative min-h-0 flex-1">
+          <div class="absolute inset-0 flex flex-col gap-2 overflow-hidden">
+            <p class="text-xs text-slate-500">Recent measurements from the Console – click one to add it</p>
+            <div id="mLibWallTiles" class="grid min-h-0 grid-cols-[repeat(auto-fill,minmax(2.75rem,1fr))] content-start gap-1.5 p-0.5"></div>
+          </div>
         </div>
         <!-- add a color by hand (or from the last measurement), rename the library – folded away -->
         <details id="mLibEdit" class="border-t border-slate-200 pt-3 dark:border-slate-800">
@@ -436,9 +443,9 @@
         </div>
 
         <!-- color space: a measured map of what the printer really prints – predicts values straight away, learns from every sheet -->
-        <!-- Wide screens: two halves. With Data & files at the right, the controls stack at the left; without it (no color space
-             chosen) the chart controls move into the right half instead of leaving it empty. -->
-        <div id="mSpaceCard" class="card min-w-0 flex-1 grid items-start gap-x-6 gap-y-3 xl:grid-cols-2">
+        <!-- Wide screens: two halves. With Data & files at the right, the controls stack at the left with the preview below
+             them; without it (no color space chosen) the chart controls move into the right half and the preview spans both. -->
+        <div id="mSpaceCard" class="card min-w-0 flex-1 grid content-start items-start gap-x-6 gap-y-3 xl:grid-cols-2">
           <div class="min-w-0 space-y-3">
             <div class="flex items-center justify-between gap-2">
               <h3 class="font-semibold">Color space</h3>
@@ -461,9 +468,14 @@
             <div class="flex items-center gap-2 text-sm"><label for="mFillIn" class="flex-1">Fill-in patches on each test sheet</label>
               <select id="mFillIn" class="input !w-40" title="Extra patches where the color space has measured least – some near the color being matched. They are marked on the sheet and only feed the color space. “Fill the free space” uses the empty slots of the pages the sheet already needs, so they cost no extra media."><option value="0">None</option><option value="4">4</option><option value="8">8</option><option value="auto">Fill the free space</option></select></div>
           </div>
+          <!-- spare room (wide screens, when the card is taller than its controls): a small turning picture of the color space -->
+          <div id="mSpaceMini" class="invisible relative min-h-0 self-stretch rounded-xl border border-slate-200 dark:border-slate-800">
+            <canvas id="mSpaceMiniCanvas" class="absolute inset-0 h-full w-full"></canvas>
+            <p id="mSpaceMiniNote" class="pointer-events-none absolute inset-x-0 bottom-2 px-3 text-center text-[11px] text-slate-500"></p>
+          </div>
           <!-- what the color space holds, and its files – beside the controls on wide screens, its list filling the card's
                height (so the card ends with the column beside it); below the controls otherwise -->
-          <div id="mSpaceData" class="hidden min-w-0 flex-col border-t border-slate-200 pt-3 text-xs dark:border-slate-800 xl:col-start-2 xl:row-span-2 xl:row-start-1 xl:self-stretch xl:border-t-0 xl:border-l xl:pt-0 xl:pl-6">
+          <div id="mSpaceData" class="hidden min-w-0 flex-col border-t border-slate-200 pt-3 text-xs dark:border-slate-800 xl:col-start-2 xl:row-span-3 xl:row-start-1 xl:self-stretch xl:border-t-0 xl:border-l xl:pt-0 xl:pl-6">
             <h4 id="mSpaceDataTitle" class="text-sm font-medium">Data &amp; files</h4>
             <div class="relative mt-2 xl:min-h-[12rem] xl:flex-1">
               <ul id="mSpaceSessions" class="max-h-96 space-y-1 overflow-y-auto xl:absolute xl:inset-0 xl:max-h-none"></ul>
@@ -563,26 +575,27 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-21.c577fa1-231041",
-      "./js/transport.js": "./js/transport.js?v=2026-10-21.c577fa1-231041",
-      "./js/mock.js": "./js/mock.js?v=2026-10-21.c577fa1-231041",
-      "./js/session.js": "./js/session.js?v=2026-10-21.c577fa1-231041",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-21.c577fa1-231041",
-      "./js/color.js": "./js/color.js?v=2026-10-21.c577fa1-231041",
-      "./js/weights.js": "./js/weights.js?v=2026-10-21.c577fa1-231041",
-      "./js/storage.js": "./js/storage.js?v=2026-10-21.c577fa1-231041",
-      "./js/icc.js": "./js/icc.js?v=2026-10-21.c577fa1-231041",
-      "./js/match.js": "./js/match.js?v=2026-10-21.c577fa1-231041",
-      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-21.c577fa1-231041",
-      "./js/ui.js": "./js/ui.js?v=2026-10-21.c577fa1-231041",
-      "./js/match-view.js": "./js/match-view.js?v=2026-10-21.c577fa1-231041",
-      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-21.c577fa1-231041",
-      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-21.c577fa1-231041",
-      "./js/debug.js": "./js/debug.js?v=2026-10-21.c577fa1-231041",
-      "./js/space-view.js": "./js/space-view.js?v=2026-10-21.c577fa1-231041"
+      "./js/app.js": "./js/app.js?v=2026-10-21.fd446bb-232136",
+      "./js/transport.js": "./js/transport.js?v=2026-10-21.fd446bb-232136",
+      "./js/mock.js": "./js/mock.js?v=2026-10-21.fd446bb-232136",
+      "./js/session.js": "./js/session.js?v=2026-10-21.fd446bb-232136",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-21.fd446bb-232136",
+      "./js/color.js": "./js/color.js?v=2026-10-21.fd446bb-232136",
+      "./js/weights.js": "./js/weights.js?v=2026-10-21.fd446bb-232136",
+      "./js/storage.js": "./js/storage.js?v=2026-10-21.fd446bb-232136",
+      "./js/icc.js": "./js/icc.js?v=2026-10-21.fd446bb-232136",
+      "./js/match.js": "./js/match.js?v=2026-10-21.fd446bb-232136",
+      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-21.fd446bb-232136",
+      "./js/ui.js": "./js/ui.js?v=2026-10-21.fd446bb-232136",
+      "./js/match-view.js": "./js/match-view.js?v=2026-10-21.fd446bb-232136",
+      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-21.fd446bb-232136",
+      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-21.fd446bb-232136",
+      "./js/debug.js": "./js/debug.js?v=2026-10-21.fd446bb-232136",
+      "./js/space-view.js": "./js/space-view.js?v=2026-10-21.fd446bb-232136",
+      "./js/mini-space.js": "./js/mini-space.js?v=2026-10-21.fd446bb-232136"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-21.c577fa1-231041"></script>
+  <script type="module" src="js/app.js?v=2026-10-21.fd446bb-232136"></script>
 </body>
 </html>
