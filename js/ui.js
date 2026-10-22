@@ -1,4 +1,5 @@
-// Small DOM and formatting helpers shared by the Console (app.js) and the Print match view (match-view.js).
+// Small DOM and formatting helpers shared by the Console (app.js), Print match (match-view.js) and the Color space view
+// (space-view.js).
 import { labD50ToSrgb, rgbHex } from './color.js';
 import { debugLog } from './debug.js';
 
@@ -17,6 +18,17 @@ export function toast(msg, kind = 'info') {
 }
 
 export const fmt = (v, d = 2) => (Number.isFinite(v) ? v.toFixed(d) : '—');
+export const fmt1 = (v) => (Math.round(v * 10) / 10).toFixed(1);
+/** L*a*b* as short text: "L 40.8 a 52.7 b 27.6". */
+export const labText = (lab) => `L ${fmt1(lab[0])} a ${fmt1(lab[1])} b ${fmt1(lab[2])}`;
+/** A sheet type's input values as [label, text] pairs (CMYK with its K, RGB with its hex). */
+export function formatValues(mode, x, k) {
+  if (mode === 'cmyk') return [['C', fmt1(x[0])], ['M', fmt1(x[1])], ['Y', fmt1(x[2])], ['K', fmt1(k)]];
+  if (mode === 'rgb') return [['R', String(x[0])], ['G', String(x[1])], ['B', String(x[2])], ['HEX', rgbHex(x)]];
+  return [['L*', fmt1(x[0])], ['a*', fmt1(x[1])], ['b*', fmt1(x[2])]];
+}
+/** …as one line: "L* 34.7 a* 71.3 b* 46.7", "C 40.0 M 60.0 Y 10.0 K 5.0", "R 12 G 34 B 56". */
+export const valuesText = (mode, x, k) => formatValues(mode, x, k).filter(([key]) => key !== 'HEX').map(([key, v]) => `${key} ${v}`).join(' ');
 export const round2 = (v) => Math.round(v * 100) / 100;
 export const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 /** sRGB hex of a Lab D50 color, for swatches. */

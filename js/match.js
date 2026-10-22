@@ -406,7 +406,7 @@ export function sheetLayout(opts) {
       const k = p.k ?? g.kFixed ?? 0; // a color space chart varies K per patch
       page.boxes.push({ x, y: rowTop - size, size, patch: p, kFixed: k });
       if (detailed) {
-        t(x, rowTop - size - 10, 8, `#${p.n}${p.offset?.every((v) => v === 0) ? ' (centre)' : ''}`, true);
+        t(x, rowTop - size - 10, 8, `#${p.n}${p.fill ? ' (fill-in)' : p.offset?.every((v) => v === 0) ? ' (centre)' : ''}`, true);
         t(x, rowTop - size - 19, 6.5, fmtValues(mode, p.x, k));
         if (mode === 'spot') t(x, rowTop - size - 26, 6.5, p.name ?? '');
       } else t(x, rowTop - size - 9, 7, String(p.n), true);

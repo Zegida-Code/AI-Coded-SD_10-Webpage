@@ -509,7 +509,7 @@ async function e2e() {
 }
 
 async function spaceCheck() {
-  const { CHART_SIZES, designChart, driftOf, invert, keepFrom, learn, newSpace, pointX, readSpaceFile, removeSession, spaceFromCgats, spaceStats, spaceToCgats, spaceToJson } = await import('../js/colorspace.js');
+  const { CHART_SIZES, designChart, designGapChart, driftOf, forgetPatch, gapFillers, invert, keepFrom, learn, newSpace, pointX, readSpaceFile, refreshChecks, removeSession, spaceFromCgats, spaceStats, spaceToCgats, spaceToJson } = await import('../js/colorspace.js');
   const { designPatches } = await import('../js/match.js');
   const { printSpectrum } = await import('../js/printer-sim.js');
   let seed = 7;
@@ -550,8 +550,10 @@ async function spaceCheck() {
   let bestBrute = Infinity;
   for (let L = 30; L <= 80; L += 2) for (let a = -120; a <= 120; a += 4) for (let b = -60; b <= 60; b += 4) bestBrute = Math.min(bestBrute, deltaE2000(outT, printer([L, a, b])));
   const outGot = deltaE2000(outT, printer(ro.x));
+  // beyond the measured patches the prediction stays near them (no promise the chart cannot back up): honest about how
+  // close the values print, and still near the best this printer can do – the test sheets then explore further
   check(`out of gamut: predicted ΔE00 ${ro.predictedDeltaE.toFixed(2)}, the values print ${outGot.toFixed(2)}, the best this printer can do is ${bestBrute.toFixed(2)}`,
-    ro.predictedDeltaE > 2 && Math.abs(outGot - ro.predictedDeltaE) < 1.5 && outGot < bestBrute + 1.5);
+    ro.predictedDeltaE > 2 && Math.abs(outGot - ro.predictedDeltaE) < 0.5 && outGot < bestBrute + 2);
 
   // learning from test sheets
   const t = [44, 38, -34];
@@ -565,6 +567,40 @@ async function spaceCheck() {
   check(`learning: two test sheets near a reference refine the space there (prints ΔE00 ${before.toFixed(2)} -> ${after.toFixed(2)}) and match its prediction (no drift, median ${d1?.median.toFixed(2)})`,
     after < 1 && after <= Math.max(before, 0.5) + 0.05 && d1 && !d1.drift);
 
+  // a RIP that clips hard at the printer's edge: requests beyond it all print the same most-saturated color, so a chart
+  // has few patches showing where that edge is. A reference just past it must not get an optimistic prediction, and a
+  // test sheet of beyond-edge requests (which print alike) must not be mistaken for a changed printer.
+  {
+    const clipPrinter = ([L, a, b]) => {
+      const C = Math.hypot(a, b), h = Math.atan2(b, a), Cmax = 50 + 10 * Math.cos(h - 0.5);
+      const Cp = Math.min(C * 0.97, Cmax);
+      return [Math.min(96, 5 + 0.92 * L), Cp * Math.cos(h), Cp * Math.sin(h)];
+    };
+    const clip = newSpace({ name: 'Clipping RIP', mode: 'spot', now: T0 });
+    for (const p of designChart('spot', 200, 11)) learn(clip, { session: 'chart', kind: 'chart', label: 'Chart', n: p.n, x: p.x, lab: noise(clipPrinter(p.x)), now: T0 });
+    const edgeT = [40, 62, 38]; // C* 73, well beyond this printer's ~60 in red
+    const re = invert(clip, edgeT);
+    const edgeGot = deltaE2000(edgeT, clipPrinter(re.x));
+    const sheet = designPatches('spot', [34, 80, 50], [2.5, 4, 4]); // a sheet far beyond the edge, like an over-eager first guess
+    for (const p of sheet) learn(clip, { session: 'sheet:edge', kind: 'sheet', label: 'Edge sheet', n: p.n, x: p.x, lab: noise(clipPrinter(p.x)), now: T0 + DAY });
+    const edgeDrift = driftOf(clip, 'sheet:edge');
+    // past the end of that tight cluster of patches the prediction must not follow their small trend outwards either
+    const afterSheet = invert(clip, edgeT);
+    const sheetBest = Math.min(...clip.points.filter((p) => p.s === 'sheet:edge').map((p) => deltaE2000(edgeT, p.lab)));
+    check(`after a test sheet at the edge, the prediction stays honest (predicted ΔE00 ${afterSheet.predictedDeltaE.toFixed(2)}, prints ${deltaE2000(edgeT, clipPrinter(afterSheet.x)).toFixed(2)}, the sheet's best ${sheetBest.toFixed(2)})`,
+      Math.abs(afterSheet.predictedDeltaE - deltaE2000(edgeT, clipPrinter(afterSheet.x))) < 0.75);
+    check(`at a hard-clipping gamut edge the prediction is not optimistic (predicted ΔE00 ${re.predictedDeltaE.toFixed(2)}, prints ${edgeGot.toFixed(2)}) and a beyond-edge sheet raises no drift warning (${edgeDrift ? `median ${edgeDrift.median.toFixed(2)}` : 'not judged'})`,
+      re.predictedDeltaE > edgeGot - 1 && !edgeDrift?.drift);
+    // a space saved under the older check rule still carries the false warning: it is checked again once, on load
+    const edgeSession = clip.sessions.find((q) => q.id === 'sheet:edge');
+    edgeSession.checks = Object.fromEntries(sheet.map((p) => [p.n, 3.3]));
+    delete clip.checkRule;
+    const staleDrift = driftOf(clip, 'sheet:edge')?.drift;
+    const redone = refreshChecks(clip);
+    check('a color space saved with checks made under the older rule is checked again, and its edge false alarm goes',
+      staleDrift && redone && !driftOf(clip, 'sheet:edge')?.drift && !refreshChecks(clip));
+  }
+
   // drift: the printer changed (darker, duller, yellower)
   const changed = (x) => { const [L, a, b] = printer(x); return [L - 4, a * 0.9, b * 0.9 + 3]; };
   const check24 = designChart('spot', 24, 9);
@@ -576,6 +612,30 @@ async function spaceCheck() {
   removeSession(space, 'check:1');
   check(`drift: a check chart from a changed printer is flagged (median ΔE00 ${dr?.median.toFixed(2)} > ${dr?.limit.toFixed(2)}); a re-measured patch replaces its point; removing a session removes its patches`,
     dr?.drift && replaced && space.points.length === n0 - 24 && !space.sessions.some((s) => s.id === 'check:1'));
+
+  // filling gaps: fill-in patches go where the space has measured least – half of them near the color being matched
+  {
+    const spacing = spaceStats(space).spacing;
+    const nearest = (x) => Math.min(...space.points.map((p) => Math.hypot(...x.map((v, k) => v - p.x[k]))));
+    const centre = [44, 38, -34];
+    const fills = gapFillers(space, 8, { near: centre, seed: 21 });
+    const fromCentre = fills.map((f) => Math.hypot(...f.x.map((v, k) => v - centre[k])));
+    const gaps = designGapChart(space, 48, 5);
+    check(`fill-in patches go into empty areas (each ≥ ${Math.min(...fills.map((f) => nearest(f.x))).toFixed(1)} from a measured patch, typical spacing ${spacing.toFixed(1)}), half near the color being matched; a fill-gaps chart avoids what is measured`,
+      fills.length === 8 && new Set(fills.map((f) => f.x.join())).size === 8 && fills.every((f) => nearest(f.x) > spacing) &&
+      fromCentre.slice(0, 4).every((d) => d <= 3.5 * spacing) && JSON.stringify(gapFillers(space, 8, { near: centre, seed: 21 })) === JSON.stringify(fills) &&
+      gaps.length === 48 && gaps.every((p, i) => p.n === i + 1) && gaps.every((p) => nearest(p.x) > spacing));
+    // removing one patch (undo, or a stray point): with its check; a session left empty goes too
+    const tmp = readSpaceFile(new TextEncoder().encode(spaceToJson(space)), 't.json');
+    const one = tmp.points.find((p) => p.s === 'sheet:R1');
+    const before = tmp.points.length;
+    const gone = forgetPatch(tmp, 'sheet:R1', one.n);
+    const sheetSize = tmp.points.filter((p) => p.s === 'sheet:R1').length;
+    for (const p of tmp.points.filter((q) => q.s === 'sheet:R1')) forgetPatch(tmp, p.s, p.n);
+    check('one measured patch can be removed from a color space (with its check); a set left without patches goes too',
+      gone && tmp.points.length === before - sheetSize - 1 && !(one.n in (tmp.sessions.find((q) => q.id === 'sheet:R1')?.checks ?? {})) &&
+      !tmp.sessions.some((q) => q.id === 'sheet:R1') && !forgetPatch(tmp, 'sheet:R1', one.n));
+  }
 
   // files
   const json = readSpaceFile(new TextEncoder().encode(spaceToJson(space)), 'Test printer.json');

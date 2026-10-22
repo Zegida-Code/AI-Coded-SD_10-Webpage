@@ -7,7 +7,10 @@
 //
 // Sections: stored data · what the cards work on · formatting · views · media sizes · printer profile (gamut check) ·
 // rendering · measuring · sheets · spot library · color space · start-up.
-import { $, DEMO, NEEDS_CALIBRATION, displayHex, downloadFile, escapeHtml, onFilePicked, readFlag, round2, safeFileName, toast, writeFlag } from './ui.js';
+import {
+  $, DEMO, NEEDS_CALIBRATION, displayHex, downloadFile, escapeHtml, fmt1, formatValues, labText, onFilePicked, readFlag, round2, safeFileName,
+  toast, valuesText, writeFlag,
+} from './ui.js';
 import { METHOD } from './protocol.js';
 import { deltaE2000, labD50ToSrgb, meanSpectrum, rgbHex, spectrumToLab, srgbToLabD50 } from './color.js';
 import { CUSTOM_PREFIX, PRINTER_PREFIX, loadProfile, printerProfiles } from './icc.js';
@@ -17,8 +20,9 @@ import {
 } from './match.js';
 import { RIP_EXPORTS, readLibrary } from './rip-export.js';
 import {
-  CHART_SIZES, SPACE_MIN_POINTS, chartSpotName, designChart, driftOf, invert, keepFrom, learn, newSpace, newSpaceId, pointX,
-  readSpaceFile, removeSession, sessionSize, spaceStats, spaceToCgats, spaceToJson,
+  CHART_SIZES, SPACE_MIN_POINTS, chartSpotName, designChart, designGapChart, driftOf, forgetPatch, gapFillers, invert, keepFrom, learn,
+  newSpace, newSpaceId, pointX,
+  readSpaceFile, refreshChecks, removeSession, sessionSize, spaceStats, spaceToCgats, spaceToJson,
 } from './colorspace.js';
 import { printSpectrum } from './printer-sim.js';
 import { debugLog } from './debug.js';
@@ -48,7 +52,9 @@ function fromLegacySpelling(o) {
 function loadSpaces() {
   const legacy = loadJson(LEGACY_SPACES_KEY, null);
   const stored = loadJson(SPACES_KEY, null) ?? legacy ?? [];
-  if (legacy && saveJson(SPACES_KEY, stored)) { try { localStorage.removeItem(LEGACY_SPACES_KEY); } catch { /* ignore */ } }
+  // spaces saved under an older check rule get their checks made again (and are saved once if anything changed)
+  const rechecked = stored.map((s) => refreshChecks(s)).some(Boolean);
+  if ((legacy || rechecked) && saveJson(SPACES_KEY, stored) && legacy) { try { localStorage.removeItem(LEGACY_SPACES_KEY); } catch { /* ignore */ } }
   return stored;
 }
 
@@ -58,12 +64,17 @@ function loadSpaces() {
 //             design ('full' | 'compact'), mf, tol, reads, ripFormat
 //   formula (DE_FORMULAS key), printerProfile (name of a stored printer profile for the gamut check, '' = none)
 //   space (id of the color space in use, '' = none), learn (add scanned test-sheet patches to it),
+//   fillIn (fill-in patches added to each test sheet where the color space has measured least – 0, 4, 8 or 'auto':
+//          as many as fit in the free space of the pages the sheet needs anyway),
 //   chartActive (the sheet and scan cards show the color space's chart instead of the selected color)
 //   colors: [{ id, code, name, target, targetSpectrum, refReads, refSpectra, accepted, next,
 //               rounds: [{ round, mode, centre, step, kFixed, design,
-//                          patches: [{ n, offset, x, name?, reads, spectra, lab, spread, spectrum }], result,
+//                          patches: [{ n, offset, x, name?, reads, spectra, lab, spread, spectrum }
+//                                    – fill-in patches: { n, x, k?, name?, fill: true, … }, no offset ], result,
 //                          fromSpace? ({ name, dE } – the first sheet started from the color space's prediction) }] }]
 //   active (index of the selected color)
+//   scanLog: the last readings, newest last – [{ chart, id (color or chart id), round, index (patch index) }] – for
+//            "Undo last scan"
 // Every color is matched on its own: its own sheets (one per round), scan position (next = patch index) and result.
 // The sheet, scan and result cards always work on the selected color, so several colors can be in progress at once.
 // code: 4 characters in the color's patch spot names (SD10-<code>-R<round>-<n>), new for every fresh start.
@@ -86,7 +97,7 @@ const match = (() => {
   }
   for (const k of ['sheet', 'next', 'jobId']) delete m[k];
   const out = { mode: 'spot', media: 'custom', mediaW: 210, mediaH: 297, patchMm: 20, design: 'full', mf: 1, tol: 1, reads: 1,
-    formula: 'de00', printerProfile: '', ripFormat: 'cxf', space: '', learn: true, chartActive: false, colors: [], active: 0, ...m };
+    formula: 'de00', printerProfile: '', ripFormat: 'cxf', space: '', learn: true, fillIn: 0, chartActive: false, colors: [], active: 0, scanLog: [], ...m };
   if (!out.colors.length) out.colors = [newColor()];
   return out;
 })();
@@ -147,6 +158,12 @@ const workItem = () => activeChart() ?? activeColor();
 /** The work item and its current round (latest sheet) – what the sheet, scan and result cards work on – or null. */
 const currentSheet = () => { const c = workItem(), r = latest(c); return r ? { c, r } : null; };
 const scannedCount = (r) => r.patches.filter((p) => p.lab).length;
+/** A round without its fill-in patches – what the match is worked out from (they only feed the color space). */
+const matchPart = (r) => (r.patches.some((p) => p.fill) ? { ...r, patches: r.patches.filter((p) => !p.fill) } : r);
+/** Fill-in patches a new test sheet gets: when there is a color space to fill and learning is on. */
+/** The color-space session a sheet's patches go into: the chart itself, or one per color and sheet. */
+const spaceSessionId = (c, r) => (isChart(c) ? c.id : `sheet:${c.code}-R${r.round}`);
+
 /** Index of the patch to measure next: the color's scan position, or else its first unmeasured patch. */
 const nextPatchIndex = (c, r) => (r.patches[c.next] ? c.next : Math.max(0, r.patches.findIndex((p) => !p.lab)));
 /** A color's (or the chart's) round as a sheet-layout group. */
@@ -157,7 +174,6 @@ const sheetTitle = (c) => (isChart(c) ? 'SD-10 color space chart' : undefined);
 const DE = () => DE_FORMULAS[match.formula] ?? DE_FORMULAS.de00;
 
 // ---------------------------------------------------------------- formatting
-const fmt1 = (v) => (Math.round(v * 10) / 10).toFixed(1);
 const fmtDate = (t) => new Date(t).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 const roundSpectrum = (s) => s.map((v) => Math.round(v * 1e5) / 1e5);
 const isLabMode = (mode) => mode === 'spot' || mode === 'lab';
@@ -168,12 +184,6 @@ function cmykPreviewHex([c, m, y], k) {
 }
 function patchPreviewHex(mode, x, k) {
   return mode === 'cmyk' ? cmykPreviewHex(x, k) : mode === 'rgb' ? rgbHex(x) : displayHex(x);
-}
-/** A sheet type's values as [label, text] pairs (CMYK with its K, RGB with its hex). */
-function formatValues(mode, x, k) {
-  if (mode === 'cmyk') return [['C', fmt1(x[0])], ['M', fmt1(x[1])], ['Y', fmt1(x[2])], ['K', fmt1(k)]];
-  if (mode === 'rgb') return [['R', String(x[0])], ['G', String(x[1])], ['B', String(x[2])], ['HEX', rgbHex(x)]];
-  return [['L*', fmt1(x[0])], ['a*', fmt1(x[1])], ['b*', fmt1(x[2])]];
 }
 /** Values as tiles – large in a result, smaller in the color space prediction. */
 function valueTilesHtml(mode, x, k, { large = false } = {}) {
@@ -223,9 +233,10 @@ function setView(view) {
 const spaceViewData = () => ({
   spaces,
   active: match.space,
+  formula: match.formula,
   refs: [
-    ...match.colors.filter((c) => c.target).map((c) => ({ name: colorLabel(c), lab: c.target })),
-    ...(state.lastLabD50 ? [{ name: 'Last measurement', lab: state.lastLabD50 }] : []),
+    ...match.colors.filter((c) => c.target).map((c) => ({ id: c.id, name: colorLabel(c), lab: c.target })),
+    ...(state.lastLabD50 ? [{ id: 'last', name: 'Last measurement', lab: state.lastLabD50 }] : []),
   ],
 });
 
@@ -279,7 +290,8 @@ function heightLimits() {
   const cur = currentSheet();
   // the current sheet, or a stand-in color with the chosen number of patches before there is one
   const group = cur ? sheetGroup(cur.c, cur.r) : { label: 'Color 1', target: [50, 0, 0], kFixed: 0,
-    patches: Array.from({ length: DESIGNS[match.design] ?? 16 }, (_, i) => ({ n: i + 1, offset: [0, 0, 0], x: [0, 0, 0], name: 'SD10-XXXX-R1-01' })) };
+    // 'auto' fill-ins only use free slots, so they never need more height
+    patches: Array.from({ length: (DESIGNS[match.design] ?? 16) + (+fillInSetting() || 0) }, (_, i) => ({ n: i + 1, offset: [0, 0, 0], x: [0, 0, 0], name: 'SD10-XXXX-R1-01' })) };
   const opts = { mode: match.mode, groups: [group], round: cur?.r.round ?? 1, media: [match.mediaW, 0], patchMm: match.patchMm };
   return { min: minSheetHeight(opts, { onePage: false }), onePage: minSheetHeight(opts) };
 }
@@ -320,7 +332,7 @@ function gamutHtml(c) {
   const g = gamutFor(c);
   if (!g) return '<span class="text-slate-500">Checking the printer gamut…</span>';
   if (g.error) return `<span class="text-rose-600">Gamut check failed: ${escapeHtml(g.error)}</span>`;
-  const closest = `<span class="font-mono">L ${fmt1(g.closest[0])} a ${fmt1(g.closest[1])} b ${fmt1(g.closest[2])}</span>`;
+  const closest = `<span class="font-mono">${labText(g.closest)}</span>`;
   return {
     inside: `<span class="text-emerald-600">Inside the printer gamut</span> <span class="text-slate-500">(profile round trip ΔE00 ${g.dE.toFixed(2)})</span>`,
     edge: `<span class="text-amber-600">At the edge of the printer gamut – the closest printable color is ${closest}, ΔE00 ${g.dE.toFixed(2)} away.</span>`,
@@ -365,8 +377,11 @@ export function matchControls(busyLabel) {
   $('btnMatchUseLast').disabled = !(state.lastLabD50 || state.last) || state.busy;
   $('btnMatchSheet').disabled = chart || !c.target || state.busy;
   $('btnMatchMeasure').disabled = !idle || !cur;
-  $('btnMatchAnalyse').disabled = state.busy || !cur || scannedCount(cur.r) < 5;
+  $('btnMatchAnalyse').disabled = state.busy || !cur || scannedCount(matchPart(cur.r)) < 5;
   $('btnMatchAnalyse').classList.toggle('hidden', chart);
+  const undo = lastScan();
+  $('btnMatchUndo').disabled = state.busy || !undo;
+  $('btnMatchUndo').title = undo ? `Undo the last scan: patch #${undo.p.n} of ${colorLabel(undo.c)}${isChart(undo.c) ? '' : ` – sheet ${undo.r.round}`}` : 'Nothing to undo';
   $('btnMatchRefine').disabled = state.busy || !c.target || c.accepted;
   $('btnSpaceChart').disabled = state.busy;
   $('vsMeasure').disabled = !idle;
@@ -476,7 +491,9 @@ function renderSheet(c) {
   $('btnMatchRestart').title = chart ? 'Back to your colors – the patches scanned so far stay in the color space' : "Discard this color's sheets and measurements (its reference is kept)";
   if (!chart && !c.target) { $('mSheetInfo').textContent = `Set the reference of ${colorLabel(c)} first.`; return; }
   if (!r) {
-    $('mSheetInfo').textContent = `Creates a sheet of ${DESIGNS[match.design] ?? 16} ${MODE_NAME[match.mode]} patches for ${colorLabel(c)}, around a first estimate of its reference.`;
+    const fill = fillInSetting();
+    const fillText = fill === 'auto' ? ', with fill-in patches for the color space in its free space' : fill ? `, plus ${fill} fill-in patches for the color space` : '';
+    $('mSheetInfo').textContent = `Creates a sheet of ${DESIGNS[match.design] ?? 16} ${MODE_NAME[match.mode]} patches for ${colorLabel(c)}, around a first estimate of its reference${fillText}.`;
     return;
   }
   let pages, layout = null;
@@ -494,10 +511,11 @@ function renderSheet(c) {
       ? '<b class="text-emerald-600">All patches are scanned and in the color space.</b> Close the chart to go back to your colors.'
       : 'Print it like the final job and scan the patches in number order – each goes into the color space as you scan it.'}</p>${names}${preview}`;
   } else {
-    const vals = formatValues(r.mode, r.centre, r.kFixed).map(([k, v]) => `${k} ${v}`).join('  ');
+    const vals = valuesText(r.mode, r.centre, r.kFixed);
     const steps = r.step.map((v, k) => `${MODES[r.mode].axes[k]} ±${fmt1(v)}`).join(', ');
     const from = r.fromSpace ? `<p class="mt-1 text-xs">Starts from the color space prediction (${escapeHtml(r.fromSpace.name)}, predicted ${DE().label} ${r.fromSpace.dE.toFixed(2)}).</p>` : '';
-    $('mSheetInfo').innerHTML = `${r.patches.length} patches${pages}. Download, print and scan the patches below.
+    const fills = r.patches.filter((p) => p.fill).length;
+    $('mSheetInfo').innerHTML = `${r.patches.length} patches${fills ? ` (${fills} fill-in for the color space)` : ''}${pages}. Download, print and scan the patches below.
       <p class="mt-1 text-xs">Round ${r.round}: centre <span class="font-mono">${vals}</span> · steps ${steps}</p>${from}${names}${preview}`;
   }
   if (layout) wirePreview(`${c.id}|${r.round}|${layout.W}x${layout.H}`, Math.min(...layout.pages[0].boxes.map((b) => b.x)) / layout.W);
@@ -593,14 +611,14 @@ function renderPatchGrid(c) {
   // 8 per row in a full-width scan card, 4 when it sits beside the sheet card (xl)
   $('mPatchGrid').innerHTML = `<div class="grid grid-cols-4 sm:grid-cols-8 xl:grid-cols-4 gap-2">${r.patches.map((p, i) => {
     const done = !!p.lab;
-    const bg = done ? displayHex(p.lab) : patchPreviewHex(r.mode, p.x, r.kFixed);
-    const dE = done && c.target ? DE().fn(c.target, p.lab) : null;
+    const bg = done ? displayHex(p.lab) : patchPreviewHex(r.mode, p.x, p.k ?? r.kFixed);
+    const dE = done && c.target && !p.fill ? DE().fn(c.target, p.lab) : null; // a fill-in patch is not aiming at the reference
     const partial = !done && p.reads?.length ? `${p.reads.length}/${match.reads}` : '';
     const uneven = done && p.spread > 1.5; // readings disagree – textured / uneven print
-    const title = `Patch #${p.n}${p.name ? ' · ' + p.name : ''}${done && p.spread != null && p.reads?.length > 1 ? ` · ${p.reads.length} readings, spread ΔE00 ${p.spread.toFixed(2)}` : ''}${done ? ' – tap to re-measure' : ''}`;
-    return `<button type="button" data-patch="${i}" class="text-left rounded-lg p-1.5 ring-1 ${i === next ? 'ring-2 ring-indigo-500' : 'ring-slate-200 dark:ring-slate-800'}" title="${escapeHtml(title)}">
+    const title = `Patch #${p.n}${p.fill ? ' · fill-in for the color space' : ''}${p.name ? ' · ' + p.name : ''}${done && p.spread != null && p.reads?.length > 1 ? ` · ${p.reads.length} readings, spread ΔE00 ${p.spread.toFixed(2)}` : ''}${done ? ' – tap to re-measure' : ''}`;
+    return `<button type="button" data-patch="${i}" class="text-left rounded-lg p-1.5 ring-1 ${i === next ? 'ring-2 ring-indigo-500' : 'ring-slate-200 dark:ring-slate-800'} ${p.fill ? 'outline-dashed outline-1 outline-offset-[-3px] outline-slate-400' : ''}" title="${escapeHtml(title)}">
       <div class="h-10 rounded-md ${done ? '' : 'opacity-40'}" style="background:${bg}"></div>
-      <div class="flex justify-between text-[11px] mt-1"><b>#${p.n}${uneven ? ' <span class="text-amber-600" title="Readings differ by more than 1.5 ΔE00">!</span>' : ''}</b><span class="font-mono ${dE != null && dE <= match.tol ? 'text-emerald-600' : 'text-slate-500'}">${dE != null ? 'ΔE ' + dE.toFixed(1) : partial}</span></div>
+      <div class="flex justify-between text-[11px] mt-1"><b>#${p.n}${uneven ? ' <span class="text-amber-600" title="Readings differ by more than 1.5 ΔE00">!</span>' : ''}</b><span class="font-mono ${dE != null && dE <= match.tol ? 'text-emerald-600' : 'text-slate-500'}">${dE != null ? 'ΔE ' + dE.toFixed(1) : partial || (p.fill ? 'fill' : '')}</span></div>
     </button>`;
   }).join('')}</div>`;
 }
@@ -627,13 +645,25 @@ function metamerismHtml(c, r) {
       : 'Values up to about 1 are hard to see.'}${m.d50 > 3 ? ' The patch is still far from the reference under D50, so treat this as a first indication – it becomes reliable as the match gets close.' : ''}</p></details>`;
 }
 
+/**
+ * When the recommended patch is not the one that measured lowest: they printed alike (within the measuring noise), and
+ * of such patches the one whose values are nearest the reference is recommended – near the gamut edge, more extreme
+ * values only measure better by chance.
+ */
+function pickNote(res) {
+  const lowest = res.bestEver ?? { ...res.best, round: null };
+  if (res.pickN == null || (res.pickN === lowest.n && (lowest.round == null || res.pickRound === lowest.round))) return '';
+  const where = (round, n) => (round != null && round !== res.pickRound ? `sheet ${round} #${n}` : `#${n}`);
+  return ` Patch ${where(lowest.round, lowest.n)} measured slightly lower (${DE().label} ${lowest.dE.toFixed(2)} against ${res.predictedDeltaE.toFixed(2)}) – within the measuring noise – but #${res.pickN}'s values are nearer the reference: where patches print alike, more extreme values only measure better by chance.`;
+}
+
 /** Card 4: one color's result – the values to use, how close they should print, why, and the round history. */
 function resultHtml(c) {
   const r = latest(c);
   const res = r.result;
   const within = res.predictedDeltaE <= match.tol && !res.extrapolated;
   const verified = r.round > 1 && res.centreDE != null && res.centreDE <= match.tol;
-  const prevVals = formatValues(r.mode, r.centre, r.kFixed).map(([k, v]) => `${k} ${v}`).join(' ');
+  const prevVals = valuesText(r.mode, r.centre, r.kFixed);
   const gamut = gamutClass(gamutFor(c));
   const bestElsewhere = res.bestEver && res.bestEver.round !== r.round;
   return `<section data-res="${c.id}" class="rounded-xl border border-slate-200 dark:border-slate-800 p-3 space-y-3">
@@ -655,8 +685,8 @@ function resultHtml(c) {
       <span>predicted ${DE().label} <b class="tabular-nums">${res.predictedDeltaE.toFixed(2)}</b>${res.extrapolated ? ' (rough estimate)' : ''} (tolerance ${match.tol})</span>
     </div>
     ${res.regressed ? `<p class="text-xs text-amber-600"><b>The last change made the color worse</b> (this sheet's centre printed ${DE().label} ${res.centreDE.toFixed(2)}), so the search goes back to the best patch so far and continues in smaller steps.</p>` : ''}
-    ${res.source === 'best-patch' ? `<p class="text-xs text-amber-600">No values are predicted to print closer than the best patch you measured (#${res.pickN ?? res.best.n}), so these are its values.</p>` : ''}
-    ${res.source === 'best-earlier' ? `<p class="text-xs text-amber-600">Nothing on this sheet beats patch #${res.pickN} of sheet ${res.pickRound}, so these are its values; the next sheet looks for something better close to it.</p>` : ''}
+    ${res.source === 'best-patch' ? `<p class="text-xs text-amber-600">No values are predicted to print closer than the patches you measured, so these are the values of patch #${res.pickN ?? res.best.n}.${pickNote(res)}</p>` : ''}
+    ${res.source === 'best-earlier' ? `<p class="text-xs text-amber-600">Nothing on this sheet beats patch #${res.pickN} of sheet ${res.pickRound}, so these are its values; the next sheet looks for something better close to it.${pickNote(res)}</p>` : ''}
     ${res.extrapolated ? '<p class="text-xs text-amber-600">The answer lies outside this sheet’s patch range, so the prediction is only a rough estimate. The next sheet is centred on it and will confirm.</p>' : ''}
     ${res.trustLimited ? '<p class="text-xs text-amber-600">This round moves as far as the sheet’s measurements can be trusted; the next sheet continues in that direction.</p>' : ''}
     ${res.gamutLimited && res.predictedDeltaE > match.tol ? (gamut === 'inside'
@@ -766,6 +796,7 @@ function measurePatch() {
     p.reads = [...(p.reads ?? []), m.lab];
     p.spectra = [...(p.spectra ?? []), roundSpectrum(m.spectrum)];
     r.result = null;
+    match.scanLog = [...(match.scanLog ?? []), { chart, id: c.id, round: r.round, index: k }].slice(-SCAN_LOG_MAX);
     if (p.reads.length < match.reads) {
       commit({ withSpaces: chart });
       toast(`Reading ${p.reads.length}/${match.reads} – move the SD-10 to another spot on patch #${p.n}.`);
@@ -789,11 +820,52 @@ function measurePatch() {
   });
 }
 
+// ---- undo the last scan
+/** How many readings "Undo last scan" can go back. */
+const SCAN_LOG_MAX = 30;
+
+/** The color (or chart), round and patch of the newest logged reading – null when there is none or its sheet changed since. */
+function lastScan() {
+  const entry = match.scanLog?.[match.scanLog.length - 1];
+  if (!entry) return null;
+  const s = activeSpace();
+  const c = entry.chart ? (s?.chart?.id === entry.id ? s.chart : null) : match.colors.find((x) => x.id === entry.id);
+  const r = c && latest(c), p = r?.patches[entry.index];
+  return r?.round === entry.round && (p?.lab || p?.reads?.length) ? { c, r, p, index: entry.index } : null;
+}
+
+/**
+ * "Undo last scan": a patch with all its readings loses its measurement – on the sheet and in the color space it went
+ * into – and becomes the next to scan; a patch still collecting readings loses its last reading. The sheet's result,
+ * if it had one, goes too (it rested on that patch).
+ */
+function undoLastScan() {
+  const t = lastScan();
+  match.scanLog = (match.scanLog ?? []).slice(0, -1);
+  if (!t) { commit(); toast('That scan can no longer be undone – its sheet has changed since.', 'error'); return; }
+  const { c, r, p, index } = t;
+  let msg;
+  if (p.lab) {
+    for (const s of spaces) forgetPatch(s, spaceSessionId(c, r), p.n);
+    Object.assign(p, { lab: null, reads: [], spectra: [], spread: null, spectrum: null });
+    msg = `Scan of patch #${p.n} undone – measure it again.`;
+  } else {
+    p.reads = p.reads.slice(0, -1);
+    p.spectra = (p.spectra ?? []).slice(0, -1);
+    msg = `Reading ${p.reads.length + 1} of patch #${p.n} undone.`;
+  }
+  r.result = null;
+  c.next = index;
+  debugLog('match', `scan undone: ${colorLabel(c)} patch #${p.n}`, { round: r.round, readingsLeft: p.reads.length });
+  commit({ withSpaces: true });
+  toast(msg, 'ok');
+}
+
 /** A color's result from its measured patches (and its earlier rounds); false (and says why) when it cannot be fitted. */
 function analyseColor(c, r = latest(c)) {
   try {
     // the color's earlier rounds count too: the best patch so far is the bar to beat, and a failed move is undone
-    const a = analyseRound(r, c.target, match.formula, c.rounds.filter((x) => x !== r));
+    const a = analyseRound(matchPart(r), c.target, match.formula, c.rounds.filter((x) => x !== r).map(matchPart));
     r.result = { x: a.x, predicted: a.predicted, predictedDeltaE: a.predictedDeltaE, clamped: a.clamped, correction: a.correction, extrapolated: a.extrapolated,
       source: a.source, trustLimited: a.trustLimited, gamutLimited: a.gamutLimited, regressed: a.regressed, pickRound: a.pickRound, pickN: a.pickN,
       best: { n: a.best.n, dE: a.best.dE }, bestEver: { round: a.bestEver.round, n: a.bestEver.n, dE: a.bestEver.dE },
@@ -811,7 +883,7 @@ function analyseColor(c, r = latest(c)) {
 /** "Calculate now": the selected color's result from the patches measured so far (at least 5). */
 function analyseMatch() {
   const cur = currentSheet();
-  const ok = cur && scannedCount(cur.r) >= 5 && analyseColor(cur.c, cur.r);
+  const ok = cur && scannedCount(matchPart(cur.r)) >= 5 && analyseColor(cur.c, cur.r);
   commit();
   if (ok) $('mResultCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -839,12 +911,42 @@ async function initialCentre(c) {
 }
 
 /** A color's next sheet (round) around `centre`; its patches are named SD10-<color code>-R<round>-<n> in spot mode. */
+/**
+ * The fill-in setting in force for a new test sheet: 0 (none – also without a color space to fill or with learning
+ * off), 4, 8, or 'auto' (as many as fit in the empty slots of the pages the sheet already needs – see emptySlots).
+ */
+const fillInSetting = () => (match.learn && usableSpace()?.points.length >= SPACE_MIN_POINTS ? match.fillIn : 0);
+/** Most fill-in patches 'auto' adds (each one is also a patch to scan). */
+const MAX_AUTO_FILL = 100;
+
+/**
+ * How many more patches fit on the pages a color's sheet of `n` patches already takes – its empty slots on the media
+ * in use – so fill-in patches cost no extra media.
+ */
+function emptySlots(c, n) {
+  const opts = (count) => ({ mode: match.mode, round: 1, media: mediaMm(), patchMm: match.patchMm, groups: [{ label: colorLabel(c), target: c.target, kFixed: 0,
+    patches: Array.from({ length: count }, (_, i) => ({ n: i + 1, offset: [1, 0, 0], x: [0, 0, 0], name: 'SD10-XXXX-R1-01' })) }] });
+  const pagesFor = (count) => { try { return sheetLayout(opts(count)).pages.length; } catch { return Infinity; } };
+  const pages = pagesFor(n);
+  if (!Number.isFinite(pages)) return 0;
+  let extra = 0;
+  while (extra < MAX_AUTO_FILL && pagesFor(n + extra + 1) === pages) extra++;
+  return extra;
+}
+/**
+ * A color's next sheet (round) around `centre`, plus its fill-in patches (half around the centre, half wherever the
+ * color space is emptiest); its patches are named SD10-<color code>-R<round>-<n> in spot mode.
+ */
 function createRound(c, { centre, step, kFixed, fromSpace = null }) {
   const round = (latest(c)?.round ?? 0) + 1;
-  const patches = designPatches(match.mode, centre, step, match.design)
+  const design = designPatches(match.mode, centre, step, match.design);
+  const setting = fillInSetting();
+  const fillCount = setting === 'auto' ? emptySlots(c, design.length) : setting;
+  const fillers = fillCount ? gapFillers(usableSpace(), fillCount, { near: pointX(match.mode, centre, kFixed), seed: crypto.getRandomValues(new Uint32Array(1))[0] }) : [];
+  const patches = [...design, ...fillers.map((f, i) => ({ n: design.length + i + 1, ...f, fill: true }))]
     .map((p) => (match.mode === 'spot' ? { ...p, name: patchSpotName(c.code, round, p.n) } : p));
   c.rounds.push({ round, mode: match.mode, centre, step, kFixed, design: match.design, patches, result: null, ...(fromSpace ? { fromSpace } : {}) });
-  debugLog('match', `sheet ${round} created for ${colorLabel(c)}`, { mode: match.mode, centre, step, kFixed, design: match.design, fromSpace });
+  debugLog('match', `sheet ${round} created for ${colorLabel(c)}`, { mode: match.mode, centre, step, kFixed, design: match.design, fromSpace, fillIn: fillers.length });
   c.next = 0;
   commit();
 }
@@ -1043,7 +1145,7 @@ function onLibraryClick(e) {
 }
 
 // ---------------------------------------------------------------- color space
-const SESSION_KIND = { chart: 'Chart', check: 'Check chart', sheet: 'Test sheet', import: 'Imported' };
+const SESSION_KIND = { chart: 'Chart', check: 'Check chart', gaps: 'Fill-gaps chart', sheet: 'Test sheet', import: 'Imported' };
 const predictionCache = new Map();
 
 /** What the color space predicts for a color's reference (cached), or null. CMYK keeps the K of the color's sheets. */
@@ -1067,7 +1169,7 @@ function spacePredictionHtml(c) {
   if (!p) return '';
   const s = usableSpace(), st = spaceStats(s);
   const rough = st.spacing != null && p.d1 > 2 * st.spacing; // no measured patches nearby
-  const lab = `<span class="font-mono">L ${fmt1(p.predicted[0])} a ${fmt1(p.predicted[1])} b ${fmt1(p.predicted[2])}</span>`;
+  const lab = `<span class="font-mono">${labText(p.predicted)}</span>`;
   return `<div class="flex flex-wrap items-baseline justify-between gap-2"><h4 class="text-sm font-semibold">Predicted by the color space</h4><span class="text-xs text-slate-500">${escapeHtml(s.name)}</span></div>
     ${valueTilesHtml(match.mode, p.x, p.k)}
     <p class="text-xs">${p.predictedDeltaE <= 2
@@ -1083,6 +1185,8 @@ function renderSpaceCard() {
   $('mSpace').innerHTML = '<option value="">None</option>' + spaces.map((q) => `<option value="${escapeHtml(q.id)}">${escapeHtml(q.name)}${q.mode !== match.mode ? ` (${MODE_NAME[q.mode]} sheets)` : ''}</option>`).join('');
   $('mSpace').value = s?.id ?? '';
   $('mSpaceLearn').checked = match.learn;
+  $('mFillIn').value = String(match.fillIn);
+  $('mFillIn').disabled = !match.learn;
   $('mSpaceActions').classList.toggle('hidden', !s);
   $('btnSpaceCgats').disabled = !s?.points.length;
   $('btnSpaceChart').textContent = s?.chart ? 'New chart' : 'Create chart';
@@ -1107,10 +1211,15 @@ function renderSpaceCard() {
   }
   // the most recent set of patches that could be compared with the space: did the printer print as predicted?
   const last = [...s.sessions].sort((a, b) => (b.updated ?? b.time) - (a.updated ?? a.time)).map((q) => ({ q, d: driftOf(s, q.id) })).find((x) => x.d);
-  if (last?.d.drift) {
+  if (last?.d.drift && last.q.kind === 'check') {
+    // a check chart is a deliberate test across the gamut: only it offers to drop the older measurements
     parts.push(`<div class="rounded-lg bg-rose-50 p-2 text-rose-700 dark:bg-rose-950 dark:text-rose-200"><b>${escapeHtml(last.q.label)} printed differently from what this color space predicts</b>
-      – typically ΔE00 ${last.d.median.toFixed(2)} off, where the space is usually within ${st.accuracy ? st.accuracy.median.toFixed(2) : '–'}. The printer, ink, media or settings have probably changed: check them. If the change is meant to stay, keep only the newer measurements.
-      <div class="mt-1"><button type="button" data-space-act="trim" data-time="${last.q.time}" class="font-medium underline">Keep only data from ${fmtDate(last.q.time)} on</button></div></div>`);
+      – typically ΔE00 ${last.d.median.toFixed(2)} off, where the space is usually within ${st.accuracy ? st.accuracy.median.toFixed(2) : '–'}. The printer, ink, media or settings have probably changed: check them. If the change is meant to stay, keep only the measurements from this check chart on.
+      <div class="mt-1"><button type="button" data-space-act="trim" data-time="${last.q.time}" class="font-medium underline">Keep only data from this check chart on</button></div></div>`);
+  } else if (last?.d.drift) {
+    // one test sheet can also miss because it lies where the color space knows little – a check chart tells them apart
+    parts.push(`<div class="rounded-lg bg-amber-50 p-2 text-amber-800 dark:bg-amber-950 dark:text-amber-200"><b>${escapeHtml(last.q.label)} printed differently from what this color space predicts</b>
+      – typically ΔE00 ${last.d.median.toFixed(2)} off, where the space is usually within ${st.accuracy ? st.accuracy.median.toFixed(2) : '–'}. The printer, ink, media or settings may have changed. Print a <b>check chart</b> to find out: it compares the printer with the color space across its whole range.</div>`);
   } else if (last?.q.kind === 'check') {
     parts.push(`<p class="text-emerald-600">${escapeHtml(last.q.label)} (${fmtDate(last.q.time)}): the printer still prints as predicted (typically ΔE00 ${last.d.median.toFixed(2)} off).</p>`);
   }
@@ -1179,16 +1288,19 @@ function createChart() {
   if (s && s.mode !== match.mode) { toast(`“${s.name}” was measured with ${MODE_NAME[s.mode]} sheets – switch the sheet type, or create a new color space.`, 'error'); return; }
   const key = CHART_SIZES[$('mChartSize').value] ? $('mChartSize').value : 'starter';
   if (key === 'check' && (!s || s.points.length < SPACE_MIN_POINTS)) { toast('A check chart compares the printer with an existing color space – print and scan a full chart first.', 'error'); return; }
+  if (key === 'gaps' && (!s || s.points.length < SPACE_MIN_POINTS)) { toast('A fill-gaps chart adds to an existing color space – print and scan a full chart first.', 'error'); return; }
   s ??= createSpace();
   if (!s) return;
   const old = s.chart?.rounds[0];
   if (old && !old.patches.every((p) => p.lab) && !confirm(`Replace ${s.chart.name}?${scannedCount(old) ? ' The patches scanned so far stay in the color space.' : ''}`)) return;
-  const kind = key === 'check' ? 'check' : 'chart';
+  const kind = key === 'check' || key === 'gaps' ? key : 'chart';
   const no = s.sessions.filter((q) => q.kind === kind).length + 1;
   const code = newCode();
   const seed = crypto.getRandomValues(new Uint32Array(1))[0];
-  const patches = designChart(s.mode, CHART_SIZES[key].n, seed).map((p) => (s.mode === 'spot' ? { ...p, name: chartSpotName(code, no, p.n) } : p));
-  s.chart = { id: `${kind}:${code}`, code, name: `${s.name} – ${kind === 'check' ? 'check chart' : 'chart'} ${no}`, target: null, refReads: [], accepted: false, next: 0,
+  const designed = kind === 'gaps' ? designGapChart(s, CHART_SIZES[key].n, seed) : designChart(s.mode, CHART_SIZES[key].n, seed);
+  const patches = designed.map((p) => (s.mode === 'spot' ? { ...p, name: chartSpotName(code, no, p.n) } : p));
+  const title = { chart: 'chart', check: 'check chart', gaps: 'fill-gaps chart' }[kind];
+  s.chart = { id: `${kind}:${code}`, code, name: `${s.name} – ${title} ${no}`, target: null, refReads: [], accepted: false, next: 0,
     rounds: [{ round: no, mode: s.mode, kind, kFixed: 0, patches, result: null, chart: true }] };
   match.chartActive = true;
   commit({ withSpaces: true });
@@ -1212,6 +1324,16 @@ function closeChart() {
   commit({ withSpaces: true });
 }
 
+/** The 3-D view's right-click menu: one measured patch (a stray point) out of a color space; the sheet keeps it. */
+function removeSpacePoint(spaceId, point) {
+  const s = spaces.find((q) => q.id === spaceId);
+  if (!s || !forgetPatch(s, point.s, point.n, point)) return;
+  saveSpaces();
+  showSpaceView();
+  debugLog('space', `point removed from “${s.name}”`, { session: point.s, n: point.n, x: point.x, lab: point.lab });
+  toast(`Patch${point.n != null ? ` #${point.n}` : ''} removed from the color space “${s.name}”.`, 'ok');
+}
+
 /**
  * Add a scanned patch to the color space: a chart's patches always go into its space, a color's test-sheet patches
  * when learning is on and the space was measured with this sheet type. Says so once when a sheet prints differently
@@ -1219,9 +1341,9 @@ function closeChart() {
  */
 function learnPatch(c, r, p) {
   const chart = isChart(c);
-  const s = chart || match.learn ? activeSpace() : null;
+  const s = chart || match.learn || p.fill ? activeSpace() : null; // fill-in patches exist only for the color space
   if (!s || s.mode !== r.mode) return;
-  const session = chart ? c.id : `sheet:${c.code}-R${r.round}`;
+  const session = spaceSessionId(c, r);
   const label = chart ? c.name : `${colorLabel(c)} – sheet ${r.round}`;
   const was = driftOf(s, session)?.drift;
   const check = learn(s, { session, kind: chart ? r.kind : 'sheet', label, n: p.n, x: pointX(r.mode, p.x, p.k ?? r.kFixed), lab: p.lab });
@@ -1252,9 +1374,14 @@ function onSpaceClick(e) {
     if (!q || !confirm(`Remove “${q.label}” (${sessionSize(s, q.id)} patches) from the color space?`)) return;
     removeSession(s, q.id);
   } else if (act === 'trim') {
+    // say exactly what goes – a chart from earlier the same day included – and what is left
     const time = +b.dataset.time;
     const old = s.sessions.filter((q) => q.time < time);
-    if (!old.length || !confirm(`Remove the ${old.length} older set${old.length > 1 ? 's' : ''} of measurements (${old.reduce((n, q) => n + sessionSize(s, q.id), 0)} patches) from the color space, keeping only the data from ${fmtDate(time)} on?`)) return;
+    if (!old.length) return;
+    const removed = old.reduce((n, q) => n + sessionSize(s, q.id), 0), left = s.points.length - removed;
+    const charts = old.filter((q) => q.kind === 'chart').length;
+    const list = old.map((q) => `• ${q.label} – ${SESSION_KIND[q.kind] ?? 'measurements'}, ${fmtDate(q.time)}, ${sessionSize(s, q.id)} patches`).join('\n');
+    if (!confirm(`Keep only the measurements from the check chart on? This removes:\n\n${list}\n\n${charts ? `That includes ${charts > 1 ? `${charts} charts` : 'the chart'}. ` : ''}The color space keeps ${left} patches${left < SPACE_MIN_POINTS ? ' and needs a new chart before it can predict again' : ''}. Export it first if you may want the old data back.`)) return;
     keepFrom(s, time);
   }
   commit({ withSpaces: true });
@@ -1391,6 +1518,7 @@ function wireSheetCards() {
   $('btnMatchRestart').onclick = restartSheet;
   $('btnMatchMeasure').onclick = measurePatch;
   $('btnMatchAnalyse').onclick = analyseMatch;
+  $('btnMatchUndo').onclick = undoLastScan;
   $('mPatchGrid').onclick = (e) => {
     const b = e.target.closest('[data-patch]');
     const cur = b && currentSheet();
@@ -1417,7 +1545,8 @@ function wireSpaceCard() {
   $('btnSpaceImport').onclick = () => $('spaceFile').click();
   onFilePicked('spaceFile', importSpaceFile);
   $('btnSpaceChart').onclick = createChart;
-  $('mSpaceLearn').onchange = () => { match.learn = $('mSpaceLearn').checked; saveMatch(); };
+  $('mSpaceLearn').onchange = () => { match.learn = $('mSpaceLearn').checked; commit(); };
+  $('mFillIn').onchange = () => { match.fillIn = $('mFillIn').value === 'auto' ? 'auto' : +$('mFillIn').value || 0; commit(); };
   $('btnSpaceJson').onclick = () => { const s = activeSpace(); if (s) downloadFile(spaceToJson(s), 'application/json', `${safeFileName(s.name)}.json`); };
   $('btnSpaceCgats').onclick = () => { const s = activeSpace(); if (s?.points.length) downloadFile(spaceToCgats(s), 'text/plain', `${safeFileName(s.name)}.txt`); };
   $('btnSpaceRename').onclick = renameSpace;
@@ -1451,7 +1580,7 @@ export function initMatch(app) {
   wireSpaceCard();
   wireLibrary();
   wireDrop();
-  initSpaceView(spaceViewData);
+  initSpaceView(spaceViewData, { removePoint: removeSpacePoint });
   $('vsMeasure').onclick = measureForSpaceView;
   setView(location.hash.slice(1) || 'console');
   WIDE.addEventListener('change', () => { if (!WIDE.matches && state.view !== 'console') setView('console'); });

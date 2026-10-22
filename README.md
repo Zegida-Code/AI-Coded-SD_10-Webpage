@@ -93,7 +93,8 @@ scanning. A to-scale preview shows how the sheet sits on your media before you d
 Print the sheet exactly like the final job – same printer, media, quality and color settings, at 100% – and scan
 the patches in number order with **Measure** or the SD-10's button (tap a patch to re-measure it). If your prints are
 transferred, cured or finished (pressed, cured, laminated…), treat the sheet the same way and scan the finished
-result.
+result. Scanned the wrong patch? **Undo last scan** takes the last reading back – off the sheet and out of the color
+space – and makes that patch the next to scan; press it again to go further back.
 
 On textured or uneven surfaces, set **Readings per patch** to 3 or more: each patch is then the average of readings
 taken at different spots, and a **!** marks patches whose readings disagree by more than 1.5 ΔE00.
@@ -138,18 +139,33 @@ Measure it once and every color gets a prediction straight away, instead of star
 1. **Create chart** under *Color space* (it asks for a name, e.g. the printer, media and settings) and download the
    chart like a test sheet: **Starter** (200 patches), **Standard** (400) or **Fine** (800). The patches are spread
    over everything the printer might produce and placed in a mixed order, so uneven printing across the sheet averages
-   out. In the L\*a\*b\* sheet types there is a **Sheet library** for the chart too.
+   out. In the L\*a\*b\* sheet types there is a **Sheet library** for the chart too. Later, a **Fill gaps** chart
+   (48 patches) measures where the color space is emptiest.
 2. Print it like the final job and scan the patches in number order. Each one goes into the color space as you scan
    it, so a chart can be scanned in several sittings – it sits at the top of the color list until you close it.
 3. Set a reference: the *Reference* card now shows the values the color space predicts and how close they should
    print – or, for a color the printer never reached, the closest it prints. **Create sheet** starts from those
    values with finer steps, and the usual rounds confirm and refine them.
 
+The prediction is an estimate from the measured patches around it, not a measured color. It only goes as far as
+the measurements reach: between patches it fills in, but at the edge of what the chart measured – typically the gamut
+edge, where a RIP prints every "more saturated" request the same – it stays close to the last measured patches
+instead of extrapolating, so it does not promise colors the printer cannot make.
+
 **It learns.** With *Learn from every test sheet I scan* on, every patch you scan for a color is added too, so the
 color space gets more accurate where you actually work. Before a patch counts, it is compared with what the rest of
-the color space predicts. When a whole sheet prints differently, the app warns that the printer, ink or media has
-probably changed. A **Check** chart (24 patches) tests exactly that. If the change is meant to stay, **Keep only data
-from … on** removes the older measurements. Older measurements also count less over time.
+the color space predicts – where measured patches surround it (at a sparsely measured edge a miss only means the space
+did not know that region). When a whole test sheet prints differently, the app warns that the printer, ink or media
+may have changed and suggests a **Check** chart (24 patches) to find out. If a check chart confirms the change and it
+is meant to stay, **Keep only data from this check chart on** removes the older measurements – it lists exactly what
+it would remove, a chart from earlier the same day included. Older measurements also count less over time.
+
+**Fill-in patches.** *Fill-in patches on each test sheet* (off by default) adds patches to every test sheet where the
+color space has measured least – some near the color being matched, where it needs the data most (up to 8), the rest
+wherever it is emptiest. They are marked *fill-in* on the sheet and in the scan card, the match calculation ignores
+them, and they go into the color space like chart patches. **4** or **8** add that many (which can take an extra page
+on tight media); **Fill the free space** adds exactly as many as fit in the empty slots of the pages the sheet needs
+anyway – no extra media, only a little more scanning (at most 100).
 
 **Data & files** lists every chart, check chart and test sheet in the color space, and **remove** takes one out
 again – for example a sheet printed on the wrong media. Make a separate color space for each printer, ink, media and
@@ -172,6 +188,15 @@ colors measured at each lightness and hue. Drag to turn it, scroll (or pinch) to
 both gamut volumes. The Print match reference colors are marked, and the ones outside the surface are flagged.
 **Measure a color** (or the SD-10's button) adds the color you measure to the picture, so you can see whether a
 sample is printable at a glance.
+
+The **Reference colors** list beside the picture shows, for every reference, the patch of the color space that
+measured closest to it (with its ΔE, what it printed and which sheet it came from) and the values the color space
+predicts for it (what to ask for, what it should print, and "first estimate" where it has few patches nearby). Click
+one to show it in the picture: a line runs to its closest measured patch and a dashed one to its predicted color.
+With many references, only the selected one is named in the picture – hover the others. **Full screen** (on the
+picture, Esc to leave) fills the screen, and **Spin** turns it slowly. A stray patch – a smudge or a mis-scan – can be
+taken out of the color space by right-clicking it and choosing **Remove from the color space**; the test sheet keeps
+its measurement.
 
 ### Spot color libraries
 
@@ -214,11 +239,11 @@ Open these pages in Chrome – on the live site (e.g. [sd-10.com/test/](https://
 
 | Page | What it checks |
 |---|---|
-| [`test/index.html`](https://sd-10.com/test/index.html) | 113 checks of the core code: command frames against the app's own (emulated) code; L\*a\*b\* and CMYK against its native libraries; ΔE2000, CMC and ΔE00 2:1:1 against reference data; the ICC engine against LittleCMS; Print match convergence, layouts and PDF / PNG sheets; color space charts, predictions, learning, drift checks and files against simulated printers; the library formats against real VersaWorks and Edge Print exports, the CxF3 standard and a reference Adobe Color Book encoder; and a full session against the simulated SD-10 |
+| [`test/index.html`](https://sd-10.com/test/index.html) | 118 checks of the core code: command frames against the app's own (emulated) code; L\*a\*b\* and CMYK against its native libraries; ΔE2000, CMC and ΔE00 2:1:1 against reference data; the ICC engine against LittleCMS; Print match convergence, layouts and PDF / PNG sheets; color space charts, predictions, learning, drift checks and files against simulated printers; the library formats against real VersaWorks and Edge Print exports, the CxF3 standard and a reference Adobe Color Book encoder; and a full session against the simulated SD-10 |
 | [`test/ui-smoke.html`](https://sd-10.com/test/ui-smoke.html) | 34 checks driving the Console against the simulated SD-10: calibrate, measure, compare, line scan, history sync, palettes, settings, custom ICC profiles |
 | [`test/mobile-check.html`](https://sd-10.com/test/mobile-check.html) | The layout at phone width (no sideways scrolling) and the compare / reference flows |
 | [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 50 checks driving Print match against the simulated device and printer: matching to within tolerance, several colors at once, media sizes and limits, readings per patch, textile ΔE, metamerism and gamut checks, spot color sheets and libraries, RGB sheets |
-| [`test/space-smoke.html`](https://sd-10.com/test/space-smoke.html) | 24 checks of the color space workflow against the simulated device and printer: charts, scanning into the color space, import / export, predictions, a first sheet that starts from them, learning, the drift check, removing measurements, the 3-D view, and taking over data saved under the old "colour" spelling |
+| [`test/space-smoke.html`](https://sd-10.com/test/space-smoke.html) | 34 checks of the color space workflow against the simulated device and printer: charts, scanning into the color space, import / export, predictions, a first sheet that starts from them, learning, the drift check, removing measurements, undoing a scan, fill-in patches and fill-gaps charts, the 3-D view with its reference list, full screen and right-click removal, and taking over data saved under the old "colour" spelling |
 
 ## Project layout
 
@@ -227,7 +252,7 @@ index.html          page and layout
 css/app.css         compiled Tailwind stylesheet (source: css/tailwind.src.css)
 js/app.js           Console view (connection, measuring, history, palettes, settings, log) and start-up
 js/match-view.js    Print match view (reference colors, sheets, scanning, results, color space, spot library)
-js/ui.js            DOM and formatting helpers shared by both views
+js/ui.js            DOM and formatting helpers shared by the views
 js/debug.js         debug report: journal of actions, messages and errors; the report file
 js/session.js       SD-10 session: byte routing, command queue with FF / FE acks, handshake, operations
 js/protocol.js      command builders and reply parsers

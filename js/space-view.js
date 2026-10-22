@@ -1,13 +1,15 @@
 // Color space view: a large, turnable 3-D picture of a measured color space in CIE L*a*b* – every measured patch in the
 // color it printed, the gamut surface around them, optionally a second space as a wireframe to compare (another
-// media or printer), and the Print match reference colors. Plain canvas 2-D with a small perspective projection;
-// drag to turn, scroll or pinch to zoom, hover a patch for its values.
+// media or printer), and the Print match reference colors, listed beside it with their closest measured patch and the
+// values the space predicts for them. Plain canvas 2-D with a small perspective projection; drag to turn, scroll or
+// pinch to zoom, hover a patch for its values; full screen on request.
 // The data comes from the Print match view (initSpaceView's `data` callback), which owns the color spaces.
-import { $, displayHex, escapeHtml } from './ui.js';
-import { spaceStats } from './colorspace.js';
-import { MODE_NAME } from './match.js';
+import { $, displayHex, escapeHtml, labText, valuesText } from './ui.js';
+import { invert, spaceStats } from './colorspace.js';
+import { DE_FORMULAS, MODE_NAME } from './match.js';
 
-let data = () => ({ spaces: [], active: '', refs: [] });
+let data = () => ({ spaces: [], active: '', refs: [], formula: 'de00' });
+let actions = {}; // { removePoint(spaceId, point) } – changes to the color spaces are made by their owner
 const PREFS_KEY = 'sd10.space3d';
 const prefs = (() => {
   let p = {};
@@ -20,8 +22,11 @@ const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(p
 const HOME = { yaw: -0.65, pitch: 0.38, zoom: 1 };
 let cam = { ...HOME };
 let visible = false, frame = 0, lastTime = 0, dirty = true;
-let scene = null; // { space, shell, other, otherShell, points: [{ pos, hex, p }], refs } – rebuilt when the data changes
+// rebuilt when the data changes: { R (picture radius), space, other (compared with), shell, otherShell,
+//   points: [{ pos, hex, p, session }], refs: [{ id, name, lab, pos, hex, outside }] }
+let scene = null;
 let projected = []; // screen positions of the points drawn last, for hovering
+let projectedRefs = []; // … and of the reference markers
 
 // ---------------------------------------------------------------- gamut surface
 const L_STEP = 5, HUES = 36;
@@ -231,16 +236,44 @@ function drawItems(items, { wire }) {
   }
 }
 
-/** Reference colors on top of everything, with their names – ringed red when outside the surface. */
+/**
+ * The selected reference with its closest colors: a line to the closest measured patch (ringed), and a dashed line to
+ * the color its predicted values should print (a hollow ring).
+ */
+function drawSelection({ text }) {
+  const ref = scene.refs.find((r) => r.id === selectedRef);
+  const detail = ref && scene.space && refDetail(scene.space, ref, formulaKey());
+  if (!detail) return;
+  const at = (lab) => project([lab[1], lab[0], lab[2]]), from = project(ref.pos);
+  const to = (lab, dash) => { const q = at(lab); ctx.setLineDash(dash); ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(q.x, q.y); ctx.stroke(); ctx.setLineDash([]); return q; };
+  ctx.strokeStyle = text; ctx.lineWidth = 1.5;
+  if (detail.measured) {
+    const q = to(detail.measured.p.lab, []);
+    ctx.beginPath(); ctx.arc(q.x, q.y, 9, 0, 2 * Math.PI); ctx.lineWidth = 2; ctx.stroke();
+  }
+  if (detail.predicted) {
+    ctx.lineWidth = 1.5;
+    const q = to(detail.predicted.predicted, [5, 4]);
+    ctx.beginPath(); ctx.arc(q.x, q.y, 6, 0, 2 * Math.PI); ctx.stroke();
+  }
+}
+
+/** More reference colors than this and only the selected one is named in the picture (hover the others). */
+const MAX_NAMED_REFS = 6;
+
+/** Reference colors on top of everything – ringed red when outside the surface, named when there are few. */
 function drawReferences({ text }) {
   ctx.font = '600 12px ui-sans-serif, system-ui, sans-serif';
+  projectedRefs = [];
   for (const ref of scene.refs) {
-    const p = project(ref.pos);
-    ctx.beginPath(); ctx.arc(p.x, p.y, 7, 0, 2 * Math.PI);
+    const p = project(ref.pos), selected = ref.id === selectedRef;
+    ctx.beginPath(); ctx.arc(p.x, p.y, selected ? 9 : 7, 0, 2 * Math.PI);
     ctx.fillStyle = ref.hex; ctx.fill();
-    ctx.lineWidth = 2.5; ctx.strokeStyle = ref.outside ? '#e11d48' : text; ctx.stroke();
+    ctx.lineWidth = selected ? 3.5 : 2.5; ctx.strokeStyle = ref.outside ? '#e11d48' : text; ctx.stroke();
+    projectedRefs.push({ x: p.x, y: p.y, r: 9, ref });
+    if (scene.refs.length > MAX_NAMED_REFS && !selected) continue;
     ctx.fillStyle = text; ctx.textAlign = 'left';
-    ctx.fillText(`${ref.name}${ref.outside ? ' (outside)' : ''}`, p.x + 11, p.y + 4);
+    ctx.fillText(`${ref.name}${ref.outside ? ' (outside)' : ''}`, p.x + 12, p.y + 4);
   }
 }
 
@@ -250,7 +283,7 @@ function draw() {
   const colors = theme();
   drawAxes(colors);
   drawItems(depthItems(), colors);
-  if (prefs.refs && scene) drawReferences(colors);
+  if (prefs.refs && scene) { drawSelection(colors); drawReferences(colors); }
 }
 
 function loop(time) {
@@ -262,6 +295,100 @@ function loop(time) {
   frame = requestAnimationFrame(loop);
 }
 const kick = () => { dirty = true; if (visible && !frame) frame = requestAnimationFrame((t) => { lastTime = t; loop(t); }); };
+
+// ---------------------------------------------------------------- reference list
+// For each reference color: the patch of this space that measured closest to it, and the values the space predicts
+// for it. A prediction takes a moment, so they are worked out one at a time after the list is drawn, and cached.
+const refDetailCache = new Map();
+let selectedRef = null; // id of the reference shown with its closest colors in the picture
+let refJob = null;
+const formulaKey = () => (DE_FORMULAS[data().formula] ? data().formula : 'de00');
+const refDetailKey = (space, ref, formula) => `${space.id}|${space.updated}|${space.points.length}|${ref.lab.join()}|${formula}`;
+const refDetail = (space, ref, formula) => refDetailCache.get(refDetailKey(space, ref, formula));
+
+function computeRefDetail(space, ref, formula) {
+  const { fn: dE } = DE_FORMULAS[formula];
+  let measured = null;
+  for (const p of space.points) { const d = dE(ref.lab, p.lab); if (!measured || d < measured.dE) measured = { p, dE: d }; }
+  let predicted = null;
+  try { predicted = invert(space, ref.lab, { formula }); } catch { /* too few patches */ }
+  return { measured, predicted };
+}
+
+/** Work out the next reference that has no details yet, then redraw; continues until all have them. */
+function scheduleRefDetails() {
+  clearTimeout(refJob);
+  const { space, refs } = scene ?? {};
+  const formula = formulaKey();
+  const next = space?.points.length && refs.find((r) => !refDetail(space, r, formula));
+  if (!next) return;
+  refJob = setTimeout(() => {
+    if (refDetailCache.size > 500) refDetailCache.clear();
+    refDetailCache.set(refDetailKey(space, next, formula), computeRefDetail(space, next, formula));
+    if (scene?.space === space) { renderRefList(); kick(); }
+  }, 0);
+}
+
+
+function renderRefList() {
+  const { space, refs } = scene;
+  const formula = formulaKey(), dE = DE_FORMULAS[formula].label;
+  $('vsRefCount').textContent = refs.length ? `(${refs.length})` : '';
+  if (!refs.length) {
+    $('vsRefList').innerHTML = '<li class="px-4 py-3 text-sm text-slate-500">No reference colors yet – set them in Print match, or measure a color here.</li>';
+    return;
+  }
+  const sessions = new Map((space?.sessions ?? []).map((s) => [s.id, s.label]));
+  $('vsRefList').innerHTML = refs.map((ref) => {
+    const d = space?.points.length ? refDetail(space, ref, formula) : null;
+    const m = d?.measured, p = d?.predicted;
+    const pending = space?.points.length && !d ? '<p class="mt-1 text-[11px] text-slate-500">Working it out…</p>' : '';
+    const details = !d ? pending : `<dl class="mt-1.5 grid grid-cols-[auto,minmax(0,1fr)] gap-x-2 gap-y-0.5 text-[11px] leading-4">
+        <dt class="text-slate-500">Measured</dt>
+        <dd>${m ? `${dE} <b>${m.dE.toFixed(2)}</b> · <span class="font-mono">${labText(m.p.lab)}</span><span class="block truncate text-slate-500" title="${escapeHtml(sessions.get(m.p.s) ?? '')}">${escapeHtml(sessions.get(m.p.s) ?? '')}${m.p.n != null ? ` · patch #${m.p.n}` : ''}</span>` : '–'}</dd>
+        <dt class="text-slate-500">Predicted</dt>
+        <dd>${p ? `${dE} <b>${p.predictedDeltaE.toFixed(2)}</b> · <span class="font-mono">${labText(p.predicted)}</span><span class="block text-slate-500">ask for <span class="font-mono">${valuesText(space.mode, p.x, p.k)}</span>${p.sparse ? ' · first estimate' : ''}</span>` : '–'}</dd>
+      </dl>`;
+    const selected = ref.id === selectedRef;
+    return `<li data-ref="${escapeHtml(ref.id)}" class="cursor-pointer border-b border-slate-200 px-4 py-2.5 last:border-0 dark:border-slate-800 ${selected ? 'bg-indigo-50 dark:bg-indigo-950/40' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'}">
+      <div class="flex items-center gap-2">
+        <span class="flex h-6 w-12 flex-none overflow-hidden rounded ring-1 ring-black/10" title="Reference · closest measured patch">
+          <span class="flex-1" style="background:${ref.hex}"></span><span class="flex-1" style="background:${m ? displayHex(m.p.lab) : 'transparent'}"></span></span>
+        <span class="min-w-0 flex-1 truncate font-medium ${selected ? 'text-indigo-700 dark:text-indigo-300' : ''}">${escapeHtml(ref.name)}</span>
+        ${ref.outside ? '<span class="chip bg-rose-600 text-white !px-1.5 !py-0 text-[10px]" title="Outside the measured gamut surface">OUTSIDE</span>' : ''}
+      </div>
+      <div class="mt-0.5 font-mono text-[11px] text-slate-500">${labText(ref.lab)}</div>
+      ${details}
+    </li>`;
+  }).join('');
+  scheduleRefDetails();
+}
+
+// ---------------------------------------------------------------- full screen
+// The picture fills the screen (Esc leaves). Where the browser has no full-screen mode, or refuses it, the picture is
+// enlarged over the page instead.
+const ENLARGED = ['!fixed', '!inset-0', '!z-50', '!max-h-none', '!aspect-auto', '!h-auto'];
+const isEnlarged = () => $('vsStage').classList.contains('!fixed');
+const isFull = () => document.fullscreenElement === $('vsStage') || isEnlarged();
+function setEnlarged(on) {
+  for (const c of ENLARGED) $('vsStage').classList.toggle(c, on);
+  updateFullButton();
+  kick();
+}
+async function toggleFullScreen() {
+  const stage = $('vsStage');
+  if (document.fullscreenElement) { await document.exitFullscreen().catch(() => {}); return; }
+  if (isEnlarged()) { setEnlarged(false); return; }
+  try {
+    if (!stage.requestFullscreen) throw new Error('no full screen');
+    await stage.requestFullscreen();
+  } catch { setEnlarged(true); }
+}
+function updateFullButton() {
+  $('vsFull').textContent = isFull() ? 'Exit full screen' : 'Full screen';
+  $('vsSpinBtn').classList.toggle('!bg-indigo-600', prefs.spin);
+  $('vsSpinBtn').classList.toggle('!text-white', prefs.spin);
+}
 
 // ---------------------------------------------------------------- panel
 const fmtInt = (v) => Math.round(v).toLocaleString();
@@ -308,18 +435,49 @@ function renderPanel() {
 let drag = null; // { x, y, yaw, pitch } while turning; pinch: { dist, zoom }
 const pointers = new Map();
 
+/** The measured patch drawn under (x, y) on the canvas (the nearest within a few pixels), or null. */
+function pointAt(x, y) {
+  let hit = null, best = 9;
+  for (const q of projected) { const d = Math.hypot(q.x - x, q.y - y); if (d < Math.max(best, q.r + 2)) { best = d; hit = q; } }
+  return hit;
+}
+
+// The right-click menu of a measured patch: remove it from the color space (a stray point). Right-click only, so a
+// click while turning the picture never removes anything.
+let menuPoint = null;
+function hideMenu() { menuPoint = null; $('vsMenu').classList.add('hidden'); }
+function openMenu(e) {
+  e.preventDefault();
+  const box = $('vsCanvas').getBoundingClientRect();
+  const x = e.clientX - box.left, y = e.clientY - box.top;
+  const hit = prefs.points ? pointAt(x, y) : null;
+  if (!hit || !scene?.space) { hideMenu(); return; }
+  const { p, session } = hit.pt;
+  menuPoint = p;
+  $('vsMenuTitle').textContent = `${session}${p.n != null ? ` · patch #${p.n}` : ''} · printed ${labText(p.lab)}`;
+  const menu = $('vsMenu');
+  menu.classList.remove('hidden');
+  menu.style.left = `${Math.min(x, box.width - menu.offsetWidth - 4)}px`;
+  menu.style.top = `${Math.min(y, box.height - menu.offsetHeight - 4)}px`;
+  $('vsTip').classList.add('hidden');
+}
+
 function hover(e) {
   const tip = $('vsTip');
   const box = $('vsCanvas').getBoundingClientRect();
   const x = e.clientX - box.left, y = e.clientY - box.top;
-  let hit = null, best = 9;
-  for (const q of projected) { const d = Math.hypot(q.x - x, q.y - y); if (d < Math.max(best, q.r + 2)) { best = d; hit = q; } }
-  if (!hit) { tip.classList.add('hidden'); return; }
-  const { p, session } = hit.pt;
-  const mode = scene.space.mode;
-  const asked = mode === 'cmyk' ? `C ${p.x[0]} M ${p.x[1]} Y ${p.x[2]} K ${p.x[3]}` : mode === 'rgb' ? `R ${p.x[0]} G ${p.x[1]} B ${p.x[2]}` : `L* ${p.x[0]} a* ${p.x[1]} b* ${p.x[2]}`;
-  tip.innerHTML = `<div class="flex items-center gap-2"><span class="h-3 w-3 rounded-sm ring-1 ring-white/40" style="background:${hit.pt.hex}"></span><b>Printed L* ${p.lab[0].toFixed(1)} a* ${p.lab[1].toFixed(1)} b* ${p.lab[2].toFixed(1)}</b></div>
-    <div>Asked for ${asked}</div><div class="text-slate-300">${escapeHtml(session)}${p.n != null ? ` · patch #${p.n}` : ''}</div>`;
+  // reference markers are drawn on top, so they win
+  const refHit = prefs.refs ? projectedRefs.find((q) => Math.hypot(q.x - x, q.y - y) <= q.r + 2) : null;
+  const hit = refHit ? null : pointAt(x, y);
+  if (refHit) {
+    const { ref } = refHit;
+    tip.innerHTML = `<div class="flex items-center gap-2"><span class="h-3 w-3 rounded-sm ring-1 ring-white/40" style="background:${ref.hex}"></span><b>${escapeHtml(ref.name)}</b></div>
+      <div>Reference ${labText(ref.lab)}${ref.outside ? ' · outside the measured gamut' : ''}</div>`;
+  } else if (hit) {
+    const { p, session } = hit.pt;
+    tip.innerHTML = `<div class="flex items-center gap-2"><span class="h-3 w-3 rounded-sm ring-1 ring-white/40" style="background:${hit.pt.hex}"></span><b>Printed ${labText(p.lab)}</b></div>
+      <div>Asked for ${valuesText(scene.space.mode, p.x, p.x[3])}</div><div class="text-slate-300">${escapeHtml(session)}${p.n != null ? ` · patch #${p.n}` : ''}</div>`;
+  } else { tip.classList.add('hidden'); return; }
   tip.classList.remove('hidden');
   tip.style.left = `${Math.min(x + 14, box.width - tip.offsetWidth - 4)}px`;
   tip.style.top = `${Math.max(4, y - tip.offsetHeight - 10)}px`;
@@ -358,21 +516,49 @@ function wire() {
   canvas.addEventListener('pointerleave', () => { if (!drag) $('vsTip').classList.add('hidden'); });
   canvas.addEventListener('wheel', (e) => { e.preventDefault(); cam.zoom = Math.min(6, Math.max(0.4, cam.zoom * Math.exp(-e.deltaY * 0.0012))); kick(); }, { passive: false });
   canvas.addEventListener('dblclick', () => { cam = { ...HOME }; kick(); });
+  canvas.addEventListener('contextmenu', openMenu);
+  $('vsMenuRemove').onclick = () => {
+    const p = menuPoint, space = scene?.space;
+    hideMenu();
+    if (p && space) actions.removePoint?.(space.id, p);
+  };
+  document.addEventListener('pointerdown', (e) => { if (!$('vsMenu').contains(e.target)) hideMenu(); }, true);
   new ResizeObserver(kick).observe(canvas);
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', kick);
 
   $('vsSpace').onchange = () => { prefs.space = $('vsSpace').value; savePrefs(); showSpaceView(); };
   $('vsCompare').onchange = () => { prefs.compare = $('vsCompare').value; savePrefs(); showSpaceView(); };
-  for (const k of ['surface', 'points', 'refs', 'spin']) $(`vs_${k}`).onchange = () => { prefs[k] = $(`vs_${k}`).checked; savePrefs(); kick(); };
-  const view = (yaw, pitch) => { cam = { ...cam, yaw, pitch }; prefs.spin = false; $('vs_spin').checked = false; savePrefs(); kick(); };
+  for (const k of ['surface', 'points', 'refs', 'spin']) $(`vs_${k}`).onchange = () => { prefs[k] = $(`vs_${k}`).checked; savePrefs(); updateFullButton(); kick(); };
+  const setSpin = (on) => { prefs.spin = on; $('vs_spin').checked = on; savePrefs(); updateFullButton(); kick(); };
+  const view = (yaw, pitch) => { cam = { ...cam, yaw, pitch }; setSpin(false); };
+  $('vsSpinBtn').onclick = () => setSpin(!prefs.spin);
+  $('vsFull').onclick = toggleFullScreen;
+  document.addEventListener('fullscreenchange', () => { updateFullButton(); kick(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    hideMenu();
+    if (isEnlarged()) setEnlarged(false);
+  });
+  $('vsRefList').onclick = (e) => {
+    const li = e.target.closest('[data-ref]');
+    if (!li) return;
+    selectedRef = selectedRef === li.dataset.ref ? null : li.dataset.ref;
+    if (selectedRef) { prefs.refs = true; $('vs_refs').checked = true; }
+    renderRefList(); kick();
+  };
   $('vsTop').onclick = () => view(0, Math.PI / 2 - 0.001); // the usual a*b* diagram: +a* right, +b* up
   $('vsSide').onclick = () => view(0, 0);
   $('vsReset').onclick = () => { cam = { ...HOME }; kick(); };
 }
 
-/** Called once by the Print match view, which owns the color spaces: `getData()` -> { spaces, active, refs: [{ name, lab }] }. */
-export function initSpaceView(getData) {
+/**
+ * Called once by the Print match view, which owns the color spaces: `getData()` -> { spaces, active (id of the space in
+ * use there), refs: [{ id, name, lab }], formula (DE_FORMULAS key) }; `act.removePoint(spaceId, point)` removes a
+ * measured patch (the right-click menu).
+ */
+export function initSpaceView(getData, act = {}) {
   data = getData;
+  actions = act;
   wire();
 }
 
@@ -381,10 +567,15 @@ export function showSpaceView() {
   visible = true;
   buildScene();
   renderPanel();
+  renderRefList();
+  updateFullButton();
   kick();
 }
 
 export function hideSpaceView() {
   visible = false;
+  clearTimeout(refJob);
+  hideMenu();
+  if (isEnlarged()) setEnlarged(false);
   $('vsTip').classList.add('hidden');
 }

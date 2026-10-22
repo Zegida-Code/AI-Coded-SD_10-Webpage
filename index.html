@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <link rel="stylesheet" href="css/app.css?v=2026-10-20.06bc5ee-195835">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-21.a66e5f1-220443">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -397,6 +397,7 @@
             <div class="mt-auto flex flex-wrap items-center gap-2">
               <button id="btnMatchMeasure" class="btn btn-primary w-full sm:w-auto px-6 py-3 sm:py-2.5" disabled>Measure patch</button>
               <button id="btnMatchAnalyse" class="btn btn-ghost" disabled>Calculate now</button>
+              <button id="btnMatchUndo" class="btn btn-ghost" disabled>Undo last scan</button>
             </div>
           </div>
         </div>
@@ -460,6 +461,8 @@
             <button id="btnSpaceChart" type="button" class="btn btn-ghost">Create chart</button>
           </div>
           <label class="flex items-center gap-2 text-sm"><input id="mSpaceLearn" type="checkbox" class="h-4 w-4"> Learn from every test sheet I scan</label>
+          <div class="flex items-center gap-2 text-sm"><label for="mFillIn" class="flex-1">Fill-in patches on each test sheet</label>
+            <select id="mFillIn" class="input !w-40" title="Extra patches where the color space has measured least – some near the color being matched. They are marked on the sheet and only feed the color space. “Fill the free space” uses the empty slots of the pages the sheet already needs, so they cost no extra media."><option value="0">None</option><option value="4">4</option><option value="8">8</option><option value="auto">Fill the free space</option></select></div>
           <!-- what the color space holds, and its files – folded away -->
           <details id="mSpaceData" class="hidden border-t border-slate-200 pt-3 text-xs dark:border-slate-800">
             <summary class="cursor-pointer text-sm font-medium">Data &amp; files</summary>
@@ -483,20 +486,41 @@
     <div class="mb-3 flex flex-wrap items-end gap-3">
       <div class="min-w-0 flex-1">
         <h2 class="font-semibold">Color space</h2>
-        <p class="text-sm text-slate-500 mt-1">The colors your printer really printed, measured in CIE L*a*b* – drag to turn, scroll to zoom, hover a patch for its values. Color spaces are made and kept in Print match.</p>
+        <p class="text-sm text-slate-500 mt-1">The colors your printer really printed, measured in CIE L*a*b* – drag to turn, scroll to zoom, hover a patch for its values, right-click a stray one to remove it. Color spaces are made and kept in Print match.</p>
       </div>
       <div class="w-56"><label class="label" for="vsSpace">Color space</label><select id="vsSpace" class="input"></select></div>
       <div class="w-56"><label class="label" for="vsCompare">Compare with</label><select id="vsCompare" class="input"></select></div>
     </div>
-    <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr),17rem] items-start">
-      <div class="card !p-0 overflow-hidden">
-        <div class="relative w-full aspect-[4/3] max-h-[calc(100vh-13rem)] min-h-[440px]"><!-- as tall as the screen allows, but never taller than 4:3 – zoomed out, a full-height box would be a narrow column -->
+    <!-- Wide screens: the reference colors at the left, the picture in the middle, display options and facts at the right
+         (below the list on narrower screens, so the picture keeps its width). -->
+    <div class="grid gap-4 lg:grid-cols-[16rem,minmax(0,1fr)] xl:grid-cols-[17rem,minmax(0,1fr),16rem] items-start">
+      <!-- reference colors: each with its closest measured patch and the values the color space predicts -->
+      <div id="vsRefCard" class="card !p-0 overflow-hidden min-w-0 lg:col-start-1 lg:row-start-1">
+        <div class="px-4 pt-4 pb-2">
+          <h3 class="font-semibold">Reference colors <span id="vsRefCount" class="text-sm font-normal text-slate-500"></span></h3>
+          <p class="mt-1 text-xs text-slate-500">The closest patch measured in this color space, and the values it predicts. Click one to show it in the picture.</p>
+        </div>
+        <ul id="vsRefList" class="max-h-[calc(100vh-18rem)] min-h-[5rem] overflow-y-auto border-t border-slate-200 dark:border-slate-800"></ul>
+      </div>
+      <div class="card !p-0 overflow-hidden min-w-0 lg:col-start-2 lg:row-start-1 lg:row-span-2 xl:row-span-1">
+        <!-- as tall as the screen allows, but never taller than 4:3 – zoomed out, a full-height box would be a narrow column;
+             full screen (or, where the browser has none, enlarged over the page) it fills the screen -->
+        <div id="vsStage" class="relative w-full aspect-[4/3] max-h-[calc(100vh-13rem)] min-h-[440px] bg-white dark:bg-slate-900">
           <canvas id="vsCanvas" class="absolute inset-0 h-full w-full touch-none cursor-grab" aria-label="3-D view of the color space"></canvas>
           <div id="vsTip" class="pointer-events-none absolute hidden max-w-xs rounded-md bg-slate-900/90 px-2 py-1.5 text-xs leading-5 text-white shadow"></div>
           <div id="vsEmpty" class="absolute inset-0 hidden grid place-items-center p-8 text-center text-sm text-slate-500"></div>
+          <!-- right-click menu of a measured patch -->
+          <div id="vsMenu" class="absolute z-10 hidden w-64 rounded-lg bg-white p-1 text-sm shadow-lg ring-1 ring-black/10 dark:bg-slate-800 dark:ring-white/10">
+            <div id="vsMenuTitle" class="px-2 py-1 text-xs text-slate-500"></div>
+            <button id="vsMenuRemove" type="button" class="block w-full rounded px-2 py-1.5 text-left text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950">Remove from the color space</button>
+          </div>
+          <div class="absolute right-2 top-2 flex gap-1.5">
+            <button id="vsSpinBtn" type="button" class="btn btn-ghost !px-2.5 !py-1 bg-white/80 text-xs dark:bg-slate-900/80" title="Turn slowly (on / off)">Spin</button>
+            <button id="vsFull" type="button" class="btn btn-ghost !px-2.5 !py-1 bg-white/80 text-xs dark:bg-slate-900/80" title="Fill the screen with the picture (Esc to leave)">Full screen</button>
+          </div>
         </div>
       </div>
-      <div class="space-y-4">
+      <div class="space-y-4 min-w-0 lg:col-start-1 lg:row-start-2 xl:col-start-3 xl:row-start-1">
         <div class="card space-y-2 text-sm">
           <h3 class="font-semibold">Show</h3>
           <label class="flex items-center gap-2"><input id="vs_surface" type="checkbox" class="h-4 w-4"> Gamut surface</label>
@@ -526,26 +550,26 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-20.06bc5ee-195835",
-      "./js/transport.js": "./js/transport.js?v=2026-10-20.06bc5ee-195835",
-      "./js/mock.js": "./js/mock.js?v=2026-10-20.06bc5ee-195835",
-      "./js/session.js": "./js/session.js?v=2026-10-20.06bc5ee-195835",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-20.06bc5ee-195835",
-      "./js/color.js": "./js/color.js?v=2026-10-20.06bc5ee-195835",
-      "./js/weights.js": "./js/weights.js?v=2026-10-20.06bc5ee-195835",
-      "./js/storage.js": "./js/storage.js?v=2026-10-20.06bc5ee-195835",
-      "./js/icc.js": "./js/icc.js?v=2026-10-20.06bc5ee-195835",
-      "./js/match.js": "./js/match.js?v=2026-10-20.06bc5ee-195835",
-      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-20.06bc5ee-195835",
-      "./js/ui.js": "./js/ui.js?v=2026-10-20.06bc5ee-195835",
-      "./js/match-view.js": "./js/match-view.js?v=2026-10-20.06bc5ee-195835",
-      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-20.06bc5ee-195835",
-      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-20.06bc5ee-195835",
-      "./js/debug.js": "./js/debug.js?v=2026-10-20.06bc5ee-195835",
-      "./js/space-view.js": "./js/space-view.js?v=2026-10-20.06bc5ee-195835"
+      "./js/app.js": "./js/app.js?v=2026-10-21.a66e5f1-220443",
+      "./js/transport.js": "./js/transport.js?v=2026-10-21.a66e5f1-220443",
+      "./js/mock.js": "./js/mock.js?v=2026-10-21.a66e5f1-220443",
+      "./js/session.js": "./js/session.js?v=2026-10-21.a66e5f1-220443",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-21.a66e5f1-220443",
+      "./js/color.js": "./js/color.js?v=2026-10-21.a66e5f1-220443",
+      "./js/weights.js": "./js/weights.js?v=2026-10-21.a66e5f1-220443",
+      "./js/storage.js": "./js/storage.js?v=2026-10-21.a66e5f1-220443",
+      "./js/icc.js": "./js/icc.js?v=2026-10-21.a66e5f1-220443",
+      "./js/match.js": "./js/match.js?v=2026-10-21.a66e5f1-220443",
+      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-21.a66e5f1-220443",
+      "./js/ui.js": "./js/ui.js?v=2026-10-21.a66e5f1-220443",
+      "./js/match-view.js": "./js/match-view.js?v=2026-10-21.a66e5f1-220443",
+      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-21.a66e5f1-220443",
+      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-21.a66e5f1-220443",
+      "./js/debug.js": "./js/debug.js?v=2026-10-21.a66e5f1-220443",
+      "./js/space-view.js": "./js/space-view.js?v=2026-10-21.a66e5f1-220443"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-20.06bc5ee-195835"></script>
+  <script type="module" src="js/app.js?v=2026-10-21.a66e5f1-220443"></script>
 </body>
 </html>

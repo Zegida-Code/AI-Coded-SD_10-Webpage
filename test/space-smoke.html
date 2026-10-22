@@ -131,6 +131,16 @@
       log(stored()[1].points.length === 316 && sheetSession && Object.keys(sheetSession.checks).length >= 6 && /Brand Violet – sheet 1.*16 patches/.test(text('mSpaceSessions')) && !/printed differently/.test(text('mSpaceInfo')),
         'the scanned test sheet is learned (16 patches, checked against the prediction: no drift)');
 
+      // ---- undo the last scan: the patch loses its measurement on the sheet and in the color space, and is next again
+      log(!$('btnMatchUndo').disabled && /patch #16/.test($('btnMatchUndo').title), `Undo last scan is offered (${$('btnMatchUndo').title})`);
+      $('btnMatchUndo').click();
+      await until(() => $('mProgress').textContent.startsWith('15 /'));
+      log(stored()[1].points.length === 315 && $('mResultCard').classList.contains('hidden') && /#16/.test($('btnMatchMeasure').textContent) && /undone/.test($('toast').textContent),
+        'Undo last scan takes the patch off the sheet and out of the color space, and makes it the next to scan');
+      await scan(1);
+      await until(() => !$('mResultCard').classList.contains('hidden'));
+      log(stored()[1].points.length === 316, 'scanning it again puts it back');
+
       // ---- export
       $('btnSpaceJson').click(); $('btnSpaceCgats').click();
       const json = files.find((f) => f.name === 'Demo printer full.json'), cg = files.find((f) => f.name === 'Demo printer full.txt');
@@ -159,6 +169,37 @@
       await until(() => /shown as “Last measurement”/.test($('toast').textContent));
       log(/Demo printer/.test(text('vsInfo')) && $('vs_spin').checked === false && /Last measurement/.test(text('vsInfo') + $('toast').textContent),
         'compare with another space, view from above, and measure a color into the picture');
+
+      // reference list: closest measured patch and prediction for each reference; a click shows it in the picture
+      await until(() => d.querySelectorAll('#vsRefList [data-ref]').length >= 2 && !/Working it out/.test(text('vsRefList')));
+      const firstRef = d.querySelector('#vsRefList [data-ref]');
+      log(/Brand Violet/.test(firstRef.textContent) && /Measured\s*ΔE00 [\d.]+/.test(firstRef.textContent.replace(/\s+/g, ' ')) && /Predicted\s*ΔE00 [\d.]+.*ask for L/.test(firstRef.textContent.replace(/\s+/g, ' ')) &&
+        /Last measurement/.test(text('vsRefList')), `the reference list shows each color's closest measured patch and its prediction (${firstRef.textContent.replace(/\s+/g, ' ').trim().slice(0, 140)}…)`);
+      firstRef.click();
+      log(d.querySelector('#vsRefList [data-ref]').className.includes('bg-indigo-50'), 'clicking a reference selects it (and draws its closest colors in the picture)');
+      // full screen – or, where the browser refuses it, enlarged over the page – and back
+      $('vsFull').click();
+      await until(() => d.fullscreenElement === $('vsStage') || $('vsStage').classList.contains('!fixed'));
+      const stageBox = $('vsStage').getBoundingClientRect();
+      log((d.fullscreenElement === $('vsStage') || (stageBox.width >= w.innerWidth - 1 && stageBox.height >= w.innerHeight - 1)) && $('vsFull').textContent === 'Exit full screen',
+        `Full screen fills the screen with the picture (${Math.round(stageBox.width)} × ${Math.round(stageBox.height)})`);
+      $('vsFull').click();
+      await until(() => !d.fullscreenElement && !$('vsStage').classList.contains('!fixed'));
+      log($('vsFull').textContent === 'Full screen', 'and leaves it again');
+      // right-click a measured patch: a menu removes it from the color space (a plain click never does)
+      const vsSpaceId = $('vsSpace').value, countIn = () => stored().find((s) => s.id === vsSpaceId).points.length;
+      const before3d = countIn();
+      const cv = $('vsCanvas'), box = cv.getBoundingClientRect();
+      for (let y = 20; y < box.height && $('vsMenu').classList.contains('hidden'); y += 6) {
+        for (let x = 20; x < box.width && $('vsMenu').classList.contains('hidden'); x += 6) {
+          cv.dispatchEvent(new w.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: box.left + x, clientY: box.top + y }));
+        }
+      }
+      const menuText = text('vsMenu');
+      $('vsMenuRemove').click();
+      await until(() => countIn() === before3d - 1);
+      log(/patch #\d+ · printed L/.test(menuText) && countIn() === before3d - 1 && $('vsMenu').classList.contains('hidden') && /removed from the color space/.test($('toast').textContent),
+        `right-click → Remove takes one patch out of the color space (${menuText.slice(0, 70)})`);
       d.querySelector('[data-view=match]').click();
       await until(() => !$('viewMatch').classList.contains('hidden'));
 
@@ -177,9 +218,14 @@
       await until(() => /printed differently/.test(text('mSpaceInfo')));
       log(/check chart 1 printed differently from what this color space predicts/.test(text('mSpaceInfo')) && /Check chart: the printer prints differently/.test($('toast').textContent),
         `a check chart after the printer changed is flagged (${text('mSpaceInfo').match(/typically ΔE00 [\d.]+ off/)?.[0]})`);
+      let trimQuestion = '';
+      w.confirm = (msg) => { trimQuestion = msg; return true; };
       d.querySelector('#mSpaceInfo [data-space-act=trim]').click();
+      w.confirm = () => true;
       const after = stored().find((s) => s.name === 'Before service');
-      log(after.points.length === 24 && after.sessions.length === 1 && after.sessions[0].kind === 'check', 'Keep only the newer data removes the measurements from before the change');
+      log(after.points.length === 24 && after.sessions.length === 1 && after.sessions[0].kind === 'check' &&
+        /Before service – chart 1 – Chart, .*300 patches/.test(trimQuestion) && /That includes the chart/.test(trimQuestion) && /keeps 24 patches/.test(trimQuestion),
+        'Keep only the newer data says exactly what it removes (the chart too) and removes the measurements from before the change');
       $('btnMatchRestart').click();
       d.querySelector('#mSpaceSessions [data-space-act=remove]').click();
       log(stored().find((s) => s.name === 'Before service').points.length === 0, 'a set of measurements can be removed from the color space');
@@ -193,6 +239,34 @@
       log(stored()[3].name === 'Dropped chart' && stored()[3].points.length === 30 && $('mSpace').selectedOptions[0]?.textContent === 'Dropped chart', 'a CGATS file dropped on the page is imported as a color space');
       $('btnSpaceDelete').click();
       log(stored().length === 3 && $('mSpace').value === '', 'a color space can be deleted');
+
+      // ---- fill-in patches on a test sheet, and a fill-gaps chart
+      setSel('mSpace', stored().find((s) => s.name === 'Demo printer full').id);
+      setSel('mFillIn', '4');
+      await until(() => !$('btnMatchSheet').disabled);
+      $('btnMatchSheet').click();
+      await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 20);
+      log(/\(4 fill-in for the color space\)/.test(text('mSheetInfo')) && (text('mPatchGrid').match(/fill/g) ?? []).length === 4, 'a test sheet gets 4 fill-in patches, marked as such');
+      const fullBefore = stored().find((s) => s.name === 'Demo printer full').points.length;
+      await scan(20);
+      await until(() => !$('mResultCard').classList.contains('hidden'));
+      const bestN = +text('mResult').match(/Best (?:patch|so far)\s*(?:sheet \d+ )?#(\d+)/)?.[1];
+      log(bestN >= 1 && bestN <= 16 && stored().find((s) => s.name === 'Demo printer full').points.length === fullBefore + 20,
+        `the match ignores the fill-in patches (best patch #${bestN}) while the color space learns all 20`);
+      setSel('mChartSize', 'gaps');
+      $('btnSpaceChart').click();
+      await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 48);
+      log(/fill-gaps chart 1/.test(text('mRoundLabel')), 'a Fill gaps chart: 48 patches where the color space is emptiest');
+      $('btnMatchRestart').click();
+      // "Fill the free space": as many fill-ins as fit on the pages the 16 patches need anyway – no extra page
+      setSel('mFillIn', 'auto');
+      await until(() => !$('btnMatchSheet').disabled);
+      $('btnMatchSheet').click();
+      await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length > 20);
+      const autoCount = d.querySelectorAll('#mPatchGrid [data-patch]').length;
+      log(/ · 1 page of /.test(text('mSheetInfo')) && text('mSheetInfo').includes(`(${autoCount - 16} fill-in`),
+        `"Fill the free space" fills the page the sheet needs anyway (${autoCount - 16} fill-in patches, still 1 page)`);
+      setSel('mFillIn', '0');
 
       log(errors.length === 0, `no script errors${errors.length ? ': ' + errors.join(' | ') : ''}`);
 
