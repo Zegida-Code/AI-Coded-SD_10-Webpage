@@ -193,8 +193,11 @@ The **Reference colors** list beside the picture shows, for every reference, the
 measured closest to it (with its ΔE, what it printed and which sheet it came from) and the values the color space
 predicts for it (what to ask for, what it should print, and "first estimate" where it has few patches nearby). Click
 one to show it in the picture: a line runs to its closest measured patch and a dashed one to its predicted color.
-With many references, only the selected one is named in the picture – hover the others. **Full screen** (on the
-picture, Esc to leave) fills the screen, and **Spin** turns it slowly. A stray patch – a smudge or a mis-scan – can be
+With many references, only the selected one is named in the picture – hover the others. To look closely at the colors
+around one, **center** the view on it – double-click a patch or reference marker, use **center** in the list, or
+right-click → **Center the view here**: the picture glides there and zooms in, and turning, spinning and zooming then
+happen around that color (**back to the middle** in the corner, or double-click empty space to reset). **Full screen**
+(on the picture, Esc to leave) fills the screen, and **Spin** turns it slowly. A stray patch – a smudge or a mis-scan – can be
 taken out of the color space by right-clicking it and choosing **Remove from the color space**; the test sheet keeps
 its measurement.
 

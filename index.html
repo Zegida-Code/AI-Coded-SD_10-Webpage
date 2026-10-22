@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <link rel="stylesheet" href="css/app.css?v=2026-10-21.a66e5f1-220443">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-21.ec02919-222938">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -282,7 +282,7 @@
           <h3 class="font-semibold">Colors <span id="mColorCount" class="text-sm font-normal text-slate-500"></span></h3>
           <button id="btnColorAdd" class="btn btn-ghost" title="Match another color – each has its own sheets, scan and result; select one to work on it">+ Add color</button>
         </div>
-        <ul id="mColorList" class="space-y-1.5"></ul>
+        <ul id="mColorList" class="relative space-y-1.5 max-h-[28rem] overflow-y-auto p-0.5"></ul>
       </div>
 
       <!-- settings shared by all colors: the sheet at the top; measuring and matching folded away (open state remembered),
@@ -390,14 +390,16 @@
           <div class="card min-w-0 flex flex-col gap-3">
             <div class="flex flex-wrap items-center justify-between gap-2">
               <h3 class="font-semibold"><span class="text-indigo-500">3.</span> Scan the patches</h3>
-              <span id="mProgress" class="text-xs text-slate-500"></span>
+              <div class="flex items-center gap-3 text-xs">
+                <button id="btnMatchUndo" class="text-slate-500 hover:text-slate-800 hover:underline disabled:opacity-40 disabled:no-underline dark:text-slate-400 dark:hover:text-slate-200" disabled>Undo last scan</button>
+                <span id="mProgress" class="text-slate-500"></span>
+              </div>
             </div>
             <div id="mPatchGrid"></div>
             <p class="text-xs text-slate-500">Or press the SD-10’s button · tap a patch to measure it again</p>
             <div class="mt-auto flex flex-wrap items-center gap-2">
               <button id="btnMatchMeasure" class="btn btn-primary w-full sm:w-auto px-6 py-3 sm:py-2.5" disabled>Measure patch</button>
               <button id="btnMatchAnalyse" class="btn btn-ghost" disabled>Calculate now</button>
-              <button id="btnMatchUndo" class="btn btn-ghost" disabled>Undo last scan</button>
             </div>
           </div>
         </div>
@@ -486,7 +488,7 @@
     <div class="mb-3 flex flex-wrap items-end gap-3">
       <div class="min-w-0 flex-1">
         <h2 class="font-semibold">Color space</h2>
-        <p class="text-sm text-slate-500 mt-1">The colors your printer really printed, measured in CIE L*a*b* – drag to turn, scroll to zoom, hover a patch for its values, right-click a stray one to remove it. Color spaces are made and kept in Print match.</p>
+        <p class="text-sm text-slate-500 mt-1">The colors your printer really printed, measured in CIE L*a*b* – drag to turn, scroll to zoom, hover a patch for its values, double-click one to center the view on it, right-click for more. Color spaces are made and kept in Print match.</p>
       </div>
       <div class="w-56"><label class="label" for="vsSpace">Color space</label><select id="vsSpace" class="input"></select></div>
       <div class="w-56"><label class="label" for="vsCompare">Compare with</label><select id="vsCompare" class="input"></select></div>
@@ -512,7 +514,12 @@
           <!-- right-click menu of a measured patch -->
           <div id="vsMenu" class="absolute z-10 hidden w-64 rounded-lg bg-white p-1 text-sm shadow-lg ring-1 ring-black/10 dark:bg-slate-800 dark:ring-white/10">
             <div id="vsMenuTitle" class="px-2 py-1 text-xs text-slate-500"></div>
+            <button id="vsMenuCenter" type="button" class="block w-full rounded px-2 py-1.5 text-left hover:bg-slate-100 dark:hover:bg-slate-700">Center the view here</button>
             <button id="vsMenuRemove" type="button" class="block w-full rounded px-2 py-1.5 text-left text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950">Remove from the color space</button>
+          </div>
+          <!-- the color the view is centered on -->
+          <div id="vsFocus" class="absolute left-2 top-2 hidden max-w-[60%] truncate rounded-md bg-white/85 px-2 py-1 text-xs shadow-sm ring-1 ring-black/10 dark:bg-slate-900/85 dark:ring-white/10">
+            Centered on <b id="vsFocusName"></b> · <button id="vsFocusReset" type="button" class="text-indigo-600 hover:underline dark:text-indigo-400">back to the middle</button>
           </div>
           <div class="absolute right-2 top-2 flex gap-1.5">
             <button id="vsSpinBtn" type="button" class="btn btn-ghost !px-2.5 !py-1 bg-white/80 text-xs dark:bg-slate-900/80" title="Turn slowly (on / off)">Spin</button>
@@ -550,26 +557,26 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-21.a66e5f1-220443",
-      "./js/transport.js": "./js/transport.js?v=2026-10-21.a66e5f1-220443",
-      "./js/mock.js": "./js/mock.js?v=2026-10-21.a66e5f1-220443",
-      "./js/session.js": "./js/session.js?v=2026-10-21.a66e5f1-220443",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-21.a66e5f1-220443",
-      "./js/color.js": "./js/color.js?v=2026-10-21.a66e5f1-220443",
-      "./js/weights.js": "./js/weights.js?v=2026-10-21.a66e5f1-220443",
-      "./js/storage.js": "./js/storage.js?v=2026-10-21.a66e5f1-220443",
-      "./js/icc.js": "./js/icc.js?v=2026-10-21.a66e5f1-220443",
-      "./js/match.js": "./js/match.js?v=2026-10-21.a66e5f1-220443",
-      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-21.a66e5f1-220443",
-      "./js/ui.js": "./js/ui.js?v=2026-10-21.a66e5f1-220443",
-      "./js/match-view.js": "./js/match-view.js?v=2026-10-21.a66e5f1-220443",
-      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-21.a66e5f1-220443",
-      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-21.a66e5f1-220443",
-      "./js/debug.js": "./js/debug.js?v=2026-10-21.a66e5f1-220443",
-      "./js/space-view.js": "./js/space-view.js?v=2026-10-21.a66e5f1-220443"
+      "./js/app.js": "./js/app.js?v=2026-10-21.ec02919-222938",
+      "./js/transport.js": "./js/transport.js?v=2026-10-21.ec02919-222938",
+      "./js/mock.js": "./js/mock.js?v=2026-10-21.ec02919-222938",
+      "./js/session.js": "./js/session.js?v=2026-10-21.ec02919-222938",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-21.ec02919-222938",
+      "./js/color.js": "./js/color.js?v=2026-10-21.ec02919-222938",
+      "./js/weights.js": "./js/weights.js?v=2026-10-21.ec02919-222938",
+      "./js/storage.js": "./js/storage.js?v=2026-10-21.ec02919-222938",
+      "./js/icc.js": "./js/icc.js?v=2026-10-21.ec02919-222938",
+      "./js/match.js": "./js/match.js?v=2026-10-21.ec02919-222938",
+      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-21.ec02919-222938",
+      "./js/ui.js": "./js/ui.js?v=2026-10-21.ec02919-222938",
+      "./js/match-view.js": "./js/match-view.js?v=2026-10-21.ec02919-222938",
+      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-21.ec02919-222938",
+      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-21.ec02919-222938",
+      "./js/debug.js": "./js/debug.js?v=2026-10-21.ec02919-222938",
+      "./js/space-view.js": "./js/space-view.js?v=2026-10-21.ec02919-222938"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-21.a66e5f1-220443"></script>
+  <script type="module" src="js/app.js?v=2026-10-21.ec02919-222938"></script>
 </body>
 </html>

@@ -18,9 +18,12 @@ const prefs = (() => {
 })();
 const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* ignore */ } };
 
-// camera: yaw turns around the L* axis, pitch tilts towards a view from above; zoom 1 fits the L*a*b* range
-const HOME = { yaw: -0.65, pitch: 0.38, zoom: 1 };
+// camera: yaw turns around the vertical axis through `target` (a*, L*, b* – the middle of the L* axis, or a color the
+// view is centered on), pitch tilts towards a view from above; zoom 1 fits the L*a*b* range
+const HOME = { yaw: -0.65, pitch: 0.38, zoom: 1, target: [0, 50, 0] };
 let cam = { ...HOME };
+let focus = null; // { name } of the color the view is centered on – null in the middle
+let glide = null; // { from, to, start } while the centre moves to a new color
 let visible = false, frame = 0, lastTime = 0, dirty = true;
 // rebuilt when the data changes: { R (picture radius), space, other (compared with), shell, otherShell,
 //   points: [{ pos, hex, p, session }], refs: [{ id, name, lab, pos, hex, outside }] }
@@ -126,7 +129,7 @@ function buildScene() {
 let ctx = null, W = 0, H = 0;
 /** World (a*, L*, b*) -> screen { x, y, z (depth, larger = farther), s (scale) }. */
 function project([a, L, b]) {
-  const x = a, y = L - 50, z = b;
+  const x = a - cam.target[0], y = L - cam.target[1], z = b - cam.target[2];
   const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw), cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
   const X = x * cy - z * sy, Z0 = x * sy + z * cy;
   const Y = y * cp + Z0 * sp, Z = -y * sp + Z0 * cp;
@@ -289,6 +292,12 @@ function draw() {
 function loop(time) {
   frame = 0;
   if (!visible) return;
+  if (glide) {
+    const t = Math.min(1, (time - (glide.start ??= time)) / GLIDE_MS), ease = t * (2 - t);
+    cam.target = glide.from.map((v, k) => v + (glide.to[k] - v) * ease);
+    if (t >= 1) glide = null;
+    dirty = true;
+  }
   if (prefs.spin && !drag) { cam.yaw += Math.min(time - lastTime, 50) * 0.00025; dirty = true; }
   lastTime = time;
   if (dirty) draw();
@@ -356,6 +365,7 @@ function renderRefList() {
           <span class="flex-1" style="background:${ref.hex}"></span><span class="flex-1" style="background:${m ? displayHex(m.p.lab) : 'transparent'}"></span></span>
         <span class="min-w-0 flex-1 truncate font-medium ${selected ? 'text-indigo-700 dark:text-indigo-300' : ''}">${escapeHtml(ref.name)}</span>
         ${ref.outside ? '<span class="chip bg-rose-600 text-white !px-1.5 !py-0 text-[10px]" title="Outside the measured gamut surface">OUTSIDE</span>' : ''}
+        <button type="button" data-ref-center class="text-[11px] text-indigo-600 hover:underline dark:text-indigo-400" title="Center the picture on this color and zoom in">center</button>
       </div>
       <div class="mt-0.5 font-mono text-[11px] text-slate-500">${labText(ref.lab)}</div>
       ${details}
@@ -442,19 +452,68 @@ function pointAt(x, y) {
   return hit;
 }
 
-// The right-click menu of a measured patch: remove it from the color space (a stray point). Right-click only, so a
-// click while turning the picture never removes anything.
-let menuPoint = null;
-function hideMenu() { menuPoint = null; $('vsMenu').classList.add('hidden'); }
-function openMenu(e) {
-  e.preventDefault();
+/** The reference marker drawn under (x, y), or null (markers are drawn on top of the patches, so they win). */
+const refAt = (x, y) => (prefs.refs ? projectedRefs.find((q) => Math.hypot(q.x - x, q.y - y) <= q.r + 2) ?? null : null);
+/** What is under the pointer: { ref } or { pt } (a measured patch), or null. */
+function thingAt(e) {
   const box = $('vsCanvas').getBoundingClientRect();
   const x = e.clientX - box.left, y = e.clientY - box.top;
-  const hit = prefs.points ? pointAt(x, y) : null;
-  if (!hit || !scene?.space) { hideMenu(); return; }
-  const { p, session } = hit.pt;
-  menuPoint = p;
-  $('vsMenuTitle').textContent = `${session}${p.n != null ? ` · patch #${p.n}` : ''} · printed ${labText(p.lab)}`;
+  const r = refAt(x, y);
+  if (r) return { ref: r.ref, x, y, box };
+  const p = prefs.points ? pointAt(x, y) : null;
+  return p ? { pt: p.pt, x, y, box } : { x, y, box };
+}
+
+// ---- centering the view on a color: turning and zooming then happen around it
+const GLIDE_MS = 350;
+let glideTimer = null;
+/**
+ * Move the centre of the view to `to` over GLIDE_MS (animated by loop). Animation frames can pause – a background tab,
+ * a covered window – so a timer finishes the move if the frames have not.
+ */
+function startGlide(to) {
+  glide = { from: cam.target, to: [...to] };
+  clearTimeout(glideTimer);
+  glideTimer = setTimeout(() => { if (glide) { cam.target = glide.to; glide = null; kick(); } }, GLIDE_MS + 100);
+}
+/** Center the view on `pos` (a*, L*, b*) and zoom in on it; `name` is shown in the corner. */
+function centerOn(pos, name) {
+  startGlide(pos);
+  cam.zoom = Math.max(cam.zoom, 3);
+  focus = { name };
+  $('vsFocusName').textContent = name;
+  $('vsFocus').classList.remove('hidden');
+  kick();
+}
+/** Back to the middle of the L* axis (the zoom stays). */
+function uncenter() {
+  startGlide(HOME.target);
+  focus = null;
+  $('vsFocus').classList.add('hidden');
+  kick();
+}
+function resetView() {
+  cam = { ...HOME };
+  glide = null;
+  focus = null;
+  $('vsFocus').classList.add('hidden');
+  kick();
+}
+const patchName = (pt) => `${pt.session}${pt.p.n != null ? ` · patch #${pt.p.n}` : ''}`;
+
+// The right-click menu: center the view on a patch or reference, or remove a measured patch from the color space (a
+// stray point). Right-click only, so a click while turning the picture never removes anything.
+let menuPoint = null, menuPos = null, menuName = '';
+function hideMenu() { menuPoint = null; menuPos = null; $('vsMenu').classList.add('hidden'); }
+function openMenu(e) {
+  e.preventDefault();
+  const { ref, pt, x, y, box } = thingAt(e);
+  if (!(ref || pt) || !scene?.space) { hideMenu(); return; }
+  menuPoint = pt?.p ?? null;
+  menuPos = ref ? ref.pos : pt.pos;
+  menuName = ref ? ref.name : patchName(pt);
+  $('vsMenuTitle').textContent = ref ? `${ref.name} · reference ${labText(ref.lab)}` : `${patchName(pt)} · printed ${labText(pt.p.lab)}`;
+  $('vsMenuRemove').classList.toggle('hidden', !pt);
   const menu = $('vsMenu');
   menu.classList.remove('hidden');
   menu.style.left = `${Math.min(x, box.width - menu.offsetWidth - 4)}px`;
@@ -464,13 +523,9 @@ function openMenu(e) {
 
 function hover(e) {
   const tip = $('vsTip');
-  const box = $('vsCanvas').getBoundingClientRect();
-  const x = e.clientX - box.left, y = e.clientY - box.top;
-  // reference markers are drawn on top, so they win
-  const refHit = prefs.refs ? projectedRefs.find((q) => Math.hypot(q.x - x, q.y - y) <= q.r + 2) : null;
-  const hit = refHit ? null : pointAt(x, y);
-  if (refHit) {
-    const { ref } = refHit;
+  const { ref, pt: hitPt, x, y, box } = thingAt(e);
+  const hit = hitPt ? { pt: hitPt } : null;
+  if (ref) {
     tip.innerHTML = `<div class="flex items-center gap-2"><span class="h-3 w-3 rounded-sm ring-1 ring-white/40" style="background:${ref.hex}"></span><b>${escapeHtml(ref.name)}</b></div>
       <div>Reference ${labText(ref.lab)}${ref.outside ? ' · outside the measured gamut' : ''}</div>`;
   } else if (hit) {
@@ -515,8 +570,16 @@ function wire() {
   canvas.addEventListener('pointercancel', end);
   canvas.addEventListener('pointerleave', () => { if (!drag) $('vsTip').classList.add('hidden'); });
   canvas.addEventListener('wheel', (e) => { e.preventDefault(); cam.zoom = Math.min(6, Math.max(0.4, cam.zoom * Math.exp(-e.deltaY * 0.0012))); kick(); }, { passive: false });
-  canvas.addEventListener('dblclick', () => { cam = { ...HOME }; kick(); });
+  // double-click a patch or reference to center the view on it; elsewhere, back to the start view
+  canvas.addEventListener('dblclick', (e) => {
+    const { ref, pt } = thingAt(e);
+    if (ref) centerOn(ref.pos, ref.name);
+    else if (pt) centerOn(pt.pos, patchName(pt));
+    else resetView();
+  });
   canvas.addEventListener('contextmenu', openMenu);
+  $('vsMenuCenter').onclick = () => { const pos = menuPos, name = menuName; hideMenu(); if (pos) centerOn(pos, name); };
+  $('vsFocusReset').onclick = uncenter;
   $('vsMenuRemove').onclick = () => {
     const p = menuPoint, space = scene?.space;
     hideMenu();
@@ -542,13 +605,18 @@ function wire() {
   $('vsRefList').onclick = (e) => {
     const li = e.target.closest('[data-ref]');
     if (!li) return;
+    if (e.target.closest('[data-ref-center]')) {
+      const ref = scene?.refs.find((r) => r.id === li.dataset.ref);
+      if (ref) { selectedRef = ref.id; prefs.refs = true; $('vs_refs').checked = true; renderRefList(); centerOn(ref.pos, ref.name); }
+      return;
+    }
     selectedRef = selectedRef === li.dataset.ref ? null : li.dataset.ref;
     if (selectedRef) { prefs.refs = true; $('vs_refs').checked = true; }
     renderRefList(); kick();
   };
   $('vsTop').onclick = () => view(0, Math.PI / 2 - 0.001); // the usual a*b* diagram: +a* right, +b* up
   $('vsSide').onclick = () => view(0, 0);
-  $('vsReset').onclick = () => { cam = { ...HOME }; kick(); };
+  $('vsReset').onclick = resetView;
 }
 
 /**

@@ -177,6 +177,12 @@
         /Last measurement/.test(text('vsRefList')), `the reference list shows each color's closest measured patch and its prediction (${firstRef.textContent.replace(/\s+/g, ' ').trim().slice(0, 140)}…)`);
       firstRef.click();
       log(d.querySelector('#vsRefList [data-ref]').className.includes('bg-indigo-50'), 'clicking a reference selects it (and draws its closest colors in the picture)');
+      // center the view on a reference (from the list), and back to the middle
+      d.querySelector('#vsRefList [data-ref-center]').click();
+      await until(() => !$('vsFocus').classList.contains('hidden'));
+      const centeredText = text('vsFocus');
+      $('vsFocusReset').click();
+      log(/Centered on Brand Violet/.test(centeredText) && $('vsFocus').classList.contains('hidden'), `the view can be centered on a reference and moved back (${centeredText.trim().slice(0, 40)})`);
       // full screen – or, where the browser refuses it, enlarged over the page – and back
       $('vsFull').click();
       await until(() => d.fullscreenElement === $('vsStage') || $('vsStage').classList.contains('!fixed'));
@@ -190,14 +196,29 @@
       const vsSpaceId = $('vsSpace').value, countIn = () => stored().find((s) => s.id === vsSpaceId).points.length;
       const before3d = countIn();
       const cv = $('vsCanvas'), box = cv.getBoundingClientRect();
-      for (let y = 20; y < box.height && $('vsMenu').classList.contains('hidden'); y += 6) {
-        for (let x = 20; x < box.width && $('vsMenu').classList.contains('hidden'); x += 6) {
+      // (the menu also opens on reference markers – without Remove – so look for a patch's menu)
+      const patchMenu = () => !$('vsMenu').classList.contains('hidden') && !$('vsMenuRemove').classList.contains('hidden');
+      for (let y = 20; y < box.height && !patchMenu(); y += 6) {
+        for (let x = 20; x < box.width && !patchMenu(); x += 6) {
           cv.dispatchEvent(new w.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: box.left + x, clientY: box.top + y }));
         }
       }
       const menuText = text('vsMenu');
       $('vsMenuRemove').click();
       await until(() => countIn() === before3d - 1);
+      // double-click a patch: the view centers on it
+      let dbl = null;
+      for (let y = 20; y < box.height && !dbl; y += 6) {
+        for (let x = 20; x < box.width && !dbl; x += 6) {
+          cv.dispatchEvent(new w.MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: box.left + x, clientY: box.top + y }));
+          if (!$('vsMenu').classList.contains('hidden') && !$('vsMenuRemove').classList.contains('hidden')) dbl = { x, y };
+        }
+      }
+      d.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape' }));
+      cv.dispatchEvent(new w.MouseEvent('dblclick', { bubbles: true, clientX: box.left + dbl.x, clientY: box.top + dbl.y }));
+      await until(() => !$('vsFocus').classList.contains('hidden'));
+      log(/Centered on .*patch #\d+/.test(text('vsFocus')), `double-clicking a patch centers the view on it (${text('vsFocus').trim().slice(0, 60)})`);
+      $('vsReset').click();
       log(/patch #\d+ · printed L/.test(menuText) && countIn() === before3d - 1 && $('vsMenu').classList.contains('hidden') && /removed from the color space/.test($('toast').textContent),
         `right-click → Remove takes one patch out of the color space (${menuText.slice(0, 70)})`);
       d.querySelector('[data-view=match]').click();

@@ -426,6 +426,13 @@ function renderMatch() {
   const t = c.target;
   $('mColorCount').textContent = match.colors.length > 1 ? `(${match.colors.length})` : '';
   $('mColorList').innerHTML = colorListHtml();
+  // the list scrolls when it is long: keep the selected entry in view
+  const list = $('mColorList'), selectedItem = list.querySelector(activeChart() ? '[data-color="chart"]' : `[data-color="${match.active}"]`);
+  if (selectedItem && list.clientHeight) {
+    const top = selectedItem.offsetTop, bottom = top + selectedItem.offsetHeight;
+    if (top < list.scrollTop) list.scrollTop = top - 4;
+    else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight + 4;
+  }
   // reference card (hidden while the chart is selected)
   $('mRefCard').classList.toggle('hidden', !!activeChart());
   for (const [id, i] of [['mL', 0], ['mA', 1], ['mB', 2]]) if (document.activeElement !== $(id)) $(id).value = t ? t[i].toFixed(2) : '';
@@ -540,14 +547,14 @@ function sheetPreviewHtml({ W, H, pages }, r) {
   }
   // a strip: the whole sheet small (with a frame marking the close-up), and a readable close-up below
   const label = 'text-[11px] text-slate-500';
-  // the figure and the close-up stretch to fill the card's free height (at least 110 px); the drawing's width follows
-  // its height through aspect-ratio, so a taller close-up stays to scale
+  // the figure and the close-up stretch to fill the card's free height (124–240 px: beside a long scan card it would
+  // otherwise grow huge); the drawing's width follows its height through aspect-ratio, so a taller close-up stays to scale
   return `<figure class="mt-3 flex-1 flex flex-col gap-1.5">
     <div class="${label}">Whole sheet · ${notes}</div>
     <div id="mPreviewOverview" class="relative w-full cursor-pointer overflow-hidden rounded-sm bg-white ring-1 ring-black/10" style="aspect-ratio:${W.toFixed(1)}/${H.toFixed(1)}" title="Click to show this part in the close-up">${drawing}
       <div id="mPreviewWindow" class="pointer-events-none absolute inset-y-0 rounded-sm bg-indigo-500/10 ring-2 ring-indigo-500"></div></div>
     <div class="${label} pt-1">Close-up – scroll sideways, or click the whole sheet above</div>
-    <div id="mPreviewZoom" class="relative flex-1 min-h-[124px] overflow-x-auto"><div class="absolute inset-y-0 left-0 rounded-sm bg-white ring-1 ring-black/10" style="aspect-ratio:${W.toFixed(1)}/${H.toFixed(1)}">${drawing}</div></div>
+    <div id="mPreviewZoom" class="relative flex-1 min-h-[124px] max-h-[240px] overflow-x-auto"><div class="absolute inset-y-0 left-0 rounded-sm bg-white ring-1 ring-black/10" style="aspect-ratio:${W.toFixed(1)}/${H.toFixed(1)}">${drawing}</div></div>
   </figure>`;
 }
 
@@ -604,12 +611,12 @@ function renderPatchGrid(c) {
       class="relative h-8 rounded ring-1 ${i === next ? 'ring-2 ring-indigo-500' : 'ring-black/10'}" title="${escapeHtml(`Patch #${p.n}${p.name ? ' · ' + p.name : ''}${p.lab ? ' – tap to re-measure' : ''}`)}">
       <span class="absolute inset-0 rounded ${p.lab ? '' : 'opacity-40'}" style="background:${p.lab ? displayHex(p.lab) : patchPreviewHex(r.mode, p.x, p.k ?? r.kFixed)}"></span>
       <span class="absolute bottom-0 right-0 rounded-tl bg-white/80 px-0.5 text-[9px] leading-tight text-slate-700">${p.n}</span></button>`).join('')}</div>`;
-    const grid = $('mChartGrid'), b = grid.children[next];
-    if (b && grid.clientHeight) grid.scrollTop = b.offsetTop - grid.clientHeight / 2;
+    scrollToPatch($('mChartGrid'), next);
     return;
   }
-  // 8 per row in a full-width scan card, 4 when it sits beside the sheet card (xl)
-  $('mPatchGrid').innerHTML = `<div class="grid grid-cols-4 sm:grid-cols-8 xl:grid-cols-4 gap-2">${r.patches.map((p, i) => {
+  // as many per row as the card's width holds; a long sheet (fill-ins) scrolls inside the card, kept at the next patch
+  const long = r.patches.length > 16;
+  $('mPatchGrid').innerHTML = `<div id="mSheetGrid" class="relative grid grid-cols-[repeat(auto-fill,minmax(4.25rem,1fr))] gap-2 ${long ? 'max-h-[21rem] overflow-y-auto p-0.5' : ''}">${r.patches.map((p, i) => {
     const done = !!p.lab;
     const bg = done ? displayHex(p.lab) : patchPreviewHex(r.mode, p.x, p.k ?? r.kFixed);
     const dE = done && c.target && !p.fill ? DE().fn(c.target, p.lab) : null; // a fill-in patch is not aiming at the reference
@@ -621,6 +628,13 @@ function renderPatchGrid(c) {
       <div class="flex justify-between text-[11px] mt-1"><b>#${p.n}${uneven ? ' <span class="text-amber-600" title="Readings differ by more than 1.5 ΔE00">!</span>' : ''}</b><span class="font-mono ${dE != null && dE <= match.tol ? 'text-emerald-600' : 'text-slate-500'}">${dE != null ? 'ΔE ' + dE.toFixed(1) : partial || (p.fill ? 'fill' : '')}</span></div>
     </button>`;
   }).join('')}</div>`;
+  if (long) scrollToPatch($('mSheetGrid'), next);
+}
+
+/** Keep the patch to scan next in view in a scrolling patch grid. */
+function scrollToPatch(grid, index) {
+  const b = grid.children[index];
+  if (b && grid.clientHeight) grid.scrollTop = b.offsetTop - grid.clientHeight / 2;
 }
 
 /** How the best printed patch holds up under other lights, from the measured spectra. */
