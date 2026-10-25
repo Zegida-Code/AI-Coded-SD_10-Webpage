@@ -70,7 +70,7 @@
       const ids = [...d.querySelectorAll('[id]')].map((e) => e.id);
       log(ids.length === new Set(ids).size && $('matchMf').value === '1', 'element ids are unique; match M-factor shows the job default (M1)');
       setSel('mMode', 'cmyk');
-      log($('mRipFormatWrap').classList.contains('hidden') && /CMYK profile/.test($('mModeHelp').textContent), 'CMYK mode hides the library format and explains the profile');
+      log($('mRipFormat').disabled && $('mLibNameWrap').classList.contains('hidden') && /CMYK profile/.test($('mModeHelp').textContent), 'CMYK mode turns off the spot library format and name, and explains the profile');
       $('btnConnect').click();
       await until(() => /simulated/.test($('connPill').textContent) && !$('btnMatchTarget').disabled);
       $('demoShutter').click(); await sleep(200);
@@ -247,7 +247,7 @@
       // a color without a result yet goes into the file with its reference; Adobe Color Book shows its 8-bit rounding
       setSel('mRipFormat', 'acb');
       await until(() => !/working out/.test($('mLibNote').textContent));
-      log(/stores L\* in steps of 0\.4/.test($('mLibNote').textContent) && /go in with their reference/.test($('mLibNote').textContent) && /Adobe Color Book/.test($('btnLibDownload').textContent),
+      log(/Adobe Color Book stores L\* in steps of 0\.4/.test($('mLibNote').textContent) && /go in with their reference/.test($('mLibNote').textContent),
         `Adobe Color Book: the export row shows the rounding and the colors without a recommendation (${$('mLibNote').textContent.slice(0, 80)})`);
       $('btnLibDownload').click();
       const acbFile = files.find((f) => f.name === 'House colors.acb');

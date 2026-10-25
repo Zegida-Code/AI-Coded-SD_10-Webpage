@@ -69,8 +69,8 @@ With a measured [color space](#color-space) of your printer, the first sheet alr
 - Needs a computer or tablet (768 px or wider); phones only show the Console.
 - On wide screens, the colors and the settings sit in a column at the left; the selected color's workflow and the
   color space are at the right, and the tips run across the bottom.
-- Settings you change less often – readings per patch, M-factor, ΔE formula, tolerance, printer profile, library
-  format and name – open in a dialog from the **Measuring & matching** line, which shows their current values.
+- Settings you change less often – readings per patch, M-factor, ΔE formula, tolerance, printer profile and the spot
+  library's name – open in a dialog from the **Measuring & matching** line, which shows their current values.
 
 ### 1. Reference colors
 
@@ -323,8 +323,8 @@ color. With many references, only the selected one is named in the picture – h
 
 ### Spot color libraries
 
-In the L\*a\*b\* sheet types the app writes spot color libraries for your RIP, in the format chosen under
-**Measuring & matching → Spot library format**:
+In the L\*a\*b\* sheet types the app writes spot color libraries for your RIP, in the format chosen at the bottom of
+the *Colors* card, beside **Download library**:
 
 | Format | Notes |
 |---|---|
@@ -338,7 +338,7 @@ In the L\*a\*b\* sheet types the app writes spot color libraries for your RIP, i
 | Library | Where | What it holds |
 |---|---|---|
 | **Sheet library** | Test sheet card | The current test sheet's patch colors. Import and enable it before printing the sheet, so the patches go through the same named-color path as your artwork. |
-| **Download library** | *Colors* card | Every color under its name (exactly as in your artwork – the RIP finds spot colors by name) with its recommended L\*a\*b\*. A color without a result or prediction yet goes in with its reference, and the card says how many. The file is named after **Library name** (under *Measuring & matching*). |
+| **Download library** | *Colors* card | Every color under its name (exactly as in your artwork – the RIP finds spot colors by name) with its recommended L\*a\*b\*. A color without a result or prediction yet goes in with its reference, and the card says how many. The file is named after the **Spot library name** (under *Measuring & matching*). |
 
 **Getting files in**
 

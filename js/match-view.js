@@ -507,15 +507,13 @@ function renderSettings() {
   if (document.activeElement !== $('mMediaH')) $('mMediaH').value = match.mediaH;
   $('mMediaH').min = limits.min ?? 20;
   $('mCustomHint').textContent = heightHint(limits);
-  $('mRipFormatWrap').classList.toggle('hidden', !isLabMode(match.mode));
+  $('mLibNameWrap').classList.toggle('hidden', !isLabMode(match.mode));
   if (!RIP_EXPORTS[match.ripFormat]) match.ripFormat = 'cxf';
-  $('mRipFormat').value = match.ripFormat;
-  const ripLabel = RIP_EXPORTS[match.ripFormat].label;
-  $('btnMatchRipSheet').title = `Spot color library with this sheet's patch colors, in ${ripLabel} format (set under Settings) – import it into the RIP before printing`;
+  $('btnMatchRipSheet').title = `Spot color library with this sheet's patch colors, in ${RIP_EXPORTS[match.ripFormat].label} format (chosen on the Colors card) – import it into the RIP before printing`;
   $('mModeHelp').innerHTML = `<b>${escapeHtml($('mMode').selectedOptions[0]?.textContent ?? 'Sheet type')}:</b> ${modeHelp(match.mode)}`;
   $('mPrintTips').innerHTML = printTips(match.mode);
   // the Measuring & matching line shows the dialog's current values
-  $('mMoreSummary').textContent = `${['M0', 'M1', 'M2'][match.mf] ?? 'M1'} · ${DE().label} ≤ ${match.tol}${match.reads > 1 ? ` · ${match.reads} readings` : ''}${match.printerProfile ? ' · gamut check' : ''}${isLabMode(match.mode) ? ` · ${ripLabel.replace(/ \(.*\)$/, '')}` : ''}`;
+  $('mMoreSummary').textContent = `${['M0', 'M1', 'M2'][match.mf] ?? 'M1'} · ${DE().label} ≤ ${match.tol}${match.reads > 1 ? ` · ${match.reads} readings` : ''}${match.printerProfile ? ' · gamut check' : ''}`;
 }
 
 /** Card 2: the current sheet (the selected color's, or the color space chart) – what it holds, how it prints, the downloads. */
@@ -1114,14 +1112,15 @@ function downloadColorLibrary() {
   debugLog('match', `library downloaded (${ex.label})`, { colors: colors.length, asReference });
 }
 
-/** The Colors card's export row: the download button and what the file will hold. */
+/** The Colors card's export row: the format, the download button and what the file will hold. */
 function renderLibraryExport() {
   const ex = RIP_EXPORTS[match.ripFormat] ?? RIP_EXPORTS.cxf;
   const lab = isLabMode(match.mode), withRef = match.colors.filter((c) => c.target);
+  $('mRipFormat').value = match.ripFormat;
+  $('mRipFormat').disabled = !lab;
   const btn = $('btnLibDownload');
-  btn.textContent = `Download library (${ex.label})`;
   btn.disabled = !lab || !withRef.length;
-  btn.title = lab ? `Every color under its name with its recommended L*a*b* (its reference until it has one), as a ${ex.label} file for the RIP – format and name under Measuring & matching` : 'Spot color libraries hold L*a*b* values – for spot color or L*a*b* sheets';
+  btn.title = lab ? `Every color under its name with its recommended L*a*b* (its reference until it has one), as a ${ex.label} file for the RIP – the library's name is under Measuring & matching` : 'Spot color libraries hold L*a*b* values – for spot color or L*a*b* sheets';
   if (document.activeElement !== $('mLibName')) $('mLibName').value = libraryName();
   if (!lab || !withRef.length) { $('mLibNote').textContent = ''; return; }
   const outs = withRef.map((c) => outputOf(c, { later: true }));
@@ -1569,7 +1568,6 @@ function wireSettings() {
   onFilePicked('printerIccFile', addPrinterProfile);
   $('btnPrinterIccRemove').onclick = removePrinterProfile;
   refreshPrinterProfiles().then(() => { if (state.view === 'match') renderMatch(); });
-  $('mRipFormat').onchange = () => { match.ripFormat = $('mRipFormat').value; commit(); };
   // Tips remember whether they were open (closed at first)
   $('mTipsBox').open = readFlag('sd10.tipsOpen');
   $('mTipsBox').ontoggle = () => writeFlag('sd10.tipsOpen', $('mTipsBox').open);
@@ -1627,8 +1625,9 @@ function wireSpaceCard() {
   $('mSpaceCard').addEventListener('click', onSpaceClick);
 }
 
-/** The library download (Colors card) and the library's name (Measuring & matching). */
+/** The library's format and download (Colors card) and its name (Measuring & matching). */
 function wireLibrary() {
+  $('mRipFormat').onchange = () => { match.ripFormat = $('mRipFormat').value; commit(); };
   $('btnLibDownload').onclick = downloadColorLibrary;
   $('mLibName').onchange = () => { match.libraryName = $('mLibName').value.trim().slice(0, 60); commit(); };
 }
