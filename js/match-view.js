@@ -1129,6 +1129,31 @@ function addLibraryColorByHand(e) {
   if ($('mLibDialog').open) $('mLibDialog').close();
 }
 
+/**
+ * Add the named colors of a swatch or library file (Adobe Swatch Exchange, CxF, …) as colors to match, each with the
+ * file's L*a*b* as its reference – names exactly as in the artwork. Names already in the list are left as they are; an
+ * untouched empty first color is used for the first one.
+ */
+async function importColorsFile(file) {
+  if (file.size > 20 * 1024 * 1024) { toast('That file is too large for a swatch or library file.', 'error'); return; }
+  let lib;
+  try { lib = readLibrary(new Uint8Array(await file.arrayBuffer()), file.name); } catch (e) { toast(e.message, 'error'); return; }
+  const names = new Set(match.colors.map((c) => c.name.trim()).filter(Boolean));
+  const fresh = lib.colors.filter((c) => !names.has(c.name.trim()));
+  if (!fresh.length) {
+    toast(lib.colors.length ? `All ${lib.colors.length} colors in ${file.name} are already in the list.` : `No L*a*b* colors in ${file.name}${lib.skipped.length ? ` (${lib.skipped.length} without L*a*b*, e.g. CMYK or RGB)` : ''}.`, 'error');
+    return;
+  }
+  const first = match.colors.length === 1 && !match.colors[0].name && !match.colors[0].target ? match.colors.pop() : null;
+  for (const [i, c] of fresh.entries()) match.colors.push({ ...(i === 0 && first ? first : newColor()), name: c.name.trim().slice(0, 60), target: c.lab.map(round2) });
+  match.active = match.colors.length - fresh.length;
+  match.chartActive = false;
+  debugLog('match', `${fresh.length} colors imported from ${file.name}`, { format: lib.format, names: fresh.map((c) => c.name) });
+  commit();
+  const left = lib.colors.length - fresh.length;
+  toast(`${fresh.length} color${fresh.length === 1 ? '' : 's'} added from ${file.name}${left ? ` (${left} already in the list)` : ''}${lib.skipped.length ? ` – ${lib.skipped.length} without L*a*b* skipped` : ''}. Measure a sample to replace a swatch value with the real color.`, 'ok');
+}
+
 async function importLibraryFile(file) {
   if (file.size > 20 * 1024 * 1024) { toast('That file is too large for a spot color library.', 'error'); return; }
   let lib;
@@ -1195,8 +1220,9 @@ function spacePredictionHtml(c) {
   return `<div class="flex flex-wrap items-baseline justify-between gap-2"><h4 class="text-sm font-semibold">Predicted by the color space</h4><span class="text-xs text-slate-500">${escapeHtml(s.name)}</span></div>
     ${valueTilesHtml(match.mode, p.x, p.k)}
     <p class="text-xs">${p.predictedDeltaE <= 2
-      ? `<span class="text-emerald-600">Predicted to print ${DE().label} ${p.predictedDeltaE.toFixed(2)} from the reference.</span>`
+      ? `<span class="text-emerald-600">${p.measured ? 'Measured' : 'Predicted'} to print ${DE().label} ${p.predictedDeltaE.toFixed(2)} from the reference.</span>`
       : `<span class="text-rose-600"><b>Beyond what this printer reached in the color space.</b> The closest it prints is ${lab}, ${DE().label} ${p.predictedDeltaE.toFixed(2)} from the reference.</span>`}
+      ${p.measured ? '<span class="text-slate-500">These are the values of a patch already measured – no prediction prints closer.</span>' : ''}
       <span class="text-slate-500">The color space is typically accurate to ΔE00 ${st.accuracy ? st.accuracy.median.toFixed(2) : '–'}${rough ? ', but it has few measured patches near this color, so treat this as a first estimate' : ''}. The first test sheet starts from these values${rough ? '' : ' with finer steps'} and confirms them.</span></p>
     <div class="flex flex-wrap gap-2"><button type="button" data-pred-act="copy" class="btn btn-ghost">Copy values</button>${isLabMode(match.mode) ? '<button type="button" data-pred-act="add" class="btn btn-ghost" title="Add the predicted values to your spot library under the color’s name">Add to spot library</button>' : ''}</div>`;
 }
@@ -1452,6 +1478,7 @@ function wireDrop() {
     depth = 0; highlight(false);
     for (const file of e.dataTransfer?.files ?? []) {
       if (/\.ic[cm]$/i.test(file.name)) await addPrinterProfile(file);
+      else if (e.target.closest('#mColorsCard')) await importColorsFile(file); // on the Colors card: colors to match
       else if (/\.(json|txt|cgats|cgt|it8|ti3)$/i.test(file.name)) await importSpaceFile(file);
       else await importLibraryFile(file);
     }
@@ -1460,6 +1487,8 @@ function wireDrop() {
 
 /** Color list and reference card. */
 function wireColors() {
+  $('btnColorsImport').onclick = () => $('colorsFile').click();
+  onFilePicked('colorsFile', importColorsFile);
   $('btnColorAdd').onclick = () => {
     match.colors.push(newColor());
     match.active = match.colors.length - 1;

@@ -254,8 +254,10 @@ function isSparse({ d1, dSupport, offCentre }, stats) {
  * The inputs predicted to print closest to `target` (Lab D50), searched only near measured patches (within REACH
  * patch spacings of one, SPARSE_REACH where they are sparse or at their edge), so the prediction rests on measurements rather than
  * extrapolation. CMYK: K is held at kFixed, or – kFixed null – each start keeps the K of the patch it starts from.
- * Returns { x (3 values), k, predicted, predictedDeltaE, rms, d1, sparse (a first estimate: few patches nearby) } or
- * null when the space is too small.
+ * It never promises less than a patch already measured: when one printed closer than the best prediction, its values
+ * are returned (measured: true – `predicted` is what it printed).
+ * Returns { x (3 values), k, predicted, predictedDeltaE, rms, d1, sparse (a first estimate: few patches nearby),
+ * measured } or null when the space is too small.
  */
 export function invert(space, target, { formula = 'de00', kFixed = null } = {}) {
   const pts = space.points;
@@ -299,8 +301,13 @@ export function invert(space, target, { formula = 'de00', kFixed = null } = {}) 
       if (move < 0.05) break;
     }
     const f = fitAt(x);
-    const cand = { x, k: s.k, predicted: f.lab, predictedDeltaE: dE(target, f.lab), rms: f.rms, d1: f.d1, sparse: f.sparse };
+    const cand = { x, k: s.k, predicted: f.lab, predictedDeltaE: dE(target, f.lab), rms: f.rms, d1: f.d1, sparse: f.sparse, measured: false };
     if (!best || cand.predictedDeltaE < best.predictedDeltaE) best = cand;
+  }
+  // a measured patch that printed closer than any prediction (e.g. where the reach limits kept the search short)
+  const m = pool.reduce((a, p) => { const d = dE(target, p.lab); return d < a.d ? { p, d } : a; }, { p: null, d: Infinity });
+  if (m.p && (!best || m.d < best.predictedDeltaE)) {
+    best = { x: m.p.x.slice(0, 3), k: mode === 'cmyk' ? m.p.x[3] : 0, predicted: m.p.lab, predictedDeltaE: m.d, rms: 0, d1: 0, sparse: false, measured: true };
   }
   return best;
 }

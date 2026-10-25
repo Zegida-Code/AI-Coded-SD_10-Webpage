@@ -277,7 +277,27 @@ async function matchCheck() {
     lib3.colors.find((c) => c.name === 'Two Labs')?.lab.join() === '60,-5,7' && lib3.skipped.join() === 'D65 only', JSON.stringify(lib3));
   let bad = '';
   try { readLibrary(new TextEncoder().encode('<html/>'), 'page.html'); } catch (e) { bad = e.message; }
-  check('import rejects files that are not spot color libraries', /not a CxF, Adobe Color Book, Edge Print or VersaWorks library/.test(bad), bad);
+  check('import rejects files that are not spot color libraries', /not a CxF, Adobe Color Book, Adobe Swatch Exchange, Edge Print or VersaWorks library/.test(bad), bad);
+
+  // Adobe Swatch Exchange (Illustrator swatches): a group with L*a*b* spot swatches (L* stored 0–1), an RGB one skipped
+  {
+    const parts = [];
+    const u16 = (v) => parts.push(v >> 8, v & 255), u32 = (v) => { u16(v >>> 16); u16(v & 65535); };
+    const name = (s) => { const z = s + '\0'; const out = [z.length >> 8, z.length & 255]; for (const ch of z) out.push(ch.charCodeAt(0) >> 8, ch.charCodeAt(0) & 255); return out; };
+    const f32 = (v) => { const dv = new DataView(new ArrayBuffer(4)); dv.setFloat32(0, v); return [...new Uint8Array(dv.buffer)]; };
+    const block = (type, body) => { u16(type); u32(body.length); parts.push(...body); };
+    const swatch = (n, model, vals) => [...name(n), ...[...model].map((c) => c.charCodeAt(0)), ...vals.flatMap(f32), 0, 1]; // 1 = spot
+    parts.push(...[...'ASEF'].map((c) => c.charCodeAt(0))); u16(1); u16(0); u32(5);
+    block(0xc001, name('House swatches'));
+    block(0x0001, swatch('Brand Navy', 'LAB ', [0.1957, 1.77, -7.04]));
+    block(0x0001, swatch('Screen Blue', 'RGB ', [0, 0.3, 1]));
+    block(0x0001, swatch('Brand Tan', 'LAB ', [0.7301, 4.67, 12.11]));
+    block(0xc002, []);
+    const ase = readLibrary(new Uint8Array(parts), 'swatches.ase');
+    check('Adobe Swatch Exchange import: L*a*b* swatches (L* from 0–1), the group as the library name, RGB swatches skipped',
+      ase.format === 'ase' && ase.library === 'House swatches' && ase.colors.map((c) => c.name).join() === 'Brand Navy,Brand Tan' &&
+      ase.colors.every((c, i) => c.lab.every((v, k) => Math.abs(v - [[19.57, 1.77, -7.04], [73.01, 4.67, 12.11]][i][k]) < 0.001)) && ase.skipped.join() === 'Screen Blue', JSON.stringify(ase));
+  }
 
   // compact design: 8 patches (centre twice + ±step on each axis) – fewer patches per color, still converges
   {
@@ -589,6 +609,14 @@ async function spaceCheck() {
     const sheetBest = Math.min(...clip.points.filter((p) => p.s === 'sheet:edge').map((p) => deltaE2000(edgeT, p.lab)));
     check(`after a test sheet at the edge, the prediction stays honest (predicted ΔE00 ${afterSheet.predictedDeltaE.toFixed(2)}, prints ${deltaE2000(edgeT, clipPrinter(afterSheet.x)).toFixed(2)}, the sheet's best ${sheetBest.toFixed(2)})`,
       Math.abs(afterSheet.predictedDeltaE - deltaE2000(edgeT, clipPrinter(afterSheet.x))) < 0.75);
+    // and it never promises less than a patch already measured: one that printed closer than the (smoothed) fit around
+    // it predicts is offered itself – here a lone patch that happened to print near a far-out reference
+    const allBest = Math.min(...clip.points.map((p) => deltaE2000(edgeT, p.lab)));
+    const lucky = JSON.parse(JSON.stringify(clip)), far = [30, 20, -75];
+    learn(lucky, { session: 'sheet:lucky', kind: 'sheet', label: 'Lucky sheet', n: 1, x: [45, 10, -20], lab: [30.4, 19.5, -74], now: T0 + 2 * DAY });
+    const luckyPred = invert(lucky, far), luckyBest = deltaE2000(far, [30.4, 19.5, -74]);
+    check(`the prediction is never worse than the closest measured patch (${afterSheet.predictedDeltaE.toFixed(2)} vs ${allBest.toFixed(2)}; a lone patch that printed ${luckyBest.toFixed(2)} from a far reference is offered: ${luckyPred.predictedDeltaE.toFixed(2)}${luckyPred.measured ? ', measured' : ''})`,
+      afterSheet.predictedDeltaE <= allBest + 1e-9 && luckyPred.measured && Math.abs(luckyPred.predictedDeltaE - luckyBest) < 1e-9 && luckyPred.x.join() === '45,10,-20');
     check(`at a hard-clipping gamut edge the prediction is not optimistic (predicted ΔE00 ${re.predictedDeltaE.toFixed(2)}, prints ${edgeGot.toFixed(2)}) and a beyond-edge sheet raises no drift warning (${edgeDrift ? `median ${edgeDrift.median.toFixed(2)}` : 'not judged'})`,
       re.predictedDeltaE > edgeGot - 1 && !edgeDrift?.drift);
     // a space saved under the older check rule still carries the false warning: it is checked again once, on load

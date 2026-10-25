@@ -84,6 +84,12 @@ your artwork.
 - So you can scan one color's sheet while another is still printing or curing – switching colors never disturbs the
   others.
 
+**Import…** (or dropping a file on the *Colors* card) adds the named colors of a swatch or library file in one go –
+for example the swatches exported from your artwork as an Adobe Swatch Exchange file (`.ase`), or a CxF, Adobe Color
+Book, Edge Print or VersaWorks library. Each color gets its name exactly as in the file and its L\*a\*b\* as the
+reference; names already in the list are left alone. A swatch value is the design value: measure a printed or physical
+sample to replace it with the real color.
+
 ### 2. Test sheet
 
 Pick the sheet type that matches how color reaches your printer, then **Create sheet** and download it:
@@ -224,6 +230,8 @@ across the sheet averages out. In the L\*a\*b\* sheet types there is a **Sheet l
 - At the edge of what the chart measured – typically the gamut edge, where a RIP prints every "more saturated" request
   the same – it stays close to the last measured patches instead of extrapolating, so it does not promise colors the
   printer cannot make.
+- It never promises less than a patch already measured: when one printed closer than any prediction, the card offers
+  that patch's values ("measured to print").
 - Accuracy depends on the printer and the number of patches; the card shows its own typical accuracy. With the demo's
   simulated printer, a 200-patch chart predicts to about ΔE00 1 and a 400-patch chart to about 0.6.
 
@@ -332,7 +340,9 @@ In the L\*a\*b\* sheet types the app also writes spot color libraries for your R
 
 **Getting files in and out**
 
-- **Import…** any of the formats above – for example one exported from your RIP – to update existing colors.
+- **Import…** any of the formats above – for example one exported from your RIP – to update existing colors. Adobe
+  Swatch Exchange files (`.ase`, from Illustrator, Photoshop or InDesign) can be imported too; their L\*a\*b\* swatches
+  are read, RGB and CMYK swatches skipped.
 - Drop library files anywhere on the Print match page; an `.icc` / `.icm` file dropped there is added as the printer
   profile.
 - CxF colors are read from their D50 / 2° L\*a\*b\* values or computed from their spectra; entries without L\*a\*b\*
@@ -359,10 +369,10 @@ Open these pages in Chrome – on the live site (e.g. [sd-10.com/test/](https://
 
 | Page | Checks | What it covers |
 |---|---|---|
-| [`test/index.html`](https://sd-10.com/test/index.html) | 118 | The core code (see below) |
+| [`test/index.html`](https://sd-10.com/test/index.html) | 120 | The core code (see below) |
 | [`test/ui-smoke.html`](https://sd-10.com/test/ui-smoke.html) | 34 | The Console against the simulated SD-10: calibrate, measure, compare, line scan, history sync, palettes, settings, custom ICC profiles |
 | [`test/mobile-check.html`](https://sd-10.com/test/mobile-check.html) | – | The layout at phone width (no sideways scrolling) and the compare / reference flows |
-| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 50 | Print match against the simulated device and printer: matching to within tolerance, several colors at once, media sizes and limits, readings per patch, textile ΔE, metamerism and gamut checks, spot color sheets and libraries, RGB sheets |
+| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 51 | Print match against the simulated device and printer: matching to within tolerance, several colors at once, media sizes and limits, readings per patch, textile ΔE, metamerism and gamut checks, spot color sheets and libraries, colors imported from a swatch file, RGB sheets |
 | [`test/space-smoke.html`](https://sd-10.com/test/space-smoke.html) | 35 | The color space workflow against the simulated device and printer (see below) |
 
 **`test/index.html` checks**
@@ -373,7 +383,7 @@ Open these pages in Chrome – on the live site (e.g. [sd-10.com/test/](https://
 - the ICC engine against LittleCMS
 - Print match convergence, layouts and PDF / PNG sheets
 - color space charts, predictions, learning, drift checks and files against simulated printers
-- the library formats against real VersaWorks and Edge Print exports, the CxF3 standard and a reference Adobe Color
+- the library formats against real VersaWorks and Edge Print exports, the CxF3 standard, the Adobe Swatch Exchange layout and a reference Adobe Color
   Book encoder
 - a full session against the simulated SD-10
 
@@ -407,7 +417,7 @@ js/color.js         spectrum → L*a*b*, ΔE (76 / 94 / 2000 / CMC), sRGB, LRV
 js/weights.js       CIE weighting tables from the app (12 illuminants × 2 observers)
 js/match.js         Print match maths: patch design, printer model, solver, metamerism, PDF / PNG sheet layout
 js/colorspace.js    color spaces: chart design, prediction from measured patches, learning, drift check, files
-js/rip-export.js    spot color library files (CxF3, Adobe Color Book, Edge Print, VersaWorks): export and import
+js/rip-export.js    spot color library files (CxF3, Adobe Color Book, Edge Print, VersaWorks): export and import; ASE import
 js/printer-sim.js   simulated CMYK printer (demo and tests)
 js/icc.js           ICC engine (L*a*b* → CMYK, and device → L*a*b* for the gamut check); profile storage
 js/storage.js       history and preferences (localStorage)

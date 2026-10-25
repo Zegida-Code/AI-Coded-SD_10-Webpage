@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <link rel="stylesheet" href="css/app.css?v=2026-10-22.3bb302b-062417">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-24.eac2475-202807">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -278,10 +278,14 @@
       <!-- left column: the colors, the settings shared by all colors, and the spot library -->
       <div class="flex flex-col gap-4 min-w-0">
       <!-- colors: pick the one to work on -->
-      <div class="card space-y-3">
+      <div id="mColorsCard" class="card space-y-3">
         <div class="flex items-center justify-between gap-2">
           <h3 class="font-semibold">Colors <span id="mColorCount" class="text-sm font-normal text-slate-500"></span></h3>
-          <button id="btnColorAdd" class="btn btn-ghost" title="Match another color – each has its own sheets, scan and result; select one to work on it">+ Add color</button>
+          <div class="flex gap-2">
+            <button id="btnColorsImport" type="button" class="btn btn-ghost" title="Add the named colors of a swatch or library file – Adobe Swatch Exchange (.ase), CxF, Adobe Color Book, Edge Print or VersaWorks – each with its L*a*b* as the reference; or drop the file on this card">Import…</button>
+            <input id="colorsFile" type="file" accept=".ase,.cxf,.acb,.epcc,.spot,.xml" class="hidden">
+            <button id="btnColorAdd" class="btn btn-ghost" title="Match another color – each has its own sheets, scan and result; select one to work on it">+ Add color</button>
+          </div>
         </div>
         <ul id="mColorList" class="relative space-y-1.5 max-h-[28rem] overflow-y-auto p-0.5"></ul>
       </div>
@@ -366,8 +370,8 @@
         <div class="mt-auto border-t border-slate-200 pt-3 dark:border-slate-800">
         <div class="flex flex-wrap items-center gap-2">
           <button id="btnLibDownload" class="btn btn-ghost" disabled>Download library</button>
-          <button id="btnLibImport" class="btn btn-ghost" title="Add the colors of a CxF (.cxf), Adobe Color Book (.acb), Epson Edge Print (.epcc) or VersaWorks (.spot) library – or drop the file anywhere on this page">Import…</button>
-          <input id="libFile" type="file" accept=".cxf,.acb,.spot,.epcc,.xml" class="hidden">
+          <button id="btnLibImport" class="btn btn-ghost" title="Add the colors of a CxF (.cxf), Adobe Color Book (.acb), Adobe Swatch Exchange (.ase), Epson Edge Print (.epcc) or VersaWorks (.spot) library – or drop the file anywhere on this page">Import…</button>
+          <input id="libFile" type="file" accept=".cxf,.acb,.ase,.spot,.epcc,.xml" class="hidden">
           <button id="btnLibAddOpen" type="button" class="btn btn-ghost" title="Type a color in or take the last measurement; rename or clear the library">+ Add a color</button>
         </div>
         </div>
@@ -599,26 +603,26 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-22.3bb302b-062417",
-      "./js/transport.js": "./js/transport.js?v=2026-10-22.3bb302b-062417",
-      "./js/mock.js": "./js/mock.js?v=2026-10-22.3bb302b-062417",
-      "./js/session.js": "./js/session.js?v=2026-10-22.3bb302b-062417",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-22.3bb302b-062417",
-      "./js/color.js": "./js/color.js?v=2026-10-22.3bb302b-062417",
-      "./js/weights.js": "./js/weights.js?v=2026-10-22.3bb302b-062417",
-      "./js/storage.js": "./js/storage.js?v=2026-10-22.3bb302b-062417",
-      "./js/icc.js": "./js/icc.js?v=2026-10-22.3bb302b-062417",
-      "./js/match.js": "./js/match.js?v=2026-10-22.3bb302b-062417",
-      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-22.3bb302b-062417",
-      "./js/ui.js": "./js/ui.js?v=2026-10-22.3bb302b-062417",
-      "./js/match-view.js": "./js/match-view.js?v=2026-10-22.3bb302b-062417",
-      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-22.3bb302b-062417",
-      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-22.3bb302b-062417",
-      "./js/debug.js": "./js/debug.js?v=2026-10-22.3bb302b-062417",
-      "./js/space-view.js": "./js/space-view.js?v=2026-10-22.3bb302b-062417"
+      "./js/app.js": "./js/app.js?v=2026-10-24.eac2475-202807",
+      "./js/transport.js": "./js/transport.js?v=2026-10-24.eac2475-202807",
+      "./js/mock.js": "./js/mock.js?v=2026-10-24.eac2475-202807",
+      "./js/session.js": "./js/session.js?v=2026-10-24.eac2475-202807",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-24.eac2475-202807",
+      "./js/color.js": "./js/color.js?v=2026-10-24.eac2475-202807",
+      "./js/weights.js": "./js/weights.js?v=2026-10-24.eac2475-202807",
+      "./js/storage.js": "./js/storage.js?v=2026-10-24.eac2475-202807",
+      "./js/icc.js": "./js/icc.js?v=2026-10-24.eac2475-202807",
+      "./js/match.js": "./js/match.js?v=2026-10-24.eac2475-202807",
+      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-24.eac2475-202807",
+      "./js/ui.js": "./js/ui.js?v=2026-10-24.eac2475-202807",
+      "./js/match-view.js": "./js/match-view.js?v=2026-10-24.eac2475-202807",
+      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-24.eac2475-202807",
+      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-24.eac2475-202807",
+      "./js/debug.js": "./js/debug.js?v=2026-10-24.eac2475-202807",
+      "./js/space-view.js": "./js/space-view.js?v=2026-10-24.eac2475-202807"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-22.3bb302b-062417"></script>
+  <script type="module" src="js/app.js?v=2026-10-24.eac2475-202807"></script>
 </body>
 </html>

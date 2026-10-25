@@ -391,7 +391,7 @@ function renderRefList() {
         <dt class="text-slate-500">Measured</dt>
         <dd>${m ? `${dE} <b>${m.dE.toFixed(2)}</b> · <span class="font-mono">${labText(m.p.lab)}</span><span class="block truncate text-slate-500" title="${escapeHtml(sessions.get(m.p.s) ?? '')}">${escapeHtml(sessions.get(m.p.s) ?? '')}${m.p.n != null ? ` · patch #${m.p.n}` : ''}</span>` : '–'}</dd>
         <dt class="text-slate-500">Predicted</dt>
-        <dd>${p ? `${dE} <b>${p.predictedDeltaE.toFixed(2)}</b> · <span class="font-mono">${labText(p.predicted)}</span><span class="block text-slate-500">ask for <span class="font-mono">${valuesText(space.mode, p.x, p.k)}</span>${p.sparse ? ' · first estimate' : ''}</span>` : '–'}</dd>
+        <dd>${p ? `${dE} <b>${p.predictedDeltaE.toFixed(2)}</b> · <span class="font-mono">${labText(p.predicted)}</span><span class="block text-slate-500">ask for <span class="font-mono">${valuesText(space.mode, p.x, p.k)}</span>${p.measured ? ' · a measured patch' : p.sparse ? ' · first estimate' : ''}</span>` : '–'}</dd>
       </dl>`;
     const selected = ref.id === selectedRef;
     return `<li data-ref="${escapeHtml(ref.id)}" class="cursor-pointer border-b border-slate-200 px-4 py-2.5 last:border-0 dark:border-slate-800 ${selected ? 'bg-indigo-50 dark:bg-indigo-950/40' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'}">

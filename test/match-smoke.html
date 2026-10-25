@@ -308,6 +308,29 @@
       await until(() => /Inside the printer gamut/.test($('mGamut').textContent));
       log(/Inside the printer gamut/.test($('mGamut').textContent), 'a printable reference is reported inside the gamut');
 
+      // colors to match from an Adobe Swatch Exchange file: one color per L*a*b* swatch, names as in the artwork
+      {
+        const be = (n, v) => { const out = []; for (let i = n - 1; i >= 0; i--) out.push((v >>> (8 * i)) & 255); return out; };
+        const f32 = (v) => { const dv = new DataView(new ArrayBuffer(4)); dv.setFloat32(0, v); return [...new Uint8Array(dv.buffer)]; };
+        const swatch = (t, lab) => {
+          const z = t + '\0';
+          const body = [...be(2, z.length), ...[...z].flatMap((ch) => be(2, ch.charCodeAt(0))), ...[...'LAB '].map((c) => c.charCodeAt(0)), ...lab.flatMap(f32), ...be(2, 1)];
+          return [...be(2, 1), ...be(4, body.length), ...body];
+        };
+        const bytes = [...[...'ASEF'].map((c) => c.charCodeAt(0)), ...be(2, 1), ...be(2, 0), ...be(4, 2),
+          ...swatch('Swatch Teal', [0.456, -41, -16]), ...swatch('Swatch Gold', [0.7638, 20.16, 75.13])];
+        const job = () => JSON.parse(w.localStorage.getItem('sd10.match'));
+        const before = job().colors.length;
+        const adt = new w.DataTransfer();
+        adt.items.add(new w.File([new Uint8Array(bytes)], 'artwork.ase', { type: 'application/octet-stream' }));
+        $('colorsFile').files = adt.files;
+        $('colorsFile').dispatchEvent(new w.Event('change'));
+        await until(() => job().colors.length === before + 2);
+        const teal = job().colors.find((c) => c.name === 'Swatch Teal');
+        log(teal?.target.join() === '45.6,-41,-16' && job().colors.some((c) => c.name === 'Swatch Gold') && /Swatch Teal/.test($('mColorList').textContent) && /2 colors added/.test($('toast').textContent),
+          `colors to match import from an Adobe Swatch Exchange file (${$('toast').textContent.slice(0, 60)})`);
+      }
+
       // switching views keeps the connection
       d.querySelector('[data-view=console]').click();
       log(!$('viewConsole').classList.contains('hidden') && /simulated/.test($('connPill').textContent), 'switch to Console keeps the device connected');

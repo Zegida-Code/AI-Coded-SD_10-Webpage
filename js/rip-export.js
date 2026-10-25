@@ -144,9 +144,14 @@ export const RIP_EXPORTS = {
  * Colors without usable D50/2° data are reported in `skipped`.
  */
 export function readLibrary(bytes, fileName = '') {
-  const notALibrary = (why = '') => new Error(`${fileName || 'The file'} is not a CxF, Adobe Color Book, Edge Print or VersaWorks library${why}`);
+  const notALibrary = (why = '') => new Error(`${fileName || 'The file'} is not a CxF, Adobe Color Book, Adobe Swatch Exchange, Edge Print or VersaWorks library${why}`);
   bytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  if (String.fromCharCode(...bytes.subarray(0, 4)) === '8BCB') return readAcb(bytes);
+  const magic = String.fromCharCode(...bytes.subarray(0, 4));
+  if (magic === '8BCB') return readAcb(bytes);
+  if (magic === 'ASEF') {
+    const lib = readAse(bytes);
+    return { ...lib, library: lib.library || fileName.replace(/^.*[\\/]/, '').replace(/\.[^.]*$/, '') };
+  }
   if (bytes[0] === 0xff && bytes[1] === 0xfe) {
     const text = new TextDecoder('utf-16le').decode(bytes.subarray(2));
     if (text.startsWith('EpsonEdgePrint')) return readEpcc(text);
@@ -246,6 +251,32 @@ function readEpcc(text) {
     else skipped.push(name);
   }
   return { format: 'epcc', library, colors, skipped };
+}
+
+/**
+ * Adobe Swatch Exchange (.ase – Illustrator, Photoshop, InDesign swatches): blocks of colors, optionally in named groups.
+ * L*a*b* swatches (Adobe's Lab is D50) are read – L* is stored 0–1; RGB, CMYK and gray swatches are skipped. The first
+ * group's name becomes the library name.
+ */
+function readAse(bytes) {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (dv.getUint16(4) !== 1) throw new Error('Unsupported Adobe Swatch Exchange version');
+  const count = dv.getUint32(8);
+  const utf16 = (p, n) => { let s = ''; for (let i = 0; i < n; i++) s += String.fromCharCode(dv.getUint16(p + 2 * i)); return s.replace(/\0+$/, ''); };
+  const colors = [], skipped = [];
+  let library = '', p = 12;
+  for (let i = 0; i < count && p + 6 <= bytes.length; i++) {
+    const type = dv.getUint16(p), length = dv.getUint32(p + 2), body = p + 6;
+    p = body + length;
+    if (type === 0xc001 && !library) library = utf16(body + 2, dv.getUint16(body)).trim();
+    if (type !== 0x0001) continue;
+    const nameLength = dv.getUint16(body), name = utf16(body + 2, nameLength).trim();
+    const at = body + 2 + 2 * nameLength, model = String.fromCharCode(...bytes.subarray(at, at + 4));
+    if (model !== 'LAB ') { skipped.push(name || '(unnamed)'); continue; }
+    const [L, a, b] = [0, 1, 2].map((k) => dv.getFloat32(at + 4 + 4 * k));
+    if (name && [L, a, b].every(Number.isFinite)) colors.push({ name, lab: [L * 100, a, b] }); else skipped.push(name || '(unnamed)');
+  }
+  return { format: 'ase', library, colors, skipped };
 }
 
 function readAcb(bytes) {
