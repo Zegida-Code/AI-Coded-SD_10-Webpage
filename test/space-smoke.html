@@ -76,7 +76,7 @@
       setSel('mChartSize', 'starter');
       $('btnSpaceChart').click();
       await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 200);
-      const listTop = d.querySelector('#mColorList li');
+      const listTop = d.querySelector('#mColorList li[data-color]');
       log(stored().length === 1 && stored()[0].name === 'Demo printer' && stored()[0].mode === 'spot' && listTop?.dataset.color === 'chart' && /0\/200 scanned/.test(listTop.textContent) &&
         $('mRefCard').classList.contains('hidden') && /Demo printer – chart 1/.test(text('mRoundLabel')) && $('btnMatchSheet').classList.contains('hidden') && $('btnMatchRestart').textContent === 'Close chart',
         'Create chart makes a color space and a 200-patch chart; the cards switch to the chart');
@@ -94,7 +94,7 @@
         'scanned chart patches go into the color space straight away');
       $('btnMatchRestart').click();
       await until(() => !$('mRefCard').classList.contains('hidden'));
-      log(!stored()[0].chart && d.querySelector('#mColorList li').dataset.color !== 'chart' && /3 measured patches/.test(text('mSpaceInfo')) && /predicts once it holds 20/.test(text('mSpaceInfo')) &&
+      log(!stored()[0].chart && d.querySelector('#mColorList li[data-color]').dataset.color !== 'chart' && /3 measured patches/.test(text('mSpaceInfo')) && /predicts once it holds 20/.test(text('mSpaceInfo')) &&
         /chart 1.*3 patches/.test(text('mSpaceSessions')), `Close chart goes back to the colors; the scanned patches stay (${text('mSpaceInfo').slice(0, 80)})`);
 
       // ---- import a measured space (300 chart patches of the demo printer)
@@ -115,10 +115,11 @@
       const predVals = [...d.querySelectorAll('#mSpacePred .font-mono')].slice(0, 3).map((e) => parseFloat(e.textContent));
       const predPrints = predVals.length === 3 ? deltaE2000(target, prints(predVals)) : NaN;
       log(predDE < 1.5 && predPrints < 2, `the reference gets predicted values straight away (predicted ΔE00 ${predDE}; they print ${predPrints.toFixed(2)})`);
-      w.prompt = () => 'Brand Violet';
-      d.querySelector('#mSpacePred [data-pred-act=add]').click();
-      const libEntry = JSON.parse(w.localStorage.getItem('sd10.spotLibrary')).colors.find((c) => c.name === 'Brand Violet');
-      log(libEntry && libEntry.lab.every((v, i) => Math.abs(v - predVals[i]) <= 0.051), 'the prediction can go straight into the spot library (under the name given)');
+      // before any sheet, the color's recommended L*a*b* (in the list, and in the library file) is the prediction
+      await until(() => /→ .*predicted/.test(text('mColorList')));
+      const outText = text('mColorList').match(/→\s*([-\d.]+) \/ ([-\d.]+) \/ ([-\d.]+) · predicted/);
+      log(outText && outText.slice(1, 4).every((v, i) => Math.abs(parseFloat(v) - predVals[i]) <= 0.06) /* the list shows one decimal */, `before any sheet, the color list recommends the predicted values (${outText?.[0] ?? text("mColorList").slice(0, 160)} vs ${predVals.join(" / ")})`);
+      $('mSpotName').value = 'Brand Violet'; $('mSpotName').dispatchEvent(new Event('change'));
       await until(() => !$('btnMatchSheet').disabled);
       $('btnMatchSheet').click();
       await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 16);
@@ -329,10 +330,10 @@
       await until(() => /Old colour/.test($2('mColorList').textContent));
       const ls = second.contentWindow.localStorage;
       await until(() => ls.getItem('sd10.colorSpaces'));
-      log(/Old colour/.test($2('mColorList').textContent) && /Old spot/.test($2('mLibList').textContent) && $2('mLibName').value === 'Old library' &&
+      log(/Old colour/.test($2('mColorList').textContent) && $2('mLibName').value === 'Old library' && ls.getItem('sd10.spotLibrary') === null &&
         $2('mSpace').selectedOptions[0]?.textContent === 'Saved before the rename' && !$2('mSpacePred').classList.contains('hidden') &&
         JSON.parse(ls.getItem('sd10.colorSpaces'))[0]?.points.length === oldSpace.points.length && ls.getItem('sd10.colourSpaces') === null,
-        'a job, spot library and color space saved under the old "colour" names load, and the color space moves to its new key');
+        'a job and color space saved under the old "colour" names load (the color space moves to its new key); an old spot library is retired, its name kept');
       $2('mSpotName').value = 'Old colour renamed'; $2('mSpotName').dispatchEvent(new Event('change'));
       const resaved = JSON.parse(ls.getItem('sd10.match'));
       log(Array.isArray(resaved.colors) && resaved.colors[0].name === 'Old colour renamed' && !('colours' in resaved),

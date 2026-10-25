@@ -5,18 +5,15 @@
 // pinch to zoom, hover a patch for its values; full screen on request.
 // The data comes from the Print match view (initSpaceView's `data` callback), which owns the color spaces.
 import { $, displayHex, escapeHtml, labText, valuesText } from './ui.js';
+import { loadJson, saveJson } from './storage.js';
 import { invert, spaceStats } from './colorspace.js';
 import { DE_FORMULAS, MODE_NAME } from './match.js';
 
 let data = () => ({ spaces: [], active: '', refs: [], formula: 'de00' });
 let actions = {}; // { removePoint(spaceId, point) } – changes to the color spaces are made by their owner
 const PREFS_KEY = 'sd10.space3d';
-const prefs = (() => {
-  let p = {};
-  try { p = JSON.parse(localStorage.getItem(PREFS_KEY)) || {}; } catch { /* ignore */ }
-  return { surface: true, points: true, refs: true, spin: true, space: '', compare: '', ...p };
-})();
-const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch { /* ignore */ } };
+const prefs = { surface: true, points: true, refs: true, spin: true, space: '', compare: '', ...loadJson(PREFS_KEY, {}) };
+const savePrefs = () => saveJson(PREFS_KEY, prefs);
 
 // camera: yaw turns around the vertical axis through `target` (a*, L*, b* – the middle of the L* axis, or a color the
 // view is centered on), pitch tilts towards a view from above; zoom 1 fits the L*a*b* range

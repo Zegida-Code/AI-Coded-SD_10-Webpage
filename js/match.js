@@ -10,7 +10,7 @@
 //      box around x0 and the valid input range, damped if J is ill-conditioned.
 //   5. The answer x* = x0 + Δx is the centre of the next, finer sheet; its centre patch verifies it. A patch that
 //      already measured closer than the prediction is recommended instead.
-import { deltaE2000, deltaECMC, spectrumToLab } from './color.js';
+import { deltaE2000, deltaECMC, round2, spectrumToLab } from './color.js';
 
 /**
  * Color difference used to judge a match. lWeight scales lightness in the solver's least squares, so the
@@ -61,8 +61,8 @@ export function designPatches(mode, centre, step, design = 'full') {
   }));
 }
 
-const round2 = (v) => Math.round(v * 100) / 100;
-const roundTo = (v, decimals) => (decimals ? Math.round(v * 10 ** decimals) / 10 ** decimals : Math.round(v));
+/** A value rounded to a sheet type's input precision (MODES[mode].decimals; 0 = whole numbers). */
+export const roundTo = (v, decimals) => (decimals ? Math.round(v * 10 ** decimals) / 10 ** decimals : Math.round(v));
 
 // ---------------------------------------------------------------- linear algebra helpers
 /** Solve A·x = b (Gaussian elimination with partial pivoting); null if A is singular. */

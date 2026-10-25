@@ -14,8 +14,8 @@
 //   - gapFillers() picks inputs where the space has measured least – fill-in patches and Fill gaps charts.
 // Points belong to sessions (a chart, a check chart, one test sheet, an imported file); a session or a single patch
 // can be removed again.
-import { deltaE2000 } from './color.js';
-import { DE_FORMULAS, MODES, solve, solveForTarget } from './match.js';
+import { deltaE2000, round2 } from './color.js';
+import { DE_FORMULAS, MODES, roundTo, solve, solveForTarget } from './match.js';
 
 /** A space predicts once it holds this many patches. */
 export const SPACE_MIN_POINTS = 20;
@@ -55,7 +55,6 @@ export function newSpace({ name, mode, now = Date.now() }) {
   return { id: newSpaceId(), name, mode, created: now, updated: now, points: [], sessions: [], chart: null, checkRule: CHECK_RULE };
 }
 
-const round2 = (v) => Math.round(v * 100) / 100;
 const median = (v) => quantile(v, 0.5);
 function quantile(values, q) {
   if (!values.length) return null;
@@ -265,7 +264,6 @@ export function invert(space, target, { formula = 'de00', kFixed = null } = {}) 
   const mode = space.mode;
   const { fn: dE, lWeight } = DE_FORMULAS[formula] ?? DE_FORMULAS.de00;
   const { min, max, minStep, decimals } = MODES[mode], u = UNIT[mode];
-  const roundInput = (v) => (decimals ? Math.round(v * 10 ** decimals) / 10 ** decimals : Math.round(v));
   const stats = spaceStats(space, { stale: true }), { spacing } = stats;
   // within reach: close enough to measured patches for the prediction to rest on them (any distance without a spacing yet)
   const withinReach = (f) => !!f && (spacing == null || f.d1 <= (f.sparse || f.atEdge ? SPARSE_REACH : REACH) * spacing);
@@ -292,7 +290,7 @@ export function invert(space, target, { formula = 'de00', kFixed = null } = {}) 
       // a step that would leave the measured patches' reach is shortened until it stays within it
       let next = null;
       for (let t = 1; t >= 1 / 32 && !next; t /= 2) {
-        const c = x.map((v, k) => roundInput(v + t * (sol.x[k] - v)));
+        const c = x.map((v, k) => roundTo(v + t * (sol.x[k] - v), decimals));
         if (withinReach(fitAt(c))) next = c;
       }
       if (!next) break;

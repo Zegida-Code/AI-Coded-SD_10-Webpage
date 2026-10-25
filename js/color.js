@@ -3,6 +3,9 @@
 import { WEIGHTS } from './weights.js';
 import { LIGHT_SOURCE_NAME } from './protocol.js';
 
+/** A value to two decimals – how L*a*b* values are kept and written (Lab files, the job, the color spaces). */
+export const round2 = (v) => Math.round(v * 100) / 100;
+
 const D = 6 / 29;
 const f = (t) => (t > D ** 3 ? Math.cbrt(t) : t / (3 * D * D) + 4 / 29);
 const finv = (v) => (v > D ? v ** 3 : 3 * D * D * (v - 4 / 29));

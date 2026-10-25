@@ -1,6 +1,6 @@
 // Small DOM and formatting helpers shared by the Console (app.js), Print match (match-view.js) and the Color space view
 // (space-view.js).
-import { labD50ToSrgb, rgbHex } from './color.js';
+import { labD50ToSrgb, rgbHex, round2 } from './color.js';
 import { debugLog } from './debug.js';
 
 export const $ = (id) => document.getElementById(id);
@@ -29,7 +29,7 @@ export function formatValues(mode, x, k) {
 }
 /** …as one line: "L* 34.7 a* 71.3 b* 46.7", "C 40.0 M 60.0 Y 10.0 K 5.0", "R 12 G 34 B 56". */
 export const valuesText = (mode, x, k) => formatValues(mode, x, k).filter(([key]) => key !== 'HEX').map(([key, v]) => `${key} ${v}`).join(' ');
-export const round2 = (v) => Math.round(v * 100) / 100;
+export { round2 };
 export const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 /** sRGB hex of a Lab D50 color, for swatches. */
 export const displayHex = (lab) => rgbHex(labD50ToSrgb(lab).rgb);

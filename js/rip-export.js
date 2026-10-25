@@ -1,5 +1,6 @@
-// Spot color library files for RIP software, so the named colors of a test sheet (or of the final match) can be
-// imported into the RIP. One exporter per format; more can be added as sample library files become available.
+// Spot color library files for RIP software, so the named colors of a test sheet (or the matched colors) can be
+// imported into the RIP – one exporter per format; more can be added as sample library files become available – and
+// reading such files back (plus Adobe Swatch Exchange swatches), so their named colors can come in as colors to match.
 // colors: [{ name, lab: [L, a, b] }] – CIE L*a*b* D50 / 2°.
 import { spectrumToLab } from './color.js';
 
@@ -139,7 +140,8 @@ export const RIP_EXPORTS = {
 
 // ---------------------------------------------------------------- import
 /**
- * Read a spot color library file (CxF3 .cxf, Adobe Color Book .acb, Edge Print .epcc, VersaWorks .spot) into
+ * Read a spot color library or swatch file (CxF3 .cxf, Adobe Color Book .acb, Adobe Swatch Exchange .ase, Edge Print
+ * .epcc, VersaWorks .spot) into
  * { format, library, colors: [{ name, lab }], skipped: [names] } with Lab D50 / 2°.
  * Colors without usable D50/2° data are reported in `skipped`.
  */

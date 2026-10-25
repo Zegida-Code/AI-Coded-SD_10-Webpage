@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <link rel="stylesheet" href="css/app.css?v=2026-10-24.eac2475-202807">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-24.8e0bfe1-213154">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -270,28 +270,35 @@
         with finer sheets until it is within tolerance.</p>
     </div>
 
-    <!-- Two columns on wide screens: the color list, settings and spot library at the left, the selected color's workflow and the
-         color space at the right, the tips across both. The last card of each column stretches to the bottom of the row, so
+    <!-- Two columns on wide screens: the colors and the settings at the left, the selected color's workflow and the color
+         space at the right, the tips across both. The last card of each column stretches to the bottom of the row, so
          neither column leaves a gap. On narrower screens everything stacks in that order. -->
     <div class="grid gap-4 lg:grid-cols-[minmax(0,22rem),minmax(0,1fr)] xl:grid-cols-[minmax(0,24rem),minmax(0,1fr)]">
 
-      <!-- left column: the colors, the settings shared by all colors, and the spot library -->
+      <!-- left column: the colors (also the spot library for the RIP) and the settings shared by all colors -->
       <div class="flex flex-col gap-4 min-w-0">
-      <!-- colors: pick the one to work on -->
-      <div id="mColorsCard" class="card space-y-3">
+      <!-- colors: pick the one to work on; each with its reference and the L*a*b* recommended for the RIP. The list fills
+           the column's spare height on wide screens (scrolling when long); the library download sits at the bottom. -->
+      <div id="mColorsCard" class="card min-w-0 flex-1 flex flex-col gap-3">
         <div class="flex items-center justify-between gap-2">
           <h3 class="font-semibold">Colors <span id="mColorCount" class="text-sm font-normal text-slate-500"></span></h3>
           <div class="flex gap-2">
-            <button id="btnColorsImport" type="button" class="btn btn-ghost" title="Add the named colors of a swatch or library file – Adobe Swatch Exchange (.ase), CxF, Adobe Color Book, Edge Print or VersaWorks – each with its L*a*b* as the reference; or drop the file on this card">Import…</button>
+            <button id="btnColorsImport" type="button" class="btn btn-ghost" title="Add the named colors of a swatch or library file – Adobe Swatch Exchange (.ase), CxF, Adobe Color Book, Edge Print or VersaWorks – each with its L*a*b* as the reference; or drop the file on this page">Import…</button>
             <input id="colorsFile" type="file" accept=".ase,.cxf,.acb,.epcc,.spot,.xml" class="hidden">
             <button id="btnColorAdd" class="btn btn-ghost" title="Match another color – each has its own sheets, scan and result; select one to work on it">+ Add color</button>
           </div>
         </div>
-        <ul id="mColorList" class="relative space-y-1.5 max-h-[28rem] overflow-y-auto p-0.5"></ul>
+        <div class="relative min-h-0 lg:min-h-[12rem] lg:flex-1">
+          <ul id="mColorList" class="relative flex max-h-[28rem] flex-col gap-1.5 overflow-y-auto p-0.5 lg:absolute lg:inset-0 lg:max-h-none"></ul>
+        </div>
+        <!-- the colors as a spot library for the RIP: each under its name with its recommended L*a*b* -->
+        <div class="space-y-1.5 border-t border-slate-200 pt-3 dark:border-slate-800">
+          <button id="btnLibDownload" type="button" class="btn btn-primary" disabled>Download library</button>
+          <p id="mLibNote" class="text-xs text-slate-500"></p>
+        </div>
       </div>
 
-      <!-- settings shared by all colors: the sheet at the top; measuring and matching folded away (open state remembered),
-           its summary line showing the current values -->
+      <!-- settings shared by all colors: the sheet at the top; the ones changed less often in the Measuring & matching dialog -->
       <div class="card space-y-3">
         <h3 class="font-semibold">Settings</h3>
         <div class="grid grid-cols-2 gap-3">
@@ -308,7 +315,7 @@
               <button id="btnMediaSave" type="button" class="btn btn-ghost" title="Save the width and height under a name">Save</button>
               <button id="btnMediaRemove" type="button" class="btn btn-ghost hidden" title="Remove this saved size">✕</button>
             </div></div>
-          <div id="mCustomWrap" class="col-span-2 grid grid-cols-2 gap-2">
+          <div class="col-span-2 grid grid-cols-2 gap-2">
             <div><label class="label" for="mMediaW">Width (mm)</label><input id="mMediaW" class="input" type="number" min="50" max="3000" step="0.1"></div>
             <div><label class="label" for="mMediaH">Height (mm)</label><input id="mMediaH" class="input" type="number" min="20" max="10000" step="0.1"></div>
             <p id="mCustomHint" class="col-span-2 text-xs text-slate-500"></p>
@@ -349,57 +356,17 @@
             <button id="btnPrinterIccRemove" type="button" class="btn btn-ghost hidden" title="Remove this profile from the browser">✕</button>
           </div>
           <input id="printerIccFile" type="file" accept=".icc,.icm" class="hidden"></div>
-        <div id="mRipFormatWrap" class="col-span-2"><label class="label" for="mRipFormat">Spot library format</label>
-          <select id="mRipFormat" class="input"><option value="cxf">CxF3 (.cxf)</option><option value="acb">Adobe Color Book (.acb)</option><option value="epcc">Epson Edge Print (.epcc)</option><option value="versaworks">VersaWorks (.spot)</option></select></div>
+        <div id="mRipFormatWrap" class="col-span-2 grid grid-cols-2 gap-3">
+          <div><label class="label" for="mRipFormat">Spot library format</label>
+            <select id="mRipFormat" class="input"><option value="cxf">CxF3 (.cxf)</option><option value="acb">Adobe Color Book (.acb)</option><option value="epcc">Epson Edge Print (.epcc)</option><option value="versaworks">VersaWorks (.spot)</option></select></div>
+          <div><label class="label" for="mLibName">Library name</label>
+            <input id="mLibName" class="input" type="text" maxlength="60" autocomplete="off"></div>
+        </div>
         </div>
           <div class="flex justify-end"><button type="button" data-close-dialog class="btn btn-primary">Done</button></div>
         </div>
       </dialog>
 
-      <!-- spot library: matched colors collected across jobs, exported together as one library file -->
-      <div id="mLibraryCard" class="card min-w-0 flex-1 flex flex-col gap-3">
-        <h3 class="font-semibold">Spot library <span id="mLibCount" class="text-sm font-normal text-slate-500"></span></h3>
-        <p class="text-xs text-slate-500">Your named colors, downloaded together as one library file for the RIP (format under Settings). Kept in this browser.</p>
-        <!-- the colors: on wide screens the list fills the card's spare height and scrolls (so the card follows the column
-             beside it rather than growing); an empty state while there are none -->
-        <div class="relative min-h-0 lg:min-h-[10rem] lg:flex-1">
-          <div id="mLibList" class="max-h-96 overflow-y-auto lg:absolute lg:inset-0 lg:max-h-none"></div>
-        </div>
-        <p id="mLibNote" class="text-xs text-slate-500"></p>
-        <!-- the card's actions, at its bottom edge (any extra height of the stretched card goes above them) -->
-        <div class="mt-auto border-t border-slate-200 pt-3 dark:border-slate-800">
-        <div class="flex flex-wrap items-center gap-2">
-          <button id="btnLibDownload" class="btn btn-ghost" disabled>Download library</button>
-          <button id="btnLibImport" class="btn btn-ghost" title="Add the colors of a CxF (.cxf), Adobe Color Book (.acb), Adobe Swatch Exchange (.ase), Epson Edge Print (.epcc) or VersaWorks (.spot) library – or drop the file anywhere on this page">Import…</button>
-          <input id="libFile" type="file" accept=".cxf,.acb,.ase,.spot,.epcc,.xml" class="hidden">
-          <button id="btnLibAddOpen" type="button" class="btn btn-ghost" title="Type a color in or take the last measurement; rename or clear the library">+ Add a color</button>
-        </div>
-        </div>
-      </div>
-
-      <!-- add a color by hand (or from the last measurement), rename or clear the library – a small dialog, so the card keeps its height -->
-      <dialog id="mLibDialog" class="card w-[min(30rem,calc(100vw-2rem))] text-slate-900 shadow-xl backdrop:bg-slate-950/50 dark:text-slate-100">
-        <div class="space-y-3">
-          <div class="flex items-center justify-between gap-2">
-            <h3 class="font-semibold">Add a color</h3>
-            <button type="button" data-close-dialog class="btn btn-ghost !px-2" aria-label="Close">✕</button>
-          </div>
-          <form id="libAddForm" class="grid grid-cols-[minmax(0,2fr),repeat(3,minmax(0,1fr))] gap-2 items-end">
-            <div><label class="label" for="libNewName">Name</label><input id="libNewName" class="input" type="text" maxlength="60" autocomplete="off" placeholder="Spot color name"></div>
-            <div><label class="label" for="libNewL">L*</label><input id="libNewL" class="input font-mono" type="number" step="0.01" min="0" max="100"></div>
-            <div><label class="label" for="libNewA">a*</label><input id="libNewA" class="input font-mono" type="number" step="0.01" min="-128" max="127"></div>
-            <div><label class="label" for="libNewB">b*</label><input id="libNewB" class="input font-mono" type="number" step="0.01" min="-128" max="127"></div>
-            <button id="btnLibFromLast" type="button" class="btn btn-ghost col-span-2" title="Fill L*a*b* from the last measurement (D50 / 2°)">Use last measurement</button>
-            <button id="btnLibAdd" type="submit" class="btn btn-primary col-span-2">Add</button>
-          </form>
-          <!-- the library itself -->
-          <div class="flex items-end gap-3 border-t border-slate-200 pt-3 dark:border-slate-800">
-            <div class="min-w-0 flex-1"><label class="label" for="mLibName">Library name</label>
-              <input id="mLibName" class="input" type="text" maxlength="60" autocomplete="off"></div>
-            <button id="btnLibClear" class="px-1 py-1.5 text-sm text-rose-600 hover:underline disabled:opacity-40 disabled:no-underline dark:text-rose-400" disabled title="Remove every color from the spot library">Clear the library</button>
-          </div>
-        </div>
-      </dialog>
       </div>
 
       <!-- the selected color's workflow -->
@@ -407,10 +374,10 @@
         <!-- 1. reference -->
         <div id="mRefCard" class="card space-y-3">
           <h3 class="font-semibold"><span class="text-indigo-500">1.</span> Reference</h3>
-          <div id="mColorEditor" class="flex flex-wrap gap-3 items-stretch">
+          <div class="flex flex-wrap gap-3 items-stretch">
             <div id="mTargetSwatch" class="h-24 w-full sm:w-32 rounded-xl ring-1 ring-black/10 dark:ring-white/10 bg-slate-200 dark:bg-slate-800"></div>
             <div class="flex-1 min-w-[14rem] space-y-2">
-              <div id="mSpotNameWrap"><label class="label" for="mSpotName">Color / spot color name <span id="mStatusTarget" class="font-normal text-slate-500"></span></label>
+              <div><label class="label" for="mSpotName">Color / spot color name <span id="mStatusTarget" class="font-normal text-slate-500"></span></label>
                 <input id="mSpotName" class="input" type="text" maxlength="60" placeholder="e.g. Brand Red – exactly as named in your artwork and the RIP" autocomplete="off"></div>
               <div class="grid grid-cols-3 gap-2">
                 <div><label class="label" for="mL">L*</label><input id="mL" class="input font-mono" type="number" step="0.01" min="0" max="100"></div>
@@ -603,26 +570,26 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-24.eac2475-202807",
-      "./js/transport.js": "./js/transport.js?v=2026-10-24.eac2475-202807",
-      "./js/mock.js": "./js/mock.js?v=2026-10-24.eac2475-202807",
-      "./js/session.js": "./js/session.js?v=2026-10-24.eac2475-202807",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-24.eac2475-202807",
-      "./js/color.js": "./js/color.js?v=2026-10-24.eac2475-202807",
-      "./js/weights.js": "./js/weights.js?v=2026-10-24.eac2475-202807",
-      "./js/storage.js": "./js/storage.js?v=2026-10-24.eac2475-202807",
-      "./js/icc.js": "./js/icc.js?v=2026-10-24.eac2475-202807",
-      "./js/match.js": "./js/match.js?v=2026-10-24.eac2475-202807",
-      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-24.eac2475-202807",
-      "./js/ui.js": "./js/ui.js?v=2026-10-24.eac2475-202807",
-      "./js/match-view.js": "./js/match-view.js?v=2026-10-24.eac2475-202807",
-      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-24.eac2475-202807",
-      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-24.eac2475-202807",
-      "./js/debug.js": "./js/debug.js?v=2026-10-24.eac2475-202807",
-      "./js/space-view.js": "./js/space-view.js?v=2026-10-24.eac2475-202807"
+      "./js/app.js": "./js/app.js?v=2026-10-24.8e0bfe1-213154",
+      "./js/transport.js": "./js/transport.js?v=2026-10-24.8e0bfe1-213154",
+      "./js/mock.js": "./js/mock.js?v=2026-10-24.8e0bfe1-213154",
+      "./js/session.js": "./js/session.js?v=2026-10-24.8e0bfe1-213154",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-24.8e0bfe1-213154",
+      "./js/color.js": "./js/color.js?v=2026-10-24.8e0bfe1-213154",
+      "./js/weights.js": "./js/weights.js?v=2026-10-24.8e0bfe1-213154",
+      "./js/storage.js": "./js/storage.js?v=2026-10-24.8e0bfe1-213154",
+      "./js/icc.js": "./js/icc.js?v=2026-10-24.8e0bfe1-213154",
+      "./js/match.js": "./js/match.js?v=2026-10-24.8e0bfe1-213154",
+      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-24.8e0bfe1-213154",
+      "./js/ui.js": "./js/ui.js?v=2026-10-24.8e0bfe1-213154",
+      "./js/match-view.js": "./js/match-view.js?v=2026-10-24.8e0bfe1-213154",
+      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-24.8e0bfe1-213154",
+      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-24.8e0bfe1-213154",
+      "./js/debug.js": "./js/debug.js?v=2026-10-24.8e0bfe1-213154",
+      "./js/space-view.js": "./js/space-view.js?v=2026-10-24.8e0bfe1-213154"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-24.eac2475-202807"></script>
+  <script type="module" src="js/app.js?v=2026-10-24.8e0bfe1-213154"></script>
 </body>
 </html>

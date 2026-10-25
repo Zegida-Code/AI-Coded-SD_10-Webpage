@@ -67,10 +67,10 @@ With a measured [color space](#color-space) of your printer, the first sheet alr
 **Screen layout**
 
 - Needs a computer or tablet (768 px or wider); phones only show the Console.
-- On wide screens, the color list, settings and tips sit in a column at the left; the selected color's workflow, the
-  spot library and the color space are at the right.
-- Settings you change less often – readings per patch, M-factor, ΔE formula, tolerance, printer profile and library
-  format – open in a dialog from the **Measuring & matching** line, which shows their current values.
+- On wide screens, the colors and the settings sit in a column at the left; the selected color's workflow and the
+  color space are at the right, and the tips run across the bottom.
+- Settings you change less often – readings per patch, M-factor, ΔE formula, tolerance, printer profile, library
+  format and name – open in a dialog from the **Measuring & matching** line, which shows their current values.
 
 ### 1. Reference colors
 
@@ -84,11 +84,15 @@ your artwork.
 - So you can scan one color's sheet while another is still printing or curing – switching colors never disturbs the
   others.
 
-**Import…** (or dropping a file on the *Colors* card) adds the named colors of a swatch or library file in one go –
-for example the swatches exported from your artwork as an Adobe Swatch Exchange file (`.ase`), or a CxF, Adobe Color
-Book, Edge Print or VersaWorks library. Each color gets its name exactly as in the file and its L\*a\*b\* as the
-reference; names already in the list are left alone. A swatch value is the design value: measure a printed or physical
-sample to replace it with the real color.
+**Import…** (or dropping a file on the page) adds the named colors of a swatch or library file in one go – for
+example the swatches exported from your artwork as an Adobe Swatch Exchange file (`.ase`), or a CxF, Adobe Color Book,
+Edge Print or VersaWorks library. Each color gets its name exactly as in the file and its L\*a\*b\* as the reference;
+names already in the list are left alone. A swatch value is the design value: measure a printed or physical sample to
+replace it with the real color.
+
+Under each color the list shows the L\*a\*b\* recommended for the RIP (→): its latest test-sheet result, or – before
+any sheet – what the [color space](#color-space) predicts. **Download library** at the bottom of the card turns the
+list into a [spot color library](#spot-color-libraries).
 
 ### 2. Test sheet
 
@@ -319,8 +323,8 @@ color. With many references, only the selected one is named in the picture – h
 
 ### Spot color libraries
 
-In the L\*a\*b\* sheet types the app also writes spot color libraries for your RIP, in the format chosen under
-**Spot library format**:
+In the L\*a\*b\* sheet types the app writes spot color libraries for your RIP, in the format chosen under
+**Measuring & matching → Spot library format**:
 
 | Format | Notes |
 |---|---|
@@ -329,25 +333,20 @@ In the L\*a\*b\* sheet types the app also writes spot color libraries for your R
 | **Epson Edge Print** (`.epcc`) | Edge Print color collection, values to one decimal |
 | **Roland VersaWorks** (`.spot`) | VersaWorks 6 spot color library – it imports switched off, so enable it in the library list |
 
-**The three libraries**
+**The two libraries**
 
-- **Sheet library** – the current test sheet's patch colors. Import and enable it before printing the sheet, so the
-  patches go through the same named-color path as your artwork.
-- **Add to spot library** – stores a finished match under the color's name. Use exactly the name from your artwork,
-  because the RIP finds spot colors by name.
-- **Spot library** – collects colors across jobs and is kept in this browser. You can rename or remove entries, or
-  type a color in (or take the last measurement) with **+ Add a color**, which also renames or clears the library.
+| Library | Where | What it holds |
+|---|---|---|
+| **Sheet library** | Test sheet card | The current test sheet's patch colors. Import and enable it before printing the sheet, so the patches go through the same named-color path as your artwork. |
+| **Download library** | *Colors* card | Every color under its name (exactly as in your artwork – the RIP finds spot colors by name) with its recommended L\*a\*b\*. A color without a result or prediction yet goes in with its reference, and the card says how many. The file is named after **Library name** (under *Measuring & matching*). |
 
-**Getting files in and out**
+**Getting files in**
 
-- **Import…** any of the formats above – for example one exported from your RIP – to update existing colors. Adobe
-  Swatch Exchange files (`.ase`, from Illustrator, Photoshop or InDesign) can be imported too; their L\*a\*b\* swatches
-  are read, RGB and CMYK swatches skipped.
-- Drop library files anywhere on the Print match page; an `.icc` / `.icm` file dropped there is added as the printer
-  profile.
-- CxF colors are read from their D50 / 2° L\*a\*b\* values or computed from their spectra; entries without L\*a\*b\*
-  (such as CMYK) are skipped.
-- **Download library** saves the whole library as one file to import into the RIP.
+- **Import…** on the *Colors* card, or drop a file anywhere on the Print match page: any of the formats above – for
+  example one exported from your RIP – or an Adobe Swatch Exchange file (`.ase`, from Illustrator, Photoshop or
+  InDesign). Its colors become colors to match. An `.icc` / `.icm` file dropped there is added as the printer profile.
+- ASE files: their L\*a\*b\* swatches are read, RGB and CMYK swatches skipped. CxF colors are read from their
+  D50 / 2° L\*a\*b\* values or computed from their spectra; entries without L\*a\*b\* (such as CMYK) are skipped.
 
 Support for other RIPs' formats can be added from a sample library exported by that RIP.
 
@@ -372,8 +371,8 @@ Open these pages in Chrome – on the live site (e.g. [sd-10.com/test/](https://
 | [`test/index.html`](https://sd-10.com/test/index.html) | 120 | The core code (see below) |
 | [`test/ui-smoke.html`](https://sd-10.com/test/ui-smoke.html) | 34 | The Console against the simulated SD-10: calibrate, measure, compare, line scan, history sync, palettes, settings, custom ICC profiles |
 | [`test/mobile-check.html`](https://sd-10.com/test/mobile-check.html) | – | The layout at phone width (no sideways scrolling) and the compare / reference flows |
-| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 51 | Print match against the simulated device and printer: matching to within tolerance, several colors at once, media sizes and limits, readings per patch, textile ΔE, metamerism and gamut checks, spot color sheets and libraries, colors imported from a swatch file, RGB sheets |
-| [`test/space-smoke.html`](https://sd-10.com/test/space-smoke.html) | 35 | The color space workflow against the simulated device and printer (see below) |
+| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 50 | Print match against the simulated device and printer: matching to within tolerance, several colors at once, media sizes and limits, readings per patch, textile ΔE, metamerism and gamut checks, spot color sheets and libraries, colors imported from a swatch file, RGB sheets |
+| [`test/space-smoke.html`](https://sd-10.com/test/space-smoke.html) | 38 | The color space workflow against the simulated device and printer (see below) |
 
 **`test/index.html` checks**
 
@@ -403,7 +402,7 @@ index.html          page and layout
 css/app.css         compiled Tailwind stylesheet (source: css/tailwind.src.css)
 
 js/app.js           Console view (connection, measuring, history, palettes, settings, log) and start-up
-js/match-view.js    Print match view (reference colors, sheets, scanning, results, color space, spot library)
+js/match-view.js    Print match view (colors and their library file, sheets, scanning, results, color space)
 js/space-view.js    Color space view: the 3-D picture of a color space (gamut surface, comparison, volume)
 js/ui.js            DOM and formatting helpers shared by the views
 js/debug.js         debug report: journal of actions, messages and errors; the report file
@@ -420,7 +419,7 @@ js/colorspace.js    color spaces: chart design, prediction from measured patches
 js/rip-export.js    spot color library files (CxF3, Adobe Color Book, Edge Print, VersaWorks): export and import; ASE import
 js/printer-sim.js   simulated CMYK printer (demo and tests)
 js/icc.js           ICC engine (L*a*b* → CMYK, and device → L*a*b* for the gamut check); profile storage
-js/storage.js       history and preferences (localStorage)
+js/storage.js       browser storage: JSON load / save for every view, history and preferences
 
 icc/                CMYK profiles bundled with the app
 docs/               protocol, feature and development notes

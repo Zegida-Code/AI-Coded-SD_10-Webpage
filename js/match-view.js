@@ -1,12 +1,13 @@
-// Print match view: find the values that make the user's printer reproduce reference colors – reference colors,
-// test sheets (PDF / PNG), scanning the printed patches, per-color results with metamerism and gamut checks, the
-// printer's color space (charts, predictions, learning) and the spot color library. The maths is in match.js and
-// colorspace.js, the library file formats in rip-export.js; this is the UI. It also owns the color spaces that the
-// 3-D Color space view (space-view.js) shows, and switches between the views.
+// Print match view: find the values that make the user's printer reproduce reference colors – the colors (typed,
+// measured or imported from swatch and library files), test sheets (PDF / PNG), scanning the printed patches, per-color
+// results with metamerism and gamut checks, the printer's color space (charts, predictions, learning), and the colors
+// as a spot color library for the RIP. The maths is in match.js and colorspace.js, the library file formats in
+// rip-export.js; this is the UI. It also owns the color spaces that the 3-D Color space view (space-view.js) shows, and
+// switches between the views.
 // It shares the Console's device session: app.js hands over its state and helpers once, through initMatch().
 //
 // Sections: stored data · what the cards work on · formatting · views · media sizes · printer profile (gamut check) ·
-// rendering · measuring · sheets · spot library · color space · start-up.
+// rendering · measuring · sheets · colors in and out (swatch files, the library for the RIP) · color space · start-up.
 import {
   $, DEMO, NEEDS_CALIBRATION, displayHex, downloadFile, escapeHtml, fmt1, formatValues, labText, onFilePicked, readFlag, round2, safeFileName,
   toast, valuesText, writeFlag,
@@ -26,6 +27,7 @@ import {
 } from './colorspace.js';
 import { printSpectrum } from './printer-sim.js';
 import { debugLog } from './debug.js';
+import { loadJson, removeStored, saveJson } from './storage.js';
 import { hideSpaceView, initSpaceView, showSpaceView } from './space-view.js';
 
 // From the Console (set by initMatch): shared state, the busy-guarded task runner, the Console's settings (for the
@@ -33,13 +35,6 @@ import { hideSpaceView, initSpaceView, showSpaceView } from './space-view.js';
 let state, task, settingsFromUI, updateControls, doCalibrate;
 
 // ---------------------------------------------------------------- stored data
-function loadJson(key, fallback) {
-  try { return JSON.parse(localStorage.getItem(key)) || fallback; } catch { return fallback; }
-}
-/** Store a value; false when the browser storage is full or blocked. */
-function saveJson(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch { return false; }
-}
 /**
  * Data saved by versions that spelled "colour": a stored object's `colours` list becomes `colors`, and the color
  * spaces move from 'sd10.colourSpaces' to 'sd10.colorSpaces' (the old entry is removed once the new one is stored).
@@ -54,14 +49,14 @@ function loadSpaces() {
   const stored = loadJson(SPACES_KEY, null) ?? legacy ?? [];
   // spaces saved under an older check rule get their checks made again (and are saved once if anything changed)
   const rechecked = stored.map((s) => refreshChecks(s)).some(Boolean);
-  if ((legacy || rechecked) && saveJson(SPACES_KEY, stored) && legacy) { try { localStorage.removeItem(LEGACY_SPACES_KEY); } catch { /* ignore */ } }
+  if ((legacy || rechecked) && saveJson(SPACES_KEY, stored) && legacy) removeStored(LEGACY_SPACES_KEY);
   return stored;
 }
 
 // Persisted job (localStorage 'sd10.match'):
 //   settings: mode, media ('custom' | a preset 'a4' … | 'size:<name>' for a saved size), mediaW/mediaH (mm – the size
 //             in use, also for presets), patchMm,
-//             design ('full' | 'compact'), mf, tol, reads, ripFormat
+//             design ('full' | 'compact'), mf, tol, reads, ripFormat, libraryName (the name inside the library file)
 //   formula (DE_FORMULAS key), printerProfile (name of a stored printer profile for the gamut check, '' = none)
 //   space (id of the color space in use, '' = none), learn (add scanned test-sheet patches to it),
 //   fillIn (fill-in patches added to each test sheet where the color space has measured least – 0, 4, 8 or 'auto':
@@ -115,11 +110,19 @@ if (match.media !== 'custom') {
   if (size) [match.mediaW, match.mediaH] = size; else match.media = 'custom';
 }
 
-// Spot library: { name, colors: [{ name, lab, target, predictedDeltaE, mf, time }] } – independent of the current job.
-const LIB_KEY = 'sd10.spotLibrary';
+// The colors are also the spot library for the RIP: each is exported under its name with its recommended L*a*b*
+// (libraryName: the name inside the file). A separate spot library kept by earlier versions ('sd10.spotLibrary') is
+// retired on load – its colors are not carried over, its name is.
 const DEFAULT_LIBRARY_NAME = 'SD-10 spot colors';
-const spotLib = { name: DEFAULT_LIBRARY_NAME, colors: [], ...fromLegacySpelling(loadJson(LIB_KEY, {})) };
-const saveLib = () => saveJson(LIB_KEY, spotLib);
+{
+  const OLD_LIB_KEY = 'sd10.spotLibrary';
+  const old = loadJson(OLD_LIB_KEY, null);
+  if (old) {
+    match.libraryName ??= typeof old.name === 'string' && old.name.trim() ? old.name.trim().slice(0, 60) : undefined;
+    removeStored(OLD_LIB_KEY);
+    saveMatch();
+  }
+}
 
 // Color spaces (see colorspace.js): measured maps of what a printer, ink and media really print, independent of the
 // current job. The one in use (match.space) predicts the first-sheet values for the sheet type it was measured with,
@@ -160,7 +163,6 @@ const currentSheet = () => { const c = workItem(), r = latest(c); return r ? { c
 const scannedCount = (r) => r.patches.filter((p) => p.lab).length;
 /** A round without its fill-in patches – what the match is worked out from (they only feed the color space). */
 const matchPart = (r) => (r.patches.some((p) => p.fill) ? { ...r, patches: r.patches.filter((p) => !p.fill) } : r);
-/** Fill-in patches a new test sheet gets: when there is a color space to fill and learning is on. */
 /** The color-space session a sheet's patches go into: the chart itself, or one per color and sheet. */
 const spaceSessionId = (c, r) => (isChart(c) ? c.id : `sheet:${c.code}-R${r.round}`);
 
@@ -172,11 +174,12 @@ const sheetGroup = (c, r) => ({ label: colorLabel(c), target: c.target, patches:
 const sheetTitle = (c) => (isChart(c) ? 'SD-10 color space chart' : undefined);
 /** The color difference formula chosen for judging matches: { label, name, fn(ref, sample), lWeight }. */
 const DE = () => DE_FORMULAS[match.formula] ?? DE_FORMULAS.de00;
+/** Sheet types whose values are L*a*b* – the ones a spot color library can hold. */
+const isLabMode = (mode) => mode === 'spot' || mode === 'lab';
 
 // ---------------------------------------------------------------- formatting
 const fmtDate = (t) => new Date(t).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 const roundSpectrum = (s) => s.map((v) => Math.round(v * 1e5) / 1e5);
-const isLabMode = (mode) => mode === 'spot' || mode === 'lab';
 
 function cmykPreviewHex([c, m, y], k) {
   const ch = (v) => Math.round(255 * (1 - v / 100) * (1 - k / 100));
@@ -404,36 +407,72 @@ function colorStatus(c) {
 function colorListHtml() {
   const selected = 'ring-2 ring-indigo-500 bg-indigo-50/50 dark:bg-indigo-950/30', unselected = 'ring-slate-200 dark:ring-slate-800';
   const chart = activeSpace()?.chart;
-  const chartItem = !chart ? '' : `<li data-color="chart" class="flex items-center gap-2 rounded-lg px-2 py-1.5 ring-1 ${activeChart() ? selected : unselected}">
+  const chartItem = !chart ? '' : `<li data-color="chart" class="flex shrink-0 items-center gap-2 rounded-lg px-2 py-1.5 ring-1 ${activeChart() ? selected : unselected}">
       <button type="button" data-color-act="select" class="flex flex-1 min-w-0 items-center gap-2 text-left">
         <span class="h-8 w-8 flex-none rounded ring-1 ring-black/10" style="background:conic-gradient(#e11d48,#f59e0b,#84cc16,#06b6d4,#6366f1,#d946ef,#e11d48)"></span>
         <span class="min-w-0 flex-1"><span class="block font-medium truncate">${escapeHtml(chart.name)}</span>
           <span class="block text-xs text-slate-500">color space chart · ${scannedCount(chart.rounds[0])}/${chart.rounds[0].patches.length} scanned</span></span></button></li>`;
-  return chartItem + match.colors.map((x, i) => `<li data-color="${i}" class="flex items-center gap-2 rounded-lg px-2 py-1.5 ring-1 ${i === match.active && !activeChart() ? selected : unselected}">
+  // a single untouched color: the rest of the list explains how colors come in
+  const fresh = match.colors.length === 1 && !match.colors[0].target && !match.colors[0].name;
+  const hint = !fresh ? '' : `<li class="grid flex-1 place-items-center py-6 text-center">
+      <div class="max-w-xs space-y-2">
+        <p class="text-sm font-medium text-slate-700 dark:text-slate-200">Your colors go here</p>
+        <p class="text-xs text-slate-500">Measure or type a reference for this one, add more with <b>+ Add color</b>, or <b>Import…</b> the swatches of your artwork (Adobe Swatch Exchange) or a spot color library – each comes in under its name, ready to match.</p>
+      </div></li>`;
+  return chartItem + match.colors.map((x, i) => `<li data-color="${i}" class="flex shrink-0 items-center gap-2 rounded-lg px-2 py-1.5 ring-1 ${i === match.active && !activeChart() ? selected : unselected}">
       <button type="button" data-color-act="select" class="flex flex-1 min-w-0 items-center gap-2 text-left">
         <span class="h-8 w-8 flex-none rounded ring-1 ring-black/10 ${x.target ? '' : 'bg-slate-200 dark:bg-slate-700'}" ${x.target ? `style="background:${displayHex(x.target)}"` : ''}></span>
         <span class="min-w-0 flex-1">
           <span class="flex items-center gap-2"><span class="font-medium truncate">${escapeHtml(colorLabel(x))}</span>
             ${gamutClass(gamutFor(x)) === 'outside' ? '<span class="chip bg-rose-600 text-white !px-1.5 !py-0 text-[10px]" title="Outside the printer gamut">OUT OF GAMUT</span>' : ''}</span>
           <span class="block text-xs ${x.accepted ? 'text-emerald-600' : 'text-slate-500'}">${x.target ? `<span class="font-mono">${x.target.map((v) => v.toFixed(1)).join(' / ')}</span> · ` : ''}${colorStatus(x)}</span>
+          ${outputLineHtml(x)}
         </span></button>
-      ${match.colors.length > 1 ? '<button type="button" data-color-act="remove" class="text-xs text-rose-600 hover:underline px-1" title="Remove this color">remove</button>' : ''}</li>`).join('');
+      ${match.colors.length > 1 ? '<button type="button" data-color-act="remove" class="text-xs text-rose-600 hover:underline px-1" title="Remove this color">remove</button>' : ''}</li>`).join('') + hint;
+}
+
+/** The color list's second line: the L*a*b* the library file gives this color, and where it comes from. */
+function outputLineHtml(c) {
+  if (!c.target || !isLabMode(match.mode)) return '';
+  const o = outputOf(c, { later: true });
+  const swatch = (lab) => `<span class="inline-block h-2.5 w-2.5 rounded-sm align-middle ring-1 ring-black/10" style="background:${displayHex(lab)}"></span>`;
+  if (o === undefined) return '<span class="block text-xs text-slate-400">→ working out the prediction…</span>';
+  if (!o) return '<span class="block text-xs text-slate-400" title="No test sheet result or color space prediction yet – the library gives the reference">→ the reference (no recommendation yet)</span>';
+  const from = { result: 'result', prediction: 'predicted', measured: 'measured' }[o.source];
+  const why = { result: 'its latest test-sheet result', prediction: 'the color space prediction', measured: 'a patch the color space measured' }[o.source];
+  return `<span class="block text-xs text-indigo-600 dark:text-indigo-400" title="The L*a*b* the library file gives this color (${why}, ${DE().label} ${o.dE.toFixed(2)} from the reference) – enter it for the named color in the RIP">→ ${swatch(o.lab)} <span class="font-mono">${o.lab.map(fmt1).join(' / ')}</span> · ${from} ${o.dE.toFixed(2)}</span>`;
 }
 
 /** Draw the whole Print match view from the job. */
 function renderMatch() {
-  const c = activeColor();
-  const t = c.target;
+  renderColorList();
+  renderReferenceCard(activeColor());
+  renderSettings();
+  renderSheet(workItem());
+  renderPatchGrid(workItem());
+  renderMatchResult();
+  renderSpaceCard();
+  renderLibraryExport();
+  updateControls();
+  updateGamut();
+}
+
+/** The Colors card's list (the selected entry kept in view when the list scrolls). */
+function renderColorList() {
   $('mColorCount').textContent = match.colors.length > 1 ? `(${match.colors.length})` : '';
-  $('mColorList').innerHTML = colorListHtml();
-  // the list scrolls when it is long: keep the selected entry in view
-  const list = $('mColorList'), selectedItem = list.querySelector(activeChart() ? '[data-color="chart"]' : `[data-color="${match.active}"]`);
+  const list = $('mColorList');
+  list.innerHTML = colorListHtml();
+  const selectedItem = list.querySelector(activeChart() ? '[data-color="chart"]' : `[data-color="${match.active}"]`);
   if (selectedItem && list.clientHeight) {
     const top = selectedItem.offsetTop, bottom = top + selectedItem.offsetHeight;
     if (top < list.scrollTop) list.scrollTop = top - 4;
     else if (bottom > list.scrollTop + list.clientHeight) list.scrollTop = bottom - list.clientHeight + 4;
   }
-  // reference card (hidden while the chart is selected)
+}
+
+/** Card 1: the selected color's name and reference, its gamut check and the color space's prediction (hidden for the chart). */
+function renderReferenceCard(c) {
+  const t = c.target;
   $('mRefCard').classList.toggle('hidden', !!activeChart());
   for (const [id, i] of [['mL', 0], ['mA', 1], ['mB', 2]]) if (document.activeElement !== $(id)) $(id).value = t ? t[i].toFixed(2) : '';
   if (document.activeElement !== $('mSpotName')) $('mSpotName').value = c.name;
@@ -443,7 +482,10 @@ function renderMatch() {
   const prediction = spacePredictionHtml(c);
   $('mSpacePred').innerHTML = prediction;
   $('mSpacePred').classList.toggle('hidden', !prediction);
-  // settings
+}
+
+/** The Settings card, the Measuring & matching dialog and the tips. */
+function renderSettings() {
   $('matchFormula').value = match.formula in DE_FORMULAS ? match.formula : 'de00';
   $('mPrinterProfile').value = match.printerProfile;
   $('btnPrinterIccRemove').classList.toggle('hidden', !match.printerProfile);
@@ -470,19 +512,10 @@ function renderMatch() {
   $('mRipFormat').value = match.ripFormat;
   const ripLabel = RIP_EXPORTS[match.ripFormat].label;
   $('btnMatchRipSheet').title = `Spot color library with this sheet's patch colors, in ${ripLabel} format (set under Settings) – import it into the RIP before printing`;
-  $('btnLibDownload').textContent = `Download library (${ripLabel})`;
   $('mModeHelp').innerHTML = `<b>${escapeHtml($('mMode').selectedOptions[0]?.textContent ?? 'Sheet type')}:</b> ${modeHelp(match.mode)}`;
   $('mPrintTips').innerHTML = printTips(match.mode);
-  // the folded "Measuring & matching" settings show their values on the closed line
+  // the Measuring & matching line shows the dialog's current values
   $('mMoreSummary').textContent = `${['M0', 'M1', 'M2'][match.mf] ?? 'M1'} · ${DE().label} ≤ ${match.tol}${match.reads > 1 ? ` · ${match.reads} readings` : ''}${match.printerProfile ? ' · gamut check' : ''}${isLabMode(match.mode) ? ` · ${ripLabel.replace(/ \(.*\)$/, '')}` : ''}`;
-  // the cards
-  renderSheet(workItem());
-  renderPatchGrid(workItem());
-  renderMatchResult();
-  renderSpaceCard();
-  renderLibrary();
-  updateControls();
-  updateGamut();
 }
 
 /** Card 2: the current sheet (the selected color's, or the color space chart) – what it holds, how it prints, the downloads. */
@@ -718,13 +751,20 @@ function resultHtml(c) {
     <div class="flex flex-wrap gap-2">
       <button type="button" data-res-act="accept" class="btn ${c.accepted ? 'btn-primary' : 'btn-ghost'}" title="Accepted colors are left off the next sheets">${c.accepted ? 'Accepted ✓' : 'Accept – no more rounds'}</button>
       <button type="button" data-res-act="copy" class="btn btn-ghost">Copy values</button>
-      ${isLabMode(r.mode) ? '<button type="button" data-res-act="add" class="btn btn-ghost" title="Add the matched color to your spot library under its name">Add to spot library</button>' : ''}
     </div>
     <details class="text-xs"><summary class="cursor-pointer text-slate-500">Rounds</summary>
       <table class="w-full mt-2"><thead class="text-slate-500"><tr><th class="text-left">Round</th><th class="text-left">Sheet centre</th><th class="text-left">Centre ${DE().label}</th><th class="text-left">Predicted ${DE().label}</th></tr></thead><tbody>
       ${c.rounds.map((rr) => `<tr class="border-t border-slate-200 dark:border-slate-800"><td class="py-1">${rr.round}</td><td class="font-mono">${formatValues(rr.mode, rr.centre, rr.kFixed).map(([k, v]) => `${k}${v}`).join(' ')}</td><td class="font-mono">${rr.result?.centreDE != null ? rr.result.centreDE.toFixed(2) : '–'}</td><td class="font-mono">${rr.result ? rr.result.predictedDeltaE.toFixed(2) : '–'}</td></tr>`).join('')}
       </tbody></table></details>
   </section>`;
+}
+
+/** Copy a color's result – or other values for it (`res`, e.g. the color space prediction) – as text. */
+function copyMatchValues(c, res = latest(c)?.result, mode = latest(c)?.mode, k = latest(c)?.kFixed) {
+  if (!res) return;
+  const text = `${colorLabel(c)} – ${{ spot: 'L*a*b*', lab: 'L*a*b*', cmyk: 'CMYK', rgb: 'sRGB' }[mode]}: ` + formatValues(mode, res.x, k).map(([key, v]) => `${key} ${v}`).join(', ') +
+    ` (predicted ${DE().label} ${res.predictedDeltaE.toFixed(2)} to reference L*a*b* ${c.target.map((v) => v.toFixed(2)).join(' / ')})`;
+  navigator.clipboard?.writeText(text).then(() => toast('Values copied', 'ok'), () => toast('Clipboard not available', 'error'));
 }
 
 /** The selected color's result (other colors keep theirs – select them in the list). */
@@ -924,7 +964,6 @@ async function initialCentre(c) {
   return { centre: [...c.target], kFixed: 0, step: [...MODES[match.mode].step0] };
 }
 
-/** A color's next sheet (round) around `centre`; its patches are named SD10-<color code>-R<round>-<n> in spot mode. */
 /**
  * The fill-in setting in force for a new test sheet: 0 (none – also without a color space to fill or with learning
  * off), 4, 8, or 'auto' (as many as fit in the empty slots of the pages the sheet already needs – see emptySlots).
@@ -1021,112 +1060,83 @@ async function downloadSheet() {
   } catch (e) { toast(e.message, 'error'); }
 }
 
-/** Spot color library for the RIP: the current sheet's patch colors ('sheet') or the collected spot library ('library'). */
-function downloadRipLibrary(what, rip = match.ripFormat) {
-  const ex = RIP_EXPORTS[rip];
-  if (!ex) return;
-  const cur = currentSheet();
-  if (what === 'sheet' && cur) {
-    const { c, r } = cur;
-    const colors = r.patches.filter((p) => p.name).map((p) => ({ name: p.name, lab: p.x }));
-    if (!colors.length) return;
-    const chart = isChart(c);
-    const text = ex.build({
-      library: chart ? `SD10 ${c.code} chart` : `SD10 ${c.code} sheet ${r.round}`,
-      description: chart ? `Color space chart patches (${c.name}), CIE L*a*b* D50/2°` : `Print match test sheet patches for ${colorLabel(c)}, CIE L*a*b* D50/2°`,
-      colors,
-    });
-    downloadFile(text, ex.mime, chart ? `sd10-${c.code}-chart.${ex.ext}` : `sd10-${c.code}-sheet${r.round}.${ex.ext}`);
-  } else if (what === 'library' && spotLib.colors.length) {
-    const library = spotLib.name.trim() || DEFAULT_LIBRARY_NAME;
-    const description = `${spotLib.colors.length} color(s) matched with SD-10 Print match, CIE L*a*b* D50/2°`;
-    downloadFile(ex.build({ library, description, colors: spotLib.colors.map((c) => ({ name: c.name, lab: c.lab })) }), ex.mime, `${safeFileName(library)}.${ex.ext}`);
-  }
+/** "Sheet library": the current sheet's named patches as a spot color library, to import into the RIP before printing. */
+function downloadSheetLibrary() {
+  const ex = RIP_EXPORTS[match.ripFormat], cur = currentSheet();
+  if (!ex || !cur) return;
+  const { c, r } = cur;
+  const colors = r.patches.filter((p) => p.name).map((p) => ({ name: p.name, lab: p.x }));
+  if (!colors.length) return;
+  const chart = isChart(c);
+  const text = ex.build({
+    library: chart ? `SD10 ${c.code} chart` : `SD10 ${c.code} sheet ${r.round}`,
+    description: chart ? `Color space chart patches (${c.name}), CIE L*a*b* D50/2°` : `Print match test sheet patches for ${colorLabel(c)}, CIE L*a*b* D50/2°`,
+    colors,
+  });
+  downloadFile(text, ex.mime, chart ? `sd10-${c.code}-chart.${ex.ext}` : `sd10-${c.code}-sheet${r.round}.${ex.ext}`);
 }
 
-// ---------------------------------------------------------------- spot library
-function renderLibrary() {
-  const ex = RIP_EXPORTS[match.ripFormat] ?? RIP_EXPORTS.cxf;
-  const n = spotLib.colors.length;
-  $('mLibCount').textContent = n ? `(${n})` : '';
-  if (document.activeElement !== $('mLibName')) $('mLibName').value = spotLib.name;
-  $('btnLibDownload').disabled = !n;
-  // the download is the card's main action once there is something to download
-  $('btnLibDownload').classList.toggle('btn-primary', !!n);
-  $('btnLibDownload').classList.toggle('btn-ghost', !n);
-  $('btnLibClear').disabled = !n;
-  $('mLibList').innerHTML = !n
-    ? `<div class="grid h-full place-items-center py-6 text-center">
-        <div class="max-w-xs space-y-2">
-          <svg class="mx-auto h-10 w-10 text-slate-300 dark:text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="3" width="6" height="18" rx="1.5"/><path d="M9 8.5l4.6-2.7a1.5 1.5 0 0 1 2 .5l1.6 2.8a1.5 1.5 0 0 1-.5 2L9 15.5"/><path d="M9 21h10.5a1.5 1.5 0 0 0 1.5-1.5v-3a1.5 1.5 0 0 0-1.5-1.5H14"/><circle cx="6" cy="17.5" r="1"/></svg>
-          <p class="text-sm font-medium text-slate-700 dark:text-slate-200">No colors yet</p>
-          <p class="text-xs text-slate-500">Add a finished match from its result, type one in with + Add a color, or import a library from your RIP.</p>
-        </div>
-      </div>`
-    : `<table class="w-full text-sm"><thead class="sticky top-0 bg-white text-xs text-slate-500 dark:bg-slate-900"><tr><th class="text-left font-normal">Name</th><th class="text-right font-normal">L*</th><th class="text-right font-normal">a*</th><th class="text-right font-normal">b*</th><th class="text-right font-normal">Pred. ΔE00</th><th></th></tr></thead><tbody>
-      ${spotLib.colors.map((c, i) => `<tr class="border-t border-slate-200 dark:border-slate-800" data-lib="${i}">
-        <td class="py-1.5"><button data-lib-act="rename" class="flex items-center gap-2 text-left hover:underline" title="Rename"><span class="h-5 w-5 flex-none rounded ring-1 ring-black/10" style="background:${displayHex(c.lab)}"></span><span class="font-medium">${escapeHtml(c.name)}</span></button></td>
-        <td class="text-right font-mono tabular-nums">${c.lab[0].toFixed(2)}</td><td class="text-right font-mono tabular-nums">${c.lab[1].toFixed(2)}</td><td class="text-right font-mono tabular-nums">${c.lab[2].toFixed(2)}</td>
-        <td class="text-right font-mono tabular-nums">${c.predictedDeltaE != null ? c.predictedDeltaE.toFixed(2) : '–'}</td>
-        <td class="text-right"><button data-lib-act="del" class="text-xs text-rose-600 hover:underline px-1" title="Remove from the library">remove</button></td></tr>`).join('')}
-      </tbody></table>`;
-  // Formats with reduced Lab precision round the values: say what that costs for this library when it matters.
-  let note = '', worst = 0;
-  if (n && ex.quantize) {
-    worst = Math.max(...spotLib.colors.map((c) => deltaE2000(c.lab, ex.quantize(c.lab))));
-    if (worst >= 0.1) note = `${ex.label} stores ${ex.precision} – the largest rounding in this library is ΔE00 ${worst.toFixed(2)}. For full precision use CxF3 or type the values into the RIP.`;
-  }
-  $('mLibNote').textContent = note;
-  $('mLibNote').className = `text-xs ${note && worst > match.tol / 2 ? 'text-amber-600' : 'text-slate-500'}`;
-}
-
-/** Copy a color's result – or other values for it (`res`, e.g. the color space prediction) – as text. */
-function copyMatchValues(c, res = latest(c)?.result, mode = latest(c)?.mode, k = latest(c)?.kFixed) {
-  if (!res) return;
-  const text = `${colorLabel(c)} – ${{ spot: 'L*a*b*', lab: 'L*a*b*', cmyk: 'CMYK', rgb: 'sRGB' }[mode]}: ` + formatValues(mode, res.x, k).map(([key, v]) => `${key} ${v}`).join(', ') +
-    ` (predicted ${DE().label} ${res.predictedDeltaE.toFixed(2)} to reference L*a*b* ${c.target.map((v) => v.toFixed(2)).join(' / ')})`;
-  navigator.clipboard?.writeText(text).then(() => toast('Values copied', 'ok'), () => toast('Clipboard not available', 'error'));
-}
+// ---------------------------------------------------------------- colors in and out
+// Colors come in from swatch and library files; they go out as a spot color library for the RIP, each under its
+// name with its recommended L*a*b*.
+const libraryName = () => (match.libraryName ?? '').trim() || DEFAULT_LIBRARY_NAME;
 
 /**
- * Add a color's result – or other values for it (`res`: { x, predictedDeltaE }, e.g. the color space prediction) – to
- * the spot library under its name (replacing a color with the same name).
+ * A color's recommended L*a*b* for the RIP: its latest test-sheet result, else what the color space predicts (a
+ * measured patch when one printed closer). Returns { lab, dE, source: 'result' | 'prediction' | 'measured' }, null when
+ * there is neither, or – `later` – undefined while the prediction is still to be worked out (it is, in the background).
  */
-function addResultToLibrary(c, res = latest(c)?.result, mode = latest(c)?.mode) {
-  if (!res || !isLabMode(mode)) return;
-  let name = c.name.trim();
-  if (!name) {
-    name = (prompt('Spot color name – exactly as it is named in your artwork and the RIP:') ?? '').trim();
-    if (!name) return;
-    c.name = name; saveMatch();
-  }
-  if (putInLibrary({ name, lab: res.x, target: c.target, predictedDeltaE: res.predictedDeltaE, mf: match.mf })) {
-    $('mLibraryCard').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }
+function outputOf(c, { later = false } = {}) {
+  const r = [...c.rounds].reverse().find((x) => x.result && isLabMode(x.mode));
+  if (r) return { lab: r.result.x, dE: r.result.predictedDeltaE, source: 'result' };
+  if (!isLabMode(match.mode) || !c.target) return null;
+  const p = spacePrediction(c, { later });
+  if (p === undefined) return undefined;
+  return p ? { lab: p.x, dE: p.predictedDeltaE, source: p.measured ? 'measured' : 'prediction' } : null;
 }
 
-/** Add or (after asking) replace a color by name. Returns true if the library changed. */
-function putInLibrary(c) {
-  const entry = { predictedDeltaE: null, ...c, lab: c.lab.map(round2), time: new Date().toISOString() };
-  const i = spotLib.colors.findIndex((o) => o.name === c.name);
-  if (i >= 0) {
-    if (!confirm(`“${c.name}” is already in the spot library. Replace it with the new values?`)) return false;
-    spotLib.colors[i] = entry;
-  } else spotLib.colors.push(entry);
-  saveLib(); renderMatch();
-  toast(`“${c.name}” ${i >= 0 ? 'updated in' : 'added to'} the spot library`, 'ok');
-  return true;
+/** What the library file holds: every color with a reference, under its name, with its recommended L*a*b* – or its reference where there is none yet. */
+function libraryColors() {
+  return match.colors.filter((c) => c.target).map((c) => {
+    const o = outputOf(c);
+    return { name: colorLabel(c), lab: o ? o.lab : c.target, fromReference: !o };
+  });
 }
 
-function addLibraryColorByHand(e) {
-  e.preventDefault();
-  const name = $('libNewName').value.trim();
-  const lab = ['libNewL', 'libNewA', 'libNewB'].map((id) => parseFloat($(id).value));
-  if (!name) { toast('Enter the spot color name – exactly as it is named in your artwork and the RIP.', 'error'); $('libNewName').focus(); return; }
-  if (!lab.every(Number.isFinite) || lab[0] < 0 || lab[0] > 100 || Math.abs(lab[1]) > 128 || Math.abs(lab[2]) > 128) { toast('Enter L* (0–100), a* and b* (−128–127).', 'error'); return; }
-  if (!putInLibrary({ name, lab })) return;
-  for (const id of ['libNewName', 'libNewL', 'libNewA', 'libNewB']) $(id).value = '';
-  if ($('mLibDialog').open) $('mLibDialog').close();
+/** "Download library": every color (see libraryColors) as a library file in the chosen format, named after the library. */
+function downloadColorLibrary() {
+  const ex = RIP_EXPORTS[match.ripFormat];
+  const colors = libraryColors();
+  if (!ex || !colors.length) return;
+  const library = libraryName(), asReference = colors.filter((c) => c.fromReference).length;
+  const description = `${colors.length} color(s) from SD-10 Print match – recommended values${asReference ? `, ${asReference} still their reference` : ''}; CIE L*a*b* D50/2°`;
+  downloadFile(ex.build({ library, description, colors: colors.map(({ name, lab }) => ({ name, lab: lab.map(round2) })) }), ex.mime, `${safeFileName(library)}.${ex.ext}`);
+  debugLog('match', `library downloaded (${ex.label})`, { colors: colors.length, asReference });
+}
+
+/** The Colors card's export row: the download button and what the file will hold. */
+function renderLibraryExport() {
+  const ex = RIP_EXPORTS[match.ripFormat] ?? RIP_EXPORTS.cxf;
+  const lab = isLabMode(match.mode), withRef = match.colors.filter((c) => c.target);
+  const btn = $('btnLibDownload');
+  btn.textContent = `Download library (${ex.label})`;
+  btn.disabled = !lab || !withRef.length;
+  btn.title = lab ? `Every color under its name with its recommended L*a*b* (its reference until it has one), as a ${ex.label} file for the RIP – format and name under Measuring & matching` : 'Spot color libraries hold L*a*b* values – for spot color or L*a*b* sheets';
+  if (document.activeElement !== $('mLibName')) $('mLibName').value = libraryName();
+  if (!lab || !withRef.length) { $('mLibNote').textContent = ''; return; }
+  const outs = withRef.map((c) => outputOf(c, { later: true }));
+  const pending = outs.filter((o) => o === undefined).length, asRef = outs.filter((o) => o === null).length;
+  const parts = [];
+  if (asRef) parts.push(`${asRef} of ${withRef.length} without a recommendation yet go in with their reference`);
+  if (pending) parts.push('working out predictions…');
+  // formats with reduced L*a*b* precision round the values: say what that costs when it matters
+  let worst = 0;
+  if (ex.quantize) {
+    worst = Math.max(0, ...withRef.map((c, i) => { const v = outs[i]?.lab ?? c.target; return deltaE2000(v, ex.quantize(v)); }));
+    if (worst >= 0.1) parts.push(`${ex.label} stores ${ex.precision} – rounding costs up to ΔE00 ${worst.toFixed(2)}; for full precision use CxF3`);
+  }
+  $('mLibNote').textContent = parts.join(' · ');
+  $('mLibNote').className = `text-xs ${worst > match.tol / 2 ? 'text-amber-600' : 'text-slate-500'}`;
 }
 
 /**
@@ -1154,60 +1164,51 @@ async function importColorsFile(file) {
   toast(`${fresh.length} color${fresh.length === 1 ? '' : 's'} added from ${file.name}${left ? ` (${left} already in the list)` : ''}${lib.skipped.length ? ` – ${lib.skipped.length} without L*a*b* skipped` : ''}. Measure a sample to replace a swatch value with the real color.`, 'ok');
 }
 
-async function importLibraryFile(file) {
-  if (file.size > 20 * 1024 * 1024) { toast('That file is too large for a spot color library.', 'error'); return; }
-  let lib;
-  try { lib = readLibrary(new Uint8Array(await file.arrayBuffer()), file.name); } catch (e) { toast(e.message, 'error'); return; }
-  if (!lib.colors.length) { toast(`No usable L*a*b* (D50 / 2°) colors in ${file.name}${lib.skipped.length ? ` (${lib.skipped.length} color(s) without L*a*b*, e.g. CMYK)` : ''}.`, 'error'); return; }
-  const names = new Set(spotLib.colors.map((c) => c.name));
-  const clashes = lib.colors.filter((c) => names.has(c.name));
-  const replace = clashes.length ? confirm(`${clashes.length} of the ${lib.colors.length} colors in ${file.name} are already in the spot library (${clashes.slice(0, 3).map((c) => `“${c.name}”`).join(', ')}${clashes.length > 3 ? ' …' : ''}).\n\nOK = replace them with the imported values, Cancel = keep the library's values.`) : false;
-  if (!spotLib.colors.length && lib.library) spotLib.name = lib.library.slice(0, 60);
-  let added = 0, replaced = 0;
-  for (const c of lib.colors) {
-    const entry = { name: c.name, lab: c.lab.map(round2), predictedDeltaE: null, imported: file.name, time: new Date().toISOString() };
-    const i = spotLib.colors.findIndex((o) => o.name === c.name);
-    if (i < 0) { spotLib.colors.push(entry); added++; } else if (replace) { spotLib.colors[i] = entry; replaced++; }
-  }
-  saveLib(); renderMatch();
-  toast(`Imported ${file.name}: ${added} added${replaced ? `, ${replaced} replaced` : ''}${clashes.length && !replace ? `, ${clashes.length} kept` : ''}${lib.skipped.length ? ` – ${lib.skipped.length} skipped (no D50 / 2° L*a*b*)` : ''}`, 'ok');
-}
-
-/** Rename and remove buttons in the library table. */
-function onLibraryClick(e) {
-  const b = e.target.closest('[data-lib-act]');
-  if (!b) return;
-  const i = +b.closest('[data-lib]').dataset.lib;
-  const c = spotLib.colors[i];
-  if (b.dataset.libAct === 'del') {
-    if (!confirm(`Remove “${c.name}” from the spot library?`)) return;
-    spotLib.colors.splice(i, 1);
-  } else {
-    const name = (prompt('Spot color name – exactly as it is named in your artwork and the RIP:', c.name) ?? '').trim();
-    if (!name || name === c.name) return;
-    if (spotLib.colors.some((o) => o.name === name)) { toast(`“${name}” is already in the library.`, 'error'); return; }
-    c.name = name;
-  }
-  saveLib(); renderMatch();
-}
-
 // ---------------------------------------------------------------- color space
 const SESSION_KIND = { chart: 'Chart', check: 'Check chart', gaps: 'Fill-gaps chart', sheet: 'Test sheet', import: 'Imported' };
 const predictionCache = new Map();
 
-/** What the color space predicts for a color's reference (cached), or null. CMYK keeps the K of the color's sheets. */
-function spacePrediction(c) {
+/**
+ * What a color's prediction rests on – the color space, the K held fixed (CMYK: the K of the color's sheets) and the
+ * cache key – or null when the color space cannot predict for it.
+ */
+function predictionInputs(c) {
   const s = usableSpace();
   if (!s || !c?.target || s.points.length < SPACE_MIN_POINTS) return null;
   const k = match.mode === 'cmyk' ? latest(c)?.kFixed ?? null : null;
-  const key = `${s.id}|${s.updated}|${s.points.length}|${c.target.join()}|${match.formula}|${k}`;
+  return { s, k, key: `${s.id}|${s.updated}|${s.points.length}|${c.target.join()}|${match.formula}|${k}` };
+}
+
+/**
+ * What the color space predicts for a color's reference (cached), or null. CMYK keeps the K of the color's sheets.
+ * `later`: return undefined instead of working it out now – the list's predictions are made in the background.
+ */
+function spacePrediction(c, { later = false } = {}) {
+  const inputs = predictionInputs(c);
+  if (!inputs) return null;
+  const { s, k, key } = inputs;
   if (!predictionCache.has(key)) {
+    if (later) { queuePredictions(); return undefined; }
     if (predictionCache.size > 100) predictionCache.clear();
     let p = null;
     try { p = invert(s, c.target, { formula: match.formula, kFixed: k }); } catch { /* no prediction */ }
     predictionCache.set(key, p);
   }
   return predictionCache.get(key);
+}
+
+/** Work out the missing predictions of the color list one per tick, redrawing the list (and the export row) after each. */
+let predictionTimer = 0;
+function queuePredictions() {
+  if (predictionTimer) return;
+  predictionTimer = setTimeout(() => {
+    predictionTimer = 0;
+    // (a prediction may have been made meanwhile – e.g. for the reference card – so the list is redrawn either way)
+    const c = match.colors.find((x) => { const inputs = predictionInputs(x); return inputs && !predictionCache.has(inputs.key); });
+    if (c) spacePrediction(c);
+    if (state.view === 'match') { $('mColorList').innerHTML = colorListHtml(); renderLibraryExport(); }
+    if (c) queuePredictions();
+  }, 30);
 }
 
 /** Reference card: the values the color space predicts for the reference, and how close they should print. */
@@ -1224,7 +1225,7 @@ function spacePredictionHtml(c) {
       : `<span class="text-rose-600"><b>Beyond what this printer reached in the color space.</b> The closest it prints is ${lab}, ${DE().label} ${p.predictedDeltaE.toFixed(2)} from the reference.</span>`}
       ${p.measured ? '<span class="text-slate-500">These are the values of a patch already measured – no prediction prints closer.</span>' : ''}
       <span class="text-slate-500">The color space is typically accurate to ΔE00 ${st.accuracy ? st.accuracy.median.toFixed(2) : '–'}${rough ? ', but it has few measured patches near this color, so treat this as a first estimate' : ''}. The first test sheet starts from these values${rough ? '' : ' with finer steps'} and confirms them.</span></p>
-    <div class="flex flex-wrap gap-2"><button type="button" data-pred-act="copy" class="btn btn-ghost">Copy values</button>${isLabMode(match.mode) ? '<button type="button" data-pred-act="add" class="btn btn-ghost" title="Add the predicted values to your spot library under the color’s name">Add to spot library</button>' : ''}</div>`;
+    <div class="flex flex-wrap gap-2"><button type="button" data-pred-act="copy" class="btn btn-ghost">Copy values</button></div>`;
 }
 
 /** The Color space card: the space in use, what it holds and how well it predicts, drift warnings, its data. */
@@ -1463,9 +1464,9 @@ function measureForSpaceView() {
 }
 
 // ---------------------------------------------------------------- start-up
-// Files dropped anywhere on Print match: spot color libraries go into the spot library, .icc/.icm files become
-// printer profiles, color spaces and CGATS measurement files become color spaces. The browser would otherwise open a
-// file dropped outside a drop zone, so every drop is caught.
+// Files dropped anywhere on Print match: swatch and spot color library files add colors to match, .icc/.icm files
+// become printer profiles, color spaces and CGATS measurement files become color spaces. The browser would otherwise
+// open a file dropped outside a drop zone, so every drop is caught.
 function wireDrop() {
   const view = $('viewMatch');
   const hasFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files');
@@ -1478,9 +1479,8 @@ function wireDrop() {
     depth = 0; highlight(false);
     for (const file of e.dataTransfer?.files ?? []) {
       if (/\.ic[cm]$/i.test(file.name)) await addPrinterProfile(file);
-      else if (e.target.closest('#mColorsCard')) await importColorsFile(file); // on the Colors card: colors to match
       else if (/\.(json|txt|cgats|cgt|it8|ti3)$/i.test(file.name)) await importSpaceFile(file);
-      else await importLibraryFile(file);
+      else await importColorsFile(file); // swatch and library files: colors to match
     }
   });
 }
@@ -1526,11 +1526,10 @@ function wireColors() {
     const c = activeColor(), p = b && spacePrediction(c);
     if (!p) return;
     if (b.dataset.predAct === 'copy') copyMatchValues(c, p, match.mode, p.k);
-    else addResultToLibrary(c, p, match.mode);
   };
 }
 
-/** Settings card (and the tips under it). */
+/** Settings card, the Measuring & matching dialog and the tips. */
 function wireSettings() {
   $('mMode').onchange = () => {
     if (match.colors.some((c) => c.rounds.length) && !confirm('Changing the sheet type starts every color over. Continue?')) { $('mMode').value = match.mode; return; }
@@ -1574,9 +1573,9 @@ function wireSettings() {
   // Tips remember whether they were open (closed at first)
   $('mTipsBox').open = readFlag('sd10.tipsOpen');
   $('mTipsBox').ontoggle = () => writeFlag('sd10.tipsOpen', $('mTipsBox').open);
-  // the dialogs: Measuring & matching, Add a color – closed by their ✕ / Done, Esc, or a click on the backdrop
   $('btnMoreSettings').onclick = () => $('mMoreDialog').showModal();
-  for (const dialog of [$('mMoreDialog'), $('mLibDialog')]) {
+  // dialogs close with their ✕ / Done ([data-close-dialog]), Esc, or a click on the backdrop
+  for (const dialog of $('viewMatch').querySelectorAll('dialog')) {
     dialog.addEventListener('click', (e) => {
       if (e.target.closest('[data-close-dialog]')) { dialog.close(); return; }
       const r = dialog.getBoundingClientRect();
@@ -1589,7 +1588,7 @@ function wireSettings() {
 function wireSheetCards() {
   $('btnMatchSheet').onclick = startFirstSheet;
   $('btnMatchPdf').onclick = downloadSheet;
-  $('btnMatchRipSheet').onclick = () => downloadRipLibrary('sheet');
+  $('btnMatchRipSheet').onclick = downloadSheetLibrary;
   $('btnMatchRestart').onclick = restartSheet;
   $('btnMatchMeasure').onclick = measurePatch;
   $('btnMatchAnalyse').onclick = analyseMatch;
@@ -1608,7 +1607,6 @@ function wireSheetCards() {
     if (!c) return;
     if (b.dataset.resAct === 'accept') { c.accepted = !c.accepted; commit(); }
     else if (b.dataset.resAct === 'copy') copyMatchValues(c);
-    else if (b.dataset.resAct === 'add') addResultToLibrary(c);
   };
 }
 
@@ -1629,22 +1627,10 @@ function wireSpaceCard() {
   $('mSpaceCard').addEventListener('click', onSpaceClick);
 }
 
-/** Spot library card. */
+/** The library download (Colors card) and the library's name (Measuring & matching). */
 function wireLibrary() {
-  $('btnLibDownload').onclick = () => downloadRipLibrary('library');
-  $('btnLibImport').onclick = () => $('libFile').click();
-  onFilePicked('libFile', importLibraryFile);
-  $('btnLibClear').onclick = () => { if (confirm('Remove all colors from the spot library?')) { spotLib.colors = []; saveLib(); renderMatch(); } };
-  $('mLibName').onchange = () => { spotLib.name = $('mLibName').value.trim() || DEFAULT_LIBRARY_NAME; saveLib(); renderMatch(); };
-  $('mLibList').onclick = onLibraryClick;
-  // "Add a color" (and the library's name, Clear) in a dialog – closing is wired with the other dialogs
-  $('btnLibAddOpen').onclick = () => { $('mLibDialog').showModal(); $('libNewName').focus(); };
-  $('libAddForm').onsubmit = addLibraryColorByHand;
-  $('btnLibFromLast').onclick = () => {
-    if (!state.lastLabD50) { toast('Measure a color first (in the Console or here in Print match).', 'error'); return; }
-    state.lastLabD50.forEach((v, i) => { $(['libNewL', 'libNewA', 'libNewB'][i]).value = v.toFixed(2); });
-    $('libNewName').focus();
-  };
+  $('btnLibDownload').onclick = downloadColorLibrary;
+  $('mLibName').onchange = () => { match.libraryName = $('mLibName').value.trim().slice(0, 60); commit(); };
 }
 
 /** Called once by app.js with the Console's state and helpers; wires Print match and the Color space view, opens the view in the URL. */

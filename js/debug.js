@@ -4,18 +4,18 @@
 //
 // The journal is kept in this browser (localStorage 'sd10.debugJournal', the newest 1500 entries), so it survives a
 // reload – a problem from earlier in the day is still in the report.
+import { loadJson, saveJson } from './storage.js';
+
 const JOURNAL_KEY = 'sd10.debugJournal';
 const MAX_ENTRIES = 1500;
 /** The release, from this module's own versioned URL (see the import map in index.html). */
 export const APP_VERSION = new URL(import.meta.url).searchParams.get('v') || 'development';
 
-const journal = (() => {
-  try { return JSON.parse(localStorage.getItem(JOURNAL_KEY)) || []; } catch { return []; }
-})();
+const journal = loadJson(JOURNAL_KEY, []);
 let saveTimer = null;
 const persist = () => {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => { try { localStorage.setItem(JOURNAL_KEY, JSON.stringify(journal)); } catch { /* storage full or blocked */ } }, 500);
+  saveTimer = setTimeout(() => saveJson(JOURNAL_KEY, journal), 500); // (storage full or blocked: the journal still lives for the session)
 };
 /**
  * Data as plain JSON: numbers rounded to 4 decimals, 64-bit values (the device's error bits) as hex; anything that still
@@ -69,10 +69,13 @@ export function installDebugCapture() {
   debugLog('start', 'page loaded', { version: APP_VERSION, url: location.href });
 }
 
-/** What the visible view shows: each card's heading and text (as rendered, hidden parts left out), and the last message. */
+/**
+ * What the visible view shows: each card's heading and text (as rendered, hidden parts left out), and the last message.
+ * Cards that only wrap other cards are left out (their cards are listed); a dialog styled as a card does not count.
+ */
 function screenText() {
   const view = [...document.querySelectorAll('main')].find((m) => !m.classList.contains('hidden'));
-  const cards = view ? [...view.querySelectorAll('.card, section')].filter((c) => c.offsetParent !== null && !c.querySelector('.card')) : [];
+  const cards = view ? [...view.querySelectorAll('.card, section')].filter((c) => c.offsetParent !== null && !c.querySelector('.card:not(dialog)')) : [];
   const toastEl = document.getElementById('toast');
   const labelOf = (el) => ((el.id && document.querySelector(`label[for="${el.id}"]`)?.textContent) || el.closest('label')?.textContent || el.getAttribute('aria-label') || el.id).replace(/\s+/g, ' ').trim();
   return {

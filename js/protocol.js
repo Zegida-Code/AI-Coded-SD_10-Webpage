@@ -49,8 +49,6 @@ export const AUTO_POWER_OFF = { 0: 'Disabled', 1: '10 min', 2: '30 min', 3: '60 
 export const PANEL_DIRECTION = { 0: '0°', 1: '90°', 2: '180°', 3: '270°' };
 export const LANGUAGES = { 0: 'Japanese', 1: 'English', 2: 'French', 3: 'German', 4: 'Italian', 5: 'Spanish', 6: 'Portuguese', 8: 'Turkish', 9: 'Dutch', 10: 'Russian', 11: 'Chinese (Simplified)', 12: 'Chinese (Traditional)', 13: 'Korean' };
 
-export const LIB_ERROR = { 0: 'OK', 1: 'Memory', 3: 'Invalid parameter', 4: 'Out of bound', 5: 'Busy', 6: 'Other', 7: 'Control rejected', 8: 'Timeout' };
-
 export const STATUS_ERROR_BITS = {
   2: 'FATAL: temperature high', 3: 'FATAL: temperature low', 4: 'FATAL: battery not responding', 5: 'FATAL: battery connection',
   6: 'FATAL: battery timeout', 7: 'FATAL: battery update error', 8: 'FATAL: battery full error', 9: 'FATAL: LED driver',
@@ -212,8 +210,6 @@ export function payloadOf(reply, cmd, op = OP.REPLY) {
   if (reply.length < HEADER_LEN + len) throw new ProtocolError('truncated reply');
   return reply.subarray(HEADER_LEN, HEADER_LEN + len);
 }
-
-export const replyLength = (payloadLen) => HEADER_LEN + payloadLen;
 
 export function parseAscii(payload) {
   const end = payload.indexOf(0);
