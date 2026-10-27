@@ -310,6 +310,22 @@
       const autoCount = d.querySelectorAll('#mPatchGrid [data-patch]').length;
       log(/ · 1 page of /.test(text('mSheetInfo')) && text('mSheetInfo').includes(`(${autoCount - 16} fill-in`),
         `"Fill the free space" fills the page the sheet needs anyway (${autoCount - 16} fill-in patches, still 1 page)`);
+      // a second color's sheet made before the first is scanned: its fill-ins go to other gaps than the first sheet's
+      setSel('mFillIn', '8');
+      $('btnColorAdd').click();
+      [['mL', 60], ['mA', -20], ['mB', 30]].forEach(([id, v]) => { $(id).value = String(v); });
+      $('mB').dispatchEvent(new Event('change'));
+      await until(() => !$('btnMatchSheet').disabled);
+      $('btnMatchSheet').click();
+      await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 24);
+      {
+        const job = JSON.parse(w.localStorage.getItem('sd10.match')), last = job.colors[job.colors.length - 1];
+        const fills = (c) => (c.rounds[c.rounds.length - 1]?.patches ?? []).filter((q) => q.fill && !q.lab).map((q) => q.x);
+        const others = job.colors.filter((c) => c !== last).flatMap(fills), mine = fills(last);
+        const closest = Math.min(...mine.map((x) => Math.min(...others.map((y) => Math.hypot(...x.map((v, k) => v - y[k]))))));
+        log(others.length > 0 && mine.length === 8 && closest > 3,
+          `sheets made before any is scanned get different fill-ins (closest to the other sheet's: ${closest.toFixed(1)} L*a*b*)`);
+      }
       setSel('mFillIn', '0');
 
       log(errors.length === 0, `no script errors${errors.length ? ': ' + errors.join(' | ') : ''}`);

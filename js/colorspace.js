@@ -7,11 +7,13 @@
 //     sparse (at the edge of what the chart measured) it fits a line instead, and says so (`sparse`).
 //   - invert(target) finds the inputs whose predicted print is closest to a reference (Gauss-Newton on the local fits,
 //     started from the best-printing measured patches), staying close to measured patches – an honest answer, also for
-//     colors the printer cannot reach.
+//     colors the printer cannot reach: never worse than a patch already measured, and beyond the printer's reach the
+//     request nearest the reference among those that print alike (mildest).
 //   - learn() adds every patch scanned later (test sheets, check charts, fill-ins), so the space gets denser where it is
 //     used. Each one is first compared with what the rest of the space predicts for it, where measured patches surround
 //     it: when a whole sheet disagrees, the printer, ink or media has probably changed (driftOf).
-//   - gapFillers() picks inputs where the space has measured least – fill-in patches and Fill gaps charts.
+//   - gapFillers() picks inputs where the space has measured least – fill-in patches and Fill gaps charts – counting
+//     patches already planned on sheets not yet scanned as measured.
 // Points belong to sessions (a chart, a check chart, one test sheet, an imported file); a session or a single patch
 // can be removed again.
 import { deltaE2000, round2 } from './color.js';
@@ -434,9 +436,11 @@ const NEAR_MAX = 8;
  * sampling), so they spread into the empty regions instead of crowding one. With `near` (an input, e.g. a sheet's
  * centre), half of them (at most NEAR_MAX) come from around it – up to three patch spacings away – where the color
  * being matched needs the data; the rest from anywhere. CMYK: `near` carries its K (kept for the picks around it).
+ * `planned`: inputs already on sheets waiting to be scanned (fill-ins of other sheets, a chart in progress) – they count
+ * as measured, so sheets made one after another before any is scanned fill different gaps.
  * Returns [{ x (3 values), k (CMYK only) }].
  */
-export function gapFillers(space, count, { near = null, seed = 1 } = {}) {
+export function gapFillers(space, count, { near = null, seed = 1, planned = [] } = {}) {
   const mode = space.mode, D = inputCount(mode), u = UNIT[mode];
   const { min, max } = MODES[mode];
   const lo = [...min, 0].slice(0, D), hi = [...max, 100].slice(0, D);
@@ -454,7 +458,8 @@ export function gapFillers(space, count, { near = null, seed = 1 } = {}) {
   });
   // distance (in input units) from each candidate to the nearest measured patch or earlier pick
   const dist = (a, b) => Math.hypot(...a.map((v, k) => (v - b[k]) / u[k]));
-  const nearest = (pool) => pool.map((x) => space.points.reduce((m, p) => Math.min(m, dist(x, p.x)), Infinity));
+  const covered = [...space.points.map((p) => p.x), ...planned];
+  const nearest = (pool) => pool.map((x) => covered.reduce((m, y) => Math.min(m, dist(x, y)), Infinity));
   const picks = [];
   const take = (pool, n) => {
     const d = nearest(pool);

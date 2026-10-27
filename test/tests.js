@@ -679,6 +679,12 @@ async function spaceCheck() {
       fills.length === 8 && new Set(fills.map((f) => f.x.join())).size === 8 && fills.every((f) => nearest(f.x) > spacing) &&
       fromCentre.slice(0, 4).every((d) => d <= 3.5 * spacing) && JSON.stringify(gapFillers(space, 8, { near: centre, seed: 21 })) === JSON.stringify(fills) &&
       gaps.length === 48 && gaps.every((p, i) => p.n === i + 1) && gaps.every((p) => nearest(p.x) > spacing));
+    // sheets made one after another before any is scanned: the second sheet's fill-ins avoid the first's
+    const first = gapFillers(space, 8, { seed: 31 }), again = gapFillers(space, 8, { seed: 32 });
+    const second = gapFillers(space, 8, { seed: 32, planned: first.map((f) => f.x) });
+    const closest = (set) => Math.min(...set.map((f) => Math.min(...first.map((g) => Math.hypot(...f.x.map((v, k) => v - g.x[k]))))));
+    check(`fill-ins of sheets not yet scanned count as measured: the next sheet fills other gaps (nearest to the first sheet's ${closest(second).toFixed(1)}, without that ${closest(again).toFixed(1)})`,
+      closest(second) > spacing && closest(second) > closest(again));
     // removing one patch (undo, or a stray point): with its check; a session left empty goes too
     const tmp = readSpaceFile(new TextEncoder().encode(spaceToJson(space)), 't.json');
     const one = tmp.points.find((p) => p.s === 'sheet:R1');

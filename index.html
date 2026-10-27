@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <link rel="stylesheet" href="css/app.css?v=2026-10-26.bed88e1-203645">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-26.a86154f-215410">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -294,9 +294,10 @@
         <!-- the colors as a spot library for the RIP: each under its name with its recommended L*a*b*, in the format chosen
              here (the test sheets' Sheet library uses it too) -->
         <div class="space-y-1.5 border-t border-slate-200 pt-3 dark:border-slate-800">
-          <label class="label" for="mRipFormat">Spot library for the RIP</label>
+          <div class="text-xs font-medium text-slate-500">Spot library for the RIP</div>
+          <input id="mLibName" class="input" type="text" maxlength="60" autocomplete="off" aria-label="Spot library name" title="The library's name inside the downloaded file (and the file's name)" placeholder="Library name">
           <div class="flex gap-2">
-            <select id="mRipFormat" class="input min-w-0 flex-1" title="The file format your RIP imports – also used for the test sheets' Sheet library"><option value="cxf">CxF3 (.cxf)</option><option value="acb">Adobe Color Book (.acb)</option><option value="epcc">Epson Edge Print (.epcc)</option><option value="versaworks">VersaWorks (.spot)</option></select>
+            <select id="mRipFormat" class="input min-w-0 flex-1" aria-label="Spot library format" title="The file format your RIP imports – also used for the test sheets' Sheet library"><option value="cxf">CxF3 (.cxf)</option><option value="acb">Adobe Color Book (.acb)</option><option value="epcc">Epson Edge Print (.epcc)</option><option value="versaworks">VersaWorks (.spot)</option></select>
             <button id="btnLibDownload" type="button" class="btn btn-primary whitespace-nowrap" disabled>Download library</button>
           </div>
           <button id="btnLibProof" type="button" class="btn btn-ghost w-full" disabled title="One patch per color, named exactly like it, with the value the library gives it – print it through the RIP with the library imported, and check every color at once">Proof sheet of all colors (PDF)</button>
@@ -398,8 +399,6 @@
             <button id="btnPrinterIccRemove" type="button" class="btn btn-ghost hidden" title="Remove this profile from the browser">✕</button>
           </div>
           <input id="printerIccFile" type="file" accept=".icc,.icm" class="hidden"></div>
-        <div id="mLibNameWrap" class="col-span-2"><label class="label" for="mLibName">Spot library name (inside the downloaded file)</label>
-          <input id="mLibName" class="input" type="text" maxlength="60" autocomplete="off"></div>
         </div>
           <div class="flex justify-end"><button type="button" data-close-dialog class="btn btn-primary">Done</button></div>
         </div>
@@ -614,26 +613,26 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-26.bed88e1-203645",
-      "./js/transport.js": "./js/transport.js?v=2026-10-26.bed88e1-203645",
-      "./js/mock.js": "./js/mock.js?v=2026-10-26.bed88e1-203645",
-      "./js/session.js": "./js/session.js?v=2026-10-26.bed88e1-203645",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-26.bed88e1-203645",
-      "./js/color.js": "./js/color.js?v=2026-10-26.bed88e1-203645",
-      "./js/weights.js": "./js/weights.js?v=2026-10-26.bed88e1-203645",
-      "./js/storage.js": "./js/storage.js?v=2026-10-26.bed88e1-203645",
-      "./js/icc.js": "./js/icc.js?v=2026-10-26.bed88e1-203645",
-      "./js/match.js": "./js/match.js?v=2026-10-26.bed88e1-203645",
-      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-26.bed88e1-203645",
-      "./js/ui.js": "./js/ui.js?v=2026-10-26.bed88e1-203645",
-      "./js/match-view.js": "./js/match-view.js?v=2026-10-26.bed88e1-203645",
-      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-26.bed88e1-203645",
-      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-26.bed88e1-203645",
-      "./js/debug.js": "./js/debug.js?v=2026-10-26.bed88e1-203645",
-      "./js/space-view.js": "./js/space-view.js?v=2026-10-26.bed88e1-203645"
+      "./js/app.js": "./js/app.js?v=2026-10-26.a86154f-215410",
+      "./js/transport.js": "./js/transport.js?v=2026-10-26.a86154f-215410",
+      "./js/mock.js": "./js/mock.js?v=2026-10-26.a86154f-215410",
+      "./js/session.js": "./js/session.js?v=2026-10-26.a86154f-215410",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-26.a86154f-215410",
+      "./js/color.js": "./js/color.js?v=2026-10-26.a86154f-215410",
+      "./js/weights.js": "./js/weights.js?v=2026-10-26.a86154f-215410",
+      "./js/storage.js": "./js/storage.js?v=2026-10-26.a86154f-215410",
+      "./js/icc.js": "./js/icc.js?v=2026-10-26.a86154f-215410",
+      "./js/match.js": "./js/match.js?v=2026-10-26.a86154f-215410",
+      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-26.a86154f-215410",
+      "./js/ui.js": "./js/ui.js?v=2026-10-26.a86154f-215410",
+      "./js/match-view.js": "./js/match-view.js?v=2026-10-26.a86154f-215410",
+      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-26.a86154f-215410",
+      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-26.a86154f-215410",
+      "./js/debug.js": "./js/debug.js?v=2026-10-26.a86154f-215410",
+      "./js/space-view.js": "./js/space-view.js?v=2026-10-26.a86154f-215410"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-26.bed88e1-203645"></script>
+  <script type="module" src="js/app.js?v=2026-10-26.a86154f-215410"></script>
 </body>
 </html>

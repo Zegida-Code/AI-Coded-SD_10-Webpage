@@ -7,7 +7,8 @@
 // It shares the Console's device session: app.js hands over its state and helpers once, through initMatch().
 //
 // Sections: stored data · what the cards work on · formatting · views · media sizes · printer profile (gamut check) ·
-// rendering · measuring · sheets · colors in and out (swatch files, the library for the RIP) · color space · start-up.
+// what to use for a color · rendering · measuring · sheets · colors in and out (swatch files, the library for the RIP) ·
+// color space · start-up.
 import {
   $, DEMO, NEEDS_CALIBRATION, displayHex, downloadFile, escapeHtml, fmt1, formatValues, labText, onFilePicked, readFlag, round2, safeFileName,
   toast, valuesText, writeFlag,
@@ -190,6 +191,9 @@ function cmykPreviewHex([c, m, y], k) {
 function patchPreviewHex(mode, x, k) {
   return mode === 'cmyk' ? cmykPreviewHex(x, k) : mode === 'rgb' ? rgbHex(x) : displayHex(x);
 }
+/** A small inline color swatch (`size`: Tailwind size class). */
+const swatchHtml = (hex, size = 'h-2.5 w-2.5') => `<span class="inline-block ${size} rounded-sm align-middle ring-1 ring-black/10" style="background:${hex}"></span>`;
+
 /** Values as tiles – large in a result, smaller in the color space prediction. */
 function valueTilesHtml(mode, x, k, { large = false } = {}) {
   const tiles = formatValues(mode, x, k).map(([key, v]) => `<div class="rounded-lg bg-slate-100 dark:bg-slate-800 ${large ? 'px-3 py-2' : 'px-2 py-1.5'} text-center"><div class="text-[10px] text-slate-500">${key}</div><div class="font-mono ${large ? 'text-xl ' : ''}tabular-nums">${v}</div></div>`).join('');
@@ -371,6 +375,71 @@ async function removePrinterProfile() {
   commit();
 }
 
+// ---------------------------------------------------------------- what to use for a color
+/**
+ * The values to use for a color now – what the result card shows big, what Copy values copies and what the spot library
+ * gets – from a round's result (default: the latest round with one):
+ *   confirmed – a patch printed within tolerance: a measured answer beats any refinement. The sheet's centre values,
+ *               unless another patch printed clearly closer (by more than the measuring noise) – then that patch's;
+ *   printed   – the result is only a rough estimate beyond the sheet's patches: until a sheet confirms it, the best patch
+ *               printed so far (values that really printed);
+ *   result    – the result itself (interpolated within the sheet, or a measured patch already).
+ * Returns { x, k, mode, dE, measured (dE was measured, not predicted), why, round, n (the patch, when not the centre) }
+ * or null.
+ */
+function useNow(c, r = [...c.rounds].reverse().find((x) => x.result)) {
+  const res = r?.result;
+  if (!res) return null;
+  // the best patch printed so far (on this sheet or an earlier one) – its values and how close it printed
+  const bestRound = res.bestEver?.round ?? r.round, bestN = res.bestEver?.n ?? res.best.n, bestDE = res.bestEver?.dE ?? res.best.dE;
+  const rr = c.rounds.find((x) => x.round === bestRound), bp = rr?.patches.find((q) => q.n === bestN);
+  const bestPatch = bp && { x: bp.x, k: bp.k ?? rr.kFixed, mode: rr.mode, dE: bestDE, measured: true, round: bestRound, n: bestN };
+  const centreOk = res.centreDE != null && res.centreDE <= match.tol;
+  const noise = Math.max(0.3, res.repeatability ?? 0);
+  if (centreOk && !(bestPatch && res.centreDE - bestDE > noise)) {
+    return { x: r.centre, k: r.kFixed, mode: r.mode, dE: res.centreDE, measured: true, why: 'confirmed', round: r.round };
+  }
+  if (bestPatch && bestDE <= match.tol) return { ...bestPatch, why: 'confirmed' };
+  if (res.extrapolated && bestPatch) return { ...bestPatch, why: 'printed' };
+  const measured = res.source === 'best-patch' || res.source === 'best-earlier';
+  return { x: res.x, k: r.kFixed, mode: r.mode, dE: res.predictedDeltaE, measured, why: 'result', round: r.round };
+}
+
+/**
+ * A color's recommended L*a*b* for the RIP: the values to use now from its latest test-sheet result (useNow – values
+ * a sheet backs up), else what the color space predicts (a measured patch when one printed closer) – unless the
+ * output is set by hand (c.fixed), which always wins. Returns { lab, cmyk (set by hand in CMYK; lab is then null), dE
+ * (null when set by hand), source (an OUTPUT_SOURCES key) },
+ * null when there is nothing, or – `later` – undefined while the prediction is still to be worked out (it is, in the
+ * background).
+ */
+function outputOf(c, { later = false } = {}) {
+  if (c.fixed) return { lab: c.fixed.space === 'lab' ? c.fixed.v : null, cmyk: c.fixed.space === 'cmyk' ? c.fixed.v : null, dE: null, source: 'fixed' };
+  const r = [...c.rounds].reverse().find((x) => x.result && isLabMode(x.mode));
+  if (r) {
+    const u = useNow(c, r);
+    return { lab: u.x, dE: u.dE, source: u.why };
+  }
+  if (!isLabMode(match.mode) || !c.target) return null;
+  const p = spacePrediction(c, { later });
+  if (p === undefined) return undefined;
+  return p ? { lab: p.x, dE: p.predictedDeltaE, source: p.measured ? 'measured' : 'prediction' } : null;
+}
+
+/** Where a color's output comes from (outputOf's source): the word in the color list, and the longer reason. */
+const OUTPUT_SOURCES = {
+  fixed: ['set by hand', 'set by hand'],
+  confirmed: ['confirmed', 'its sheet values, which printed within tolerance'],
+  printed: ['printed', 'the best patch printed so far – the result is still a rough estimate'],
+  result: ['result', 'its latest test-sheet result'],
+  prediction: ['predicted', 'the color space prediction'],
+  measured: ['measured', 'a patch the color space measured'],
+};
+/** A color's output (see outputOf) as text – L*a*b* or, set by hand, CMYK – and as a display color. */
+const outputText = (o) => (o.cmyk ? `C${fmt1(o.cmyk[0])} M${fmt1(o.cmyk[1])} Y${fmt1(o.cmyk[2])} K${fmt1(o.cmyk[3])}` : o.lab.map(fmt1).join(' / '));
+const outputHex = (o) => (o.cmyk ? cmykPreviewHex(o.cmyk, o.cmyk[3]) : displayHex(o.lab));
+
+
 // ---------------------------------------------------------------- rendering
 export function matchControls(busyLabel) {
   if (!state || !$('btnMatchMeasure')) return; // the Console refreshes its controls before initMatch() has run
@@ -394,35 +463,6 @@ export function matchControls(busyLabel) {
   $('btnMatchMeasure').textContent = busyLabel ? `${busyLabel}…`
     : !p ? 'Measure patch' : `Measure patch #${p.n}${match.colors.length > 1 && !chart ? ` – ${colorLabel(c)}` : ''}${reading(p.lab ? 0 : p.reads?.length ?? 0)}`;
   $('btnMatchTarget').textContent = `Measure reference${color.refReads.length ? reading(color.refReads.length) : ''}`;
-}
-
-/**
- * The values to use for a color now – what the result card shows big, what Copy values copies and what the spot library
- * gets – from a round's result (default: the latest round with one):
- *   confirmed – a patch printed within tolerance: a measured answer beats any refinement. The sheet's centre values,
- *               unless another patch printed clearly closer (by more than the measuring noise) – then that patch's;
- *   measured  – the result is only a rough estimate beyond the sheet's patches: until a sheet confirms it, the best patch
- *               measured so far (values that really printed);
- *   result    – the result itself (interpolated within the sheet, or a measured patch already).
- * Returns { x, k, mode, dE, measured (dE was measured, not predicted), why, round, n (the patch, when not the centre) }
- * or null.
- */
-function useNow(c, r = [...c.rounds].reverse().find((x) => x.result)) {
-  const res = r?.result;
-  if (!res) return null;
-  // the best patch printed so far (on this sheet or an earlier one) – its values and how close it printed
-  const bestRound = res.bestEver?.round ?? r.round, bestN = res.bestEver?.n ?? res.best.n, bestDE = res.bestEver?.dE ?? res.best.dE;
-  const rr = c.rounds.find((x) => x.round === bestRound), bp = rr?.patches.find((q) => q.n === bestN);
-  const bestPatch = bp && { x: bp.x, k: bp.k ?? rr.kFixed, mode: rr.mode, dE: bestDE, measured: true, round: bestRound, n: bestN };
-  const centreOk = res.centreDE != null && res.centreDE <= match.tol;
-  const noise = Math.max(0.3, res.repeatability ?? 0);
-  if (centreOk && !(bestPatch && res.centreDE - bestDE > noise)) {
-    return { x: r.centre, k: r.kFixed, mode: r.mode, dE: res.centreDE, measured: true, why: 'confirmed', round: r.round };
-  }
-  if (bestPatch && bestDE <= match.tol) return { ...bestPatch, why: 'confirmed' };
-  if (res.extrapolated && bestPatch) return { ...bestPatch, why: 'measured' };
-  const measured = res.source === 'best-patch' || res.source === 'best-earlier';
-  return { x: res.x, k: r.kFixed, mode: r.mode, dE: res.predictedDeltaE, measured, why: 'result', round: r.round };
 }
 
 function colorStatus(c) {
@@ -469,22 +509,15 @@ function colorListHtml() {
 /** The color list's second line: the L*a*b* the library file gives this color, and where it comes from. */
 function outputLineHtml(c) {
   if (!c.target || !isLabMode(match.mode)) return '';
-  if (c.noLibrary) return '<span class="block text-xs text-slate-400" title="Tick the box to include it again">→ left out of the spot library and the proof sheet</span>';
+  const quiet = (text, title = '') => `<span class="block text-xs text-slate-400"${title ? ` title="${title}"` : ''}>→ ${text}</span>`;
+  if (c.noLibrary) return quiet('left out of the spot library and the proof sheet', 'Tick the box to include it again');
   const o = outputOf(c, { later: true });
-  const swatch = (lab) => `<span class="inline-block h-2.5 w-2.5 rounded-sm align-middle ring-1 ring-black/10" style="background:${displayHex(lab)}"></span>`;
-  if (o === undefined) return '<span class="block text-xs text-slate-400">→ working out the prediction…</span>';
-  if (o?.source === 'fixed') {
-    return `<span class="block text-xs text-indigo-600 dark:text-indigo-400" title="Set by hand – the library and the proof sheet give this color these values">→ <span class="inline-block h-2.5 w-2.5 rounded-sm align-middle ring-1 ring-black/10" style="background:${outputHex(o)}"></span> <span class="font-mono">${outputText(o)}</span> · set by hand</span>`;
-  }
-  if (!o) return '<span class="block text-xs text-slate-400" title="No test sheet result or color space prediction yet – the library gives the reference">→ the reference (no recommendation yet)</span>';
-  const from = { confirmed: 'confirmed', result: 'result', 'sheet-patch': 'printed', prediction: 'predicted', measured: 'measured' }[o.source];
-  const why = { confirmed: 'its sheet values, which printed within tolerance', result: 'its latest test-sheet result', 'sheet-patch': 'the best patch printed so far – the result is still a rough estimate', prediction: 'the color space prediction', measured: 'a patch the color space measured' }[o.source];
-  return `<span class="block text-xs text-indigo-600 dark:text-indigo-400" title="The L*a*b* the library file gives this color (${why}, ${DE().label} ${o.dE.toFixed(2)} from the reference) – enter it for the named color in the RIP">→ ${swatch(o.lab)} <span class="font-mono">${o.lab.map(fmt1).join(' / ')}</span> · ${from} ${o.dE.toFixed(2)}</span>`;
+  if (o === undefined) return quiet('working out the prediction…');
+  if (!o) return quiet('the reference (no recommendation yet)', 'No test sheet result or color space prediction yet – the library gives the reference');
+  const [word, why] = OUTPUT_SOURCES[o.source];
+  const dE = o.dE != null ? ` ${o.dE.toFixed(2)}` : '';
+  return `<span class="block text-xs text-indigo-600 dark:text-indigo-400" title="The values the library file gives this color (${why}${dE ? `, ${DE().label}${dE} from the reference` : ''}) – enter them for the named color in the RIP">→ ${swatchHtml(outputHex(o))} <span class="font-mono">${outputText(o)}</span> · ${word}${dE}</span>`;
 }
-
-/** A color's output (see outputOf) as text – L*a*b* or, set by hand, CMYK – and as a display color. */
-const outputText = (o) => (o.cmyk ? `C${fmt1(o.cmyk[0])} M${fmt1(o.cmyk[1])} Y${fmt1(o.cmyk[2])} K${fmt1(o.cmyk[3])}` : o.lab.map(fmt1).join(' / '));
-const outputHex = (o) => (o.cmyk ? cmykPreviewHex(o.cmyk, o.cmyk[3]) : displayHex(o.lab));
 
 /** Draw the whole Print match view from the job. */
 function renderMatch() {
@@ -531,7 +564,7 @@ function renderReferenceCard(c) {
   if (showOutput) {
     const o = outputOf(c, { later: true });
     $('mFixedText').innerHTML = c.noLibrary ? 'left out of the spot library and the proof sheet (tick it in the color list to include it)' : c.fixed
-      ? `<span class="inline-block h-3 w-3 rounded-sm align-middle ring-1 ring-black/10" style="background:${outputHex(o)}"></span> <span class="font-mono">${outputText(o)}</span> – <b>set by hand</b>`
+      ? `${swatchHtml(outputHex(o), 'h-3 w-3')} <span class="font-mono">${outputText(o)}</span> – <b>set by hand</b>`
       : o ? `<span class="font-mono">${outputText(o)}</span> – the recommendation` : 'its reference, until there is a recommendation';
     $('btnFixedSet').textContent = c.fixed ? 'Change…' : 'Set by hand…';
   }
@@ -560,7 +593,6 @@ function renderSettings() {
   if (document.activeElement !== $('mMediaH')) $('mMediaH').value = match.mediaH;
   $('mMediaH').min = limits.min ?? 20;
   $('mCustomHint').textContent = heightHint(limits);
-  $('mLibNameWrap').classList.toggle('hidden', !isLabMode(match.mode));
   if (!RIP_EXPORTS[match.ripFormat]) match.ripFormat = 'cxf';
   $('btnMatchRipSheet').title = `Spot color library with this sheet's patch colors, in ${RIP_EXPORTS[match.ripFormat].label} format (chosen on the Colors card) – import it into the RIP before printing`;
   $('mModeHelp').innerHTML = `<b>${escapeHtml($('mMode').selectedOptions[0]?.textContent ?? 'Sheet type')}:</b> ${modeHelp(match.mode)}`;
@@ -779,7 +811,7 @@ function resultHtml(c) {
     note = gamut === 'inside'
       ? `<p class="text-xs text-rose-600"><b>Your printer profile says this color is printable, but the prints stop getting closer at ${DE().label} ${u.dE.toFixed(2)}.</b> The profile probably doesn't describe how this printer, ink and media really print – or the measuring conditions differ (M-factor, drying, lamination). Re-profiling the media, or checking the RIP's media and ink settings, will help more than further rounds.</p>`
       : `<p class="text-xs text-rose-600"><b>The reference looks outside what this printer and media can reproduce.</b> Nothing within reach is predicted closer than ${DE().label} ${u.dE.toFixed(2)} – more rounds will not get much closer. Use these values as the closest match. If your RIP shows the color as printable, its media profile probably doesn't match the real prints – check the media, ink limits and color settings.</p>`;
-  } else if (u.why === 'measured') {
+  } else if (u.why === 'printed') {
     note = `<p class="text-xs text-amber-600"><b>The best guess lies beyond this sheet's patches</b> – ${fmt(res.x, r.kFixed)}, predicted ${DE().label} ${res.predictedDeltaE.toFixed(2)}, is only a rough estimate${res.clamped ? ' and reaches the limit of what can be asked for, so the color may be at the edge of what this printer can make' : ''}. Until a sheet confirms it, these are the values of ${where(u.round, u.n)}, which printed ${DE().label} ${u.dE.toFixed(2)}. The next sheet is centred on the guess and tests it.</p>`;
   } else if (res.source === 'best-patch') {
     note = `<p class="text-xs text-amber-600">No values are predicted to print closer than the patches you measured, so these are the values of patch #${res.pickN ?? res.best.n}.${pickNote(res)} A next sheet with finer steps around it may still gain a little – or accept these.</p>`;
@@ -1056,6 +1088,18 @@ function emptySlots(c, n) {
   return extra;
 }
 /**
+ * Inputs already on sheets waiting to be scanned – the other colors' unscanned fill-in patches and the unscanned
+ * patches of a chart in progress – for the color space's sheet type. New fill-ins avoid them as if they were measured,
+ * so sheets made before any is scanned fill different gaps (`except`: the color whose sheet is being made).
+ */
+function plannedPatches(except) {
+  const s = usableSpace();
+  if (!s) return [];
+  const rounds = [...match.colors.filter((x) => x !== except).map((x) => latest(x)), s.chart?.rounds[0]].filter((r) => r?.mode === s.mode);
+  return rounds.flatMap((r) => r.patches.filter((p) => !p.lab && (p.fill || r.chart)).map((p) => pointX(s.mode, p.x, p.k ?? r.kFixed)));
+}
+
+/**
  * A color's next sheet (round) around `centre`, plus its fill-in patches (half around the centre, half wherever the
  * color space is emptiest); its patches are named SD10-<color code>-R<round>-<n> in spot mode.
  */
@@ -1064,7 +1108,9 @@ function createRound(c, { centre, step, kFixed, fromSpace = null }) {
   const design = designPatches(match.mode, centre, step, match.design);
   const setting = fillInSetting();
   const fillCount = setting === 'auto' ? emptySlots(c, design.length) : setting;
-  const fillers = fillCount ? gapFillers(usableSpace(), fillCount, { near: pointX(match.mode, centre, kFixed), seed: crypto.getRandomValues(new Uint32Array(1))[0] }) : [];
+  const fillers = fillCount ? gapFillers(usableSpace(), fillCount, {
+    near: pointX(match.mode, centre, kFixed), seed: crypto.getRandomValues(new Uint32Array(1))[0], planned: plannedPatches(c),
+  }) : [];
   const patches = [...design, ...fillers.map((f, i) => ({ n: design.length + i + 1, ...f, fill: true }))]
     .map((p) => (match.mode === 'spot' ? { ...p, name: patchSpotName(c.code, round, p.n) } : p));
   c.rounds.push({ round, mode: match.mode, centre, step, kFixed, design: match.design, patches, result: null, ...(fromSpace ? { fromSpace } : {}) });
@@ -1151,27 +1197,6 @@ function downloadSheetLibrary() {
 const libraryName = () => (match.libraryName ?? '').trim() || DEFAULT_LIBRARY_NAME;
 
 /**
- * A color's recommended L*a*b* for the RIP: the values to use now from its latest test-sheet result (useNow – values
- * a sheet backs up), else what the color space predicts (a measured patch when one printed closer) – unless the
- * output is set by hand (c.fixed), which always wins. Returns { lab, cmyk (set by hand in CMYK; lab is then null), dE
- * (null when set by hand), source: 'fixed' | 'confirmed' | 'result' | 'sheet-patch' | 'prediction' | 'measured' },
- * null when there is nothing, or – `later` – undefined while the prediction is still to be worked out (it is, in the
- * background).
- */
-function outputOf(c, { later = false } = {}) {
-  if (c.fixed) return { lab: c.fixed.space === 'lab' ? c.fixed.v : null, cmyk: c.fixed.space === 'cmyk' ? c.fixed.v : null, dE: null, source: 'fixed' };
-  const r = [...c.rounds].reverse().find((x) => x.result && isLabMode(x.mode));
-  if (r) {
-    const u = useNow(c, r);
-    return { lab: u.x, dE: u.dE, source: { confirmed: 'confirmed', measured: 'sheet-patch', result: 'result' }[u.why] };
-  }
-  if (!isLabMode(match.mode) || !c.target) return null;
-  const p = spacePrediction(c, { later });
-  if (p === undefined) return undefined;
-  return p ? { lab: p.x, dE: p.predictedDeltaE, source: p.measured ? 'measured' : 'prediction' } : null;
-}
-
-/**
  * What the library file and the proof sheet hold: every color with a reference that is not left out (noLibrary), under
  * its name, with its output – set by hand (L*a*b* or CMYK), recommended, or its reference where there is none yet.
  */
@@ -1214,32 +1239,33 @@ function downloadColorLibrary() {
 /** The Colors card's export row: the format, the download button and what the file will hold. */
 function renderLibraryExport() {
   const ex = RIP_EXPORTS[match.ripFormat] ?? RIP_EXPORTS.cxf;
-  const lab = isLabMode(match.mode), withRef = match.colors.filter((c) => c.target && !c.noLibrary);
-  const leftOutByHand = match.colors.filter((c) => c.target && c.noLibrary).length;
+  const lab = isLabMode(match.mode), included = match.colors.filter((c) => c.target && !c.noLibrary);
+  const leftOut = match.colors.filter((c) => c.target && c.noLibrary).length;
   $('mRipFormat').value = match.ripFormat;
   $('mRipFormat').disabled = !lab;
+  $('mLibName').disabled = !lab;
   const btn = $('btnLibDownload');
-  btn.disabled = !lab || !withRef.length;
+  btn.disabled = !lab || !included.length;
   $('btnLibProof').disabled = btn.disabled;
-  btn.title = lab ? `Every color under its name with its recommended L*a*b* (its reference until it has one), as a ${ex.label} file for the RIP – the library's name is under Measuring & matching` : 'Spot color libraries hold L*a*b* values – for spot color or L*a*b* sheets';
+  btn.title = lab ? `Every color under its name with its recommended L*a*b* (its reference until it has one), as a ${ex.label} file for the RIP – named after the library (above)` : 'Spot color libraries hold L*a*b* values – for spot color or L*a*b* sheets';
   if (document.activeElement !== $('mLibName')) $('mLibName').value = libraryName();
-  if (!lab || !withRef.length) {
+  if (!lab || !included.length) {
     $('mLibNote').className = 'text-xs text-slate-500';
-    $('mLibNote').textContent = lab && leftOutByHand ? 'Every color is left out – tick the ones to include in the color list.' : '';
+    $('mLibNote').textContent = lab && leftOut ? 'Every color is left out – tick the ones to include in the color list.' : '';
     return;
   }
-  const outs = withRef.map((c) => outputOf(c, { later: true }));
+  const outs = included.map((c) => outputOf(c, { later: true }));
   const pending = outs.filter((o) => o === undefined).length, asRef = outs.filter((o) => o === null).length;
   const parts = [];
-  if (leftOutByHand) parts.push(`${withRef.length} color${withRef.length === 1 ? '' : 's'} included, ${leftOutByHand} left out`);
-  if (asRef) parts.push(`${asRef} of ${withRef.length} without a recommendation yet go in with their reference`);
+  if (leftOut) parts.push(`${included.length} color${included.length === 1 ? '' : 's'} included, ${leftOut} left out`);
+  if (asRef) parts.push(`${asRef} of ${included.length} without a recommendation yet go in with their reference`);
   if (pending) parts.push('working out predictions…');
   const cmykByHand = outs.filter((o) => o?.cmyk).length;
   if (cmykByHand && !ex.cmyk) parts.push(`${cmykByHand} set by hand in CMYK stay${cmykByHand === 1 ? 's' : ''} out of ${ex.label} libraries (L*a*b* only) – set ${cmykByHand === 1 ? 'it' : 'them'} in the RIP`);
   // formats with reduced L*a*b* precision round the values: say what that costs when it matters
   let worst = 0;
   if (ex.quantize) {
-    worst = Math.max(0, ...withRef.map((c, i) => { const v = outs[i] ? outs[i].lab : c.target; return v ? deltaE2000(v, ex.quantize(v)) : 0; }));
+    worst = Math.max(0, ...included.map((c, i) => { const v = outs[i] ? outs[i].lab : c.target; return v ? deltaE2000(v, ex.quantize(v)) : 0; }));
     if (worst >= 0.1) parts.push(`${ex.label} stores ${ex.precision} – rounding costs up to ΔE00 ${worst.toFixed(2)}; for full precision use CxF3`);
   }
   $('mLibNote').textContent = parts.join(' · ');
@@ -1744,7 +1770,7 @@ function wireSpaceCard() {
   $('mSpaceCard').addEventListener('click', onSpaceClick);
 }
 
-/** The library's format and download (Colors card) and its name (Measuring & matching). */
+/** The spot library row of the Colors card: its name, format, download and the proof sheet. */
 function wireLibrary() {
   $('mRipFormat').onchange = () => { match.ripFormat = $('mRipFormat').value; commit(); };
   $('btnLibDownload').onclick = downloadColorLibrary;

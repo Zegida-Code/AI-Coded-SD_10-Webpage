@@ -70,7 +70,7 @@
       const ids = [...d.querySelectorAll('[id]')].map((e) => e.id);
       log(ids.length === new Set(ids).size && $('matchMf').value === '1', 'element ids are unique; match M-factor shows the job default (M1)');
       setSel('mMode', 'cmyk');
-      log($('mRipFormat').disabled && $('mLibNameWrap').classList.contains('hidden') && /CMYK profile/.test($('mModeHelp').textContent), 'CMYK mode turns off the spot library format and name, and explains the profile');
+      log($('mRipFormat').disabled && $('mLibName').disabled && /CMYK profile/.test($('mModeHelp').textContent), 'CMYK mode turns off the spot library format and name, and explains the profile');
       $('btnConnect').click();
       await until(() => /simulated/.test($('connPill').textContent) && !$('btnMatchTarget').disabled);
       $('demoShutter').click(); await sleep(200);
@@ -241,7 +241,7 @@
       $('btnLibDownload').click();
       const cxfFile = files.find((f) => f.name === 'House colors.cxf');
       const cxfText = cxfFile ? await readFile(cxfFile) : '';
-      log(/<cc:Object ObjectType="Standard" Name="Brand Red" Id="EXC_\d+">/.test(cxfText), 'CxF3 library file named after the library (Measuring & matching)');
+      log(/<cc:Object ObjectType="Standard" Name="Brand Red" Id="EXC_\d+">/.test(cxfText), 'CxF3 library file named after the library');
 
       // colors from a library file: new names added with the file's L*a*b* as their reference, names already there kept
       const imp = '<?xml version="1.0" encoding="UTF-8"?>\n<SpotColorLibraryList strVersion="4.3.0.0"><LabSpotColorLibrary name="RIP"><m_eMakerType>0</m_eMakerType><m_bUseLibrary>false</m_bUseLibrary>' +

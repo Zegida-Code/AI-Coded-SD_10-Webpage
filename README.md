@@ -69,8 +69,8 @@ With a measured [color space](#color-space) of your printer, the first sheet alr
 - Needs a computer or tablet (768 px or wider); phones only show the Console.
 - On wide screens, the colors and the settings sit in a column at the left; the selected color's workflow and the
   color space are at the right, and the tips run across the bottom.
-- Settings you change less often – readings per patch, M-factor, ΔE formula, tolerance, printer profile and the spot
-  library's name – open in a dialog from the **Measuring & matching** line, which shows their current values.
+- Settings you change less often – readings per patch, M-factor, ΔE formula, tolerance and printer profile – open in
+  a dialog from the **Measuring & matching** line, which shows their current values.
 
 ### 1. Reference colors
 
@@ -267,6 +267,7 @@ emptiest.
 | **4** / **8** | That many – which can take an extra page on tight media |
 | **Fill the free space** | Exactly as many as fit in the empty slots of the pages the sheet needs anyway – no extra media, only a little more scanning (at most 100) |
 
+Sheets made before any is scanned get different fill-ins: those still waiting on another sheet count as measured.
 Fill-in patches are marked *fill-in* on the sheet and in the scan card. The match calculation ignores them, and they
 go into the color space like chart patches.
 
@@ -340,7 +341,7 @@ the *Colors* card, beside **Download library**:
 | Library | Where | What it holds |
 |---|---|---|
 | **Sheet library** | Test sheet card | The current test sheet's patch colors. Import and enable it before printing the sheet, so the patches go through the same named-color path as your artwork. |
-| **Download library** | *Colors* card | Every ticked color under its name (exactly as in your artwork – the RIP finds spot colors by name) with its recommended L\*a\*b\*. A color without a result or prediction yet goes in with its reference, and the card says how many. The file is named after the **Spot library name** (under *Measuring & matching*). |
+| **Download library** | *Colors* card | Every ticked color under its name (exactly as in your artwork – the RIP finds spot colors by name) with its recommended L\*a\*b\*. A color without a result or prediction yet goes in with its reference, and the card says how many. The library's name, format and download are together at the bottom of the card. |
 
 **Setting a color's output by hand**
 
@@ -393,11 +394,11 @@ Open these pages in Chrome – on the live site (e.g. [sd-10.com/test/](https://
 
 | Page | Checks | What it covers |
 |---|---|---|
-| [`test/index.html`](https://sd-10.com/test/index.html) | 123 | The core code (see below) |
+| [`test/index.html`](https://sd-10.com/test/index.html) | 124 | The core code (see below) |
 | [`test/ui-smoke.html`](https://sd-10.com/test/ui-smoke.html) | 34 | The Console against the simulated SD-10: calibrate, measure, compare, line scan, history sync, palettes, settings, custom ICC profiles |
 | [`test/mobile-check.html`](https://sd-10.com/test/mobile-check.html) | – | The layout at phone width (no sideways scrolling) and the compare / reference flows |
 | [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 58 | Print match against the simulated device and printer: matching to within tolerance, several colors at once, media sizes and limits, readings per patch, textile ΔE, metamerism and gamut checks, spot color sheets and libraries, colors imported from a swatch file, RGB sheets |
-| [`test/space-smoke.html`](https://sd-10.com/test/space-smoke.html) | 38 | The color space workflow against the simulated device and printer (see below) |
+| [`test/space-smoke.html`](https://sd-10.com/test/space-smoke.html) | 39 | The color space workflow against the simulated device and printer (see below) |
 
 **`test/index.html` checks**
 
