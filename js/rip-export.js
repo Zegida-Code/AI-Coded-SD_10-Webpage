@@ -1,7 +1,8 @@
 // Spot color library files for RIP software, so the named colors of a test sheet (or the matched colors) can be
 // imported into the RIP – one exporter per format; more can be added as sample library files become available – and
 // reading such files back (plus Adobe Swatch Exchange swatches), so their named colors can come in as colors to match.
-// colors: [{ name, lab: [L, a, b] }] – CIE L*a*b* D50 / 2°.
+// colors: [{ name, lab: [L, a, b] }] – CIE L*a*b* D50 / 2°; a format with `cmyk: true` also takes { name, cmyk: [C, M, Y, K] }
+// (percent) – a color whose output is set by hand in CMYK. Formats are only extended from sample files the RIP wrote.
 import { spectrumToLab } from './color.js';
 
 const xmlEsc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
@@ -107,13 +108,16 @@ export const RIP_EXPORTS = {
   epcc: {
     label: 'Edge Print',
     ext: 'epcc',
+    cmyk: true,
     mime: 'application/octet-stream',
     precision: 'values with one decimal',
     quantize: (lab) => lab.map((v) => Math.round(v * 10) / 10),
     build({ library, colors }) {
       const num = (v) => String(Math.round(v * 10) / 10 + 0); // 42, 15.4 (and never "-0")
       const lines = ['EpsonEdgePrint', '200', '0', String(library), String(colors.length),
-        ...colors.map(({ name, lab }) => `0,${String(name).length},${name},0,3,${lab.map(num).join(';')}`)];
+        ...colors.map(({ name, lab, cmyk }) => (cmyk
+          ? `0,${String(name).length},${name},1,4,${cmyk.map(num).join(';')}`
+          : `0,${String(name).length},${name},0,3,${lab.map(num).join(';')}`))];
       const text = lines.map((l) => `${l}\r\n`).join('');
       const out = new Uint8Array(2 + text.length * 2);
       out[0] = 0xff; out[1] = 0xfe;

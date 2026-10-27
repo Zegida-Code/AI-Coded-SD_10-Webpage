@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <link rel="stylesheet" href="css/app.css?v=2026-10-26.2ec20e3-201602">
+  <link rel="stylesheet" href="css/app.css?v=2026-10-26.bed88e1-203645">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -299,6 +299,7 @@
             <select id="mRipFormat" class="input min-w-0 flex-1" title="The file format your RIP imports – also used for the test sheets' Sheet library"><option value="cxf">CxF3 (.cxf)</option><option value="acb">Adobe Color Book (.acb)</option><option value="epcc">Epson Edge Print (.epcc)</option><option value="versaworks">VersaWorks (.spot)</option></select>
             <button id="btnLibDownload" type="button" class="btn btn-primary whitespace-nowrap" disabled>Download library</button>
           </div>
+          <button id="btnLibProof" type="button" class="btn btn-ghost w-full" disabled title="One patch per color, named exactly like it, with the value the library gives it – print it through the RIP with the library imported, and check every color at once">Proof sheet of all colors (PDF)</button>
           <p id="mLibNote" class="text-xs text-slate-500"></p>
         </div>
       </div>
@@ -338,6 +339,42 @@
           <span id="mMoreSummary" class="mt-0.5 block text-xs text-slate-500"></span>
         </button>
       </div>
+
+      <!-- a color's output set by hand, opened from the Reference card -->
+      <dialog id="mFixedDialog" class="card w-[min(30rem,calc(100vw-2rem))] text-slate-900 shadow-xl backdrop:bg-slate-950/50 dark:text-slate-100">
+        <div class="space-y-3">
+          <div class="flex items-center justify-between gap-2">
+            <h3 class="font-semibold">Set the output by hand</h3>
+            <button type="button" data-close-dialog class="btn btn-ghost !px-2" aria-label="Close">✕</button>
+          </div>
+          <p id="mFixedFor" class="text-xs text-slate-500"></p>
+          <div class="flex gap-4 text-sm">
+            <label class="flex items-center gap-1.5"><input type="radio" name="fixedSpace" value="lab" class="h-4 w-4"> L*a*b*</label>
+            <label class="flex items-center gap-1.5"><input type="radio" name="fixedSpace" value="cmyk" class="h-4 w-4"> CMYK</label>
+          </div>
+          <div id="mFixedLab" class="grid grid-cols-3 gap-2">
+            <div><label class="label" for="fixL">L*</label><input id="fixL" class="input font-mono" type="number" step="0.01" min="0" max="100"></div>
+            <div><label class="label" for="fixA">a*</label><input id="fixA" class="input font-mono" type="number" step="0.01" min="-128" max="127"></div>
+            <div><label class="label" for="fixB">b*</label><input id="fixB" class="input font-mono" type="number" step="0.01" min="-128" max="127"></div>
+          </div>
+          <div id="mFixedCmyk" class="grid grid-cols-4 gap-2">
+            <div><label class="label" for="fixC">C %</label><input id="fixC" class="input font-mono" type="number" step="0.1" min="0" max="100"></div>
+            <div><label class="label" for="fixM">M %</label><input id="fixM" class="input font-mono" type="number" step="0.1" min="0" max="100"></div>
+            <div><label class="label" for="fixY">Y %</label><input id="fixY" class="input font-mono" type="number" step="0.1" min="0" max="100"></div>
+            <div><label class="label" for="fixK">K %</label><input id="fixK" class="input font-mono" type="number" step="0.1" min="0" max="100"></div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 text-xs"><span class="text-slate-500">Presets:</span>
+            <button type="button" data-fixed-preset="paper" class="rounded-md px-2 py-1 ring-1 ring-slate-300 hover:bg-slate-100 dark:ring-slate-700 dark:hover:bg-slate-800">Paper white · CMYK 0 0 0 0</button>
+            <button type="button" data-fixed-preset="rich" class="rounded-md px-2 py-1 ring-1 ring-slate-300 hover:bg-slate-100 dark:ring-slate-700 dark:hover:bg-slate-800">Rich black · CMYK 60 40 40 100</button>
+            <button type="button" data-fixed-preset="black" class="rounded-md px-2 py-1 ring-1 ring-slate-300 hover:bg-slate-100 dark:ring-slate-700 dark:hover:bg-slate-800">Black · L*a*b* 0 0 0</button>
+          </div>
+          <p id="mFixedNote" class="text-xs text-slate-500"></p>
+          <div class="flex items-center justify-between gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">
+            <button id="btnFixedClear" type="button" class="px-1 py-1.5 text-sm text-rose-600 hover:underline dark:text-rose-400">Use the recommendation again</button>
+            <button id="btnFixedSave" type="button" class="btn btn-primary">Save</button>
+          </div>
+        </div>
+      </dialog>
 
       <!-- the Measuring & matching settings, opened from the Settings card -->
       <dialog id="mMoreDialog" class="card w-[min(30rem,calc(100vw-2rem))] text-slate-900 shadow-xl backdrop:bg-slate-950/50 dark:text-slate-100">
@@ -394,6 +431,12 @@
           </div>
           <!-- what the color space predicts for the reference -->
           <div id="mSpacePred" class="hidden rounded-xl border border-slate-200 dark:border-slate-800 p-3 space-y-2"></div>
+          <!-- what the spot library gives this color – the recommendation, or values set by hand (e.g. paper white, rich black) -->
+          <div id="mFixedRow" class="hidden flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 p-3 text-sm dark:border-slate-800">
+            <span class="font-medium text-slate-500">Output for the RIP</span>
+            <span id="mFixedText" class="min-w-0 flex-1 text-xs"></span>
+            <button id="btnFixedSet" type="button" class="btn btn-ghost" title="Hard-set the values the spot library and proof sheet give this color – L*a*b*, or CMYK where the library format holds it">Set by hand…</button>
+          </div>
         </div>
 
         <!-- 2. sheet and 3. scan: side by side on wide screens -->
@@ -571,26 +614,26 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-26.2ec20e3-201602",
-      "./js/transport.js": "./js/transport.js?v=2026-10-26.2ec20e3-201602",
-      "./js/mock.js": "./js/mock.js?v=2026-10-26.2ec20e3-201602",
-      "./js/session.js": "./js/session.js?v=2026-10-26.2ec20e3-201602",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-26.2ec20e3-201602",
-      "./js/color.js": "./js/color.js?v=2026-10-26.2ec20e3-201602",
-      "./js/weights.js": "./js/weights.js?v=2026-10-26.2ec20e3-201602",
-      "./js/storage.js": "./js/storage.js?v=2026-10-26.2ec20e3-201602",
-      "./js/icc.js": "./js/icc.js?v=2026-10-26.2ec20e3-201602",
-      "./js/match.js": "./js/match.js?v=2026-10-26.2ec20e3-201602",
-      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-26.2ec20e3-201602",
-      "./js/ui.js": "./js/ui.js?v=2026-10-26.2ec20e3-201602",
-      "./js/match-view.js": "./js/match-view.js?v=2026-10-26.2ec20e3-201602",
-      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-26.2ec20e3-201602",
-      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-26.2ec20e3-201602",
-      "./js/debug.js": "./js/debug.js?v=2026-10-26.2ec20e3-201602",
-      "./js/space-view.js": "./js/space-view.js?v=2026-10-26.2ec20e3-201602"
+      "./js/app.js": "./js/app.js?v=2026-10-26.bed88e1-203645",
+      "./js/transport.js": "./js/transport.js?v=2026-10-26.bed88e1-203645",
+      "./js/mock.js": "./js/mock.js?v=2026-10-26.bed88e1-203645",
+      "./js/session.js": "./js/session.js?v=2026-10-26.bed88e1-203645",
+      "./js/protocol.js": "./js/protocol.js?v=2026-10-26.bed88e1-203645",
+      "./js/color.js": "./js/color.js?v=2026-10-26.bed88e1-203645",
+      "./js/weights.js": "./js/weights.js?v=2026-10-26.bed88e1-203645",
+      "./js/storage.js": "./js/storage.js?v=2026-10-26.bed88e1-203645",
+      "./js/icc.js": "./js/icc.js?v=2026-10-26.bed88e1-203645",
+      "./js/match.js": "./js/match.js?v=2026-10-26.bed88e1-203645",
+      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-26.bed88e1-203645",
+      "./js/ui.js": "./js/ui.js?v=2026-10-26.bed88e1-203645",
+      "./js/match-view.js": "./js/match-view.js?v=2026-10-26.bed88e1-203645",
+      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-26.bed88e1-203645",
+      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-26.bed88e1-203645",
+      "./js/debug.js": "./js/debug.js?v=2026-10-26.bed88e1-203645",
+      "./js/space-view.js": "./js/space-view.js?v=2026-10-26.bed88e1-203645"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-26.2ec20e3-201602"></script>
+  <script type="module" src="js/app.js?v=2026-10-26.bed88e1-203645"></script>
 </body>
 </html>

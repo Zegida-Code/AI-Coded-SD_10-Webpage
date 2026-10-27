@@ -407,8 +407,8 @@ export function sheetLayout(opts) {
       page.boxes.push({ x, y: rowTop - size, size, patch: p, kFixed: k });
       if (detailed) {
         t(x, rowTop - size - 10, 8, `#${p.n}${p.fill ? ' (fill-in)' : p.offset?.every((v) => v === 0) ? ' (centre)' : ''}`, true);
-        t(x, rowTop - size - 19, 6.5, fmtValues(mode, p.x, k));
-        if (mode === 'spot') t(x, rowTop - size - 26, 6.5, p.name ?? '');
+        t(x, rowTop - size - 19, 6.5, p.cmyk ? fmtValues('cmyk', p.cmyk.slice(0, 3), p.cmyk[3]) : fmtValues(mode, p.x, k));
+        if (mode === 'spot') t(x, rowTop - size - 26, 6.5, fit(p.name ?? '', 6.5, size + gap - 2));
       } else t(x, rowTop - size - 9, 7, String(p.n), true);
       col++;
     }
@@ -449,8 +449,9 @@ const LAB_CS = '[/Lab << /WhitePoint [0.9642 1 0.8249] /Range [-128 127 -128 127
 /**
  * Build the printable sheet as a PDF (Uint8Array), one page per layout page. Patches are DeviceCMYK (mode 'cmyk'),
  * DeviceRGB (mode 'rgb'), a CIE Lab color space with a D50 white point (mode 'lab'), or one Separation – a named
- * spot color – per patch with that Lab color as its alternate (mode 'spot', patch.name = spot name).
- * Pure PDF 1.4, standard Helvetica fonts.
+ * spot color – per patch with that Lab color as its alternate (mode 'spot', patch.name = spot name). A patch with
+ * `cmyk` (percent – a color whose output is set by hand) is DeviceCMYK, or in mode 'spot' a Separation with a CMYK
+ * alternate. Pure PDF 1.4, standard Helvetica fonts.
  */
 export function buildSheetPdf(opts) {
   const { mode } = opts;
@@ -460,7 +461,11 @@ export function buildSheetPdf(opts) {
   const streams = pages.map(({ texts, boxes }) => {
     const out = ['0 g'];
     for (const { x, y, size, patch: p, kFixed } of boxes) {
-      if (mode === 'cmyk') out.push(`${f(p.x[0] / 100)} ${f(p.x[1] / 100)} ${f(p.x[2] / 100)} ${f(kFixed / 100)} k`);
+      if (mode === 'spot' && p.cmyk) {
+        spaces.push(`/SP${p.n} [/Separation ${pdfName(p.name)} /DeviceCMYK << /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [${p.cmyk.map((v) => f(v / 100)).join(' ')}] /N 1 >>]`);
+        out.push(`/SP${p.n} cs 1 scn`);
+      } else if (p.cmyk) out.push(`${p.cmyk.map((v) => f(v / 100)).join(' ')} k`);
+      else if (mode === 'cmyk') out.push(`${f(p.x[0] / 100)} ${f(p.x[1] / 100)} ${f(p.x[2] / 100)} ${f(kFixed / 100)} k`);
       else if (mode === 'rgb') out.push(`${(p.x[0] / 255).toFixed(4)} ${(p.x[1] / 255).toFixed(4)} ${(p.x[2] / 255).toFixed(4)} rg`);
       else if (mode === 'spot') {
         // tint 0 = paper (L* 100), tint 1 = the patch color; the patch prints at 100 % tint

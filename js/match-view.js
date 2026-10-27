@@ -63,6 +63,8 @@ function loadSpaces() {
 //          as many as fit in the free space of the pages the sheet needs anyway),
 //   chartActive (the sheet and scan cards show the color space's chart instead of the selected color)
 //   colors: [{ id, code, name, target, targetSpectrum, refReads, refSpectra, accepted, next,
+//               fixed? ({ space: 'lab' | 'cmyk', v } – the output for the RIP set by hand, used instead of the recommendation),
+//               noLibrary? (true: left out of the spot library and the proof sheet),
 //               rounds: [{ round, mode, centre, step, kFixed, design,
 //                          patches: [{ n, offset, x, name?, reads, spectra, lab, spread, spectrum }
 //                                    – fill-in patches: { n, x, k?, name?, fill: true, … }, no offset ], result,
@@ -460,20 +462,29 @@ function colorListHtml() {
           <span class="block text-xs ${x.accepted ? 'text-emerald-600' : 'text-slate-500'}">${x.target ? `<span class="font-mono">${x.target.map((v) => v.toFixed(1)).join(' / ')}</span> · ` : ''}${colorStatus(x)}</span>
           ${outputLineHtml(x)}
         </span></button>
+      ${x.target && isLabMode(match.mode) ? `<input type="checkbox" data-color-act="library" class="h-4 w-4 flex-none" ${x.noLibrary ? '' : 'checked'} title="Include ${escapeHtml(colorLabel(x))} in the spot library and the proof sheet" aria-label="Include ${escapeHtml(colorLabel(x))} in the spot library and the proof sheet">` : ''}
       ${match.colors.length > 1 ? '<button type="button" data-color-act="remove" class="text-xs text-rose-600 hover:underline px-1" title="Remove this color">remove</button>' : ''}</li>`).join('') + hint;
 }
 
 /** The color list's second line: the L*a*b* the library file gives this color, and where it comes from. */
 function outputLineHtml(c) {
   if (!c.target || !isLabMode(match.mode)) return '';
+  if (c.noLibrary) return '<span class="block text-xs text-slate-400" title="Tick the box to include it again">→ left out of the spot library and the proof sheet</span>';
   const o = outputOf(c, { later: true });
   const swatch = (lab) => `<span class="inline-block h-2.5 w-2.5 rounded-sm align-middle ring-1 ring-black/10" style="background:${displayHex(lab)}"></span>`;
   if (o === undefined) return '<span class="block text-xs text-slate-400">→ working out the prediction…</span>';
+  if (o?.source === 'fixed') {
+    return `<span class="block text-xs text-indigo-600 dark:text-indigo-400" title="Set by hand – the library and the proof sheet give this color these values">→ <span class="inline-block h-2.5 w-2.5 rounded-sm align-middle ring-1 ring-black/10" style="background:${outputHex(o)}"></span> <span class="font-mono">${outputText(o)}</span> · set by hand</span>`;
+  }
   if (!o) return '<span class="block text-xs text-slate-400" title="No test sheet result or color space prediction yet – the library gives the reference">→ the reference (no recommendation yet)</span>';
   const from = { confirmed: 'confirmed', result: 'result', 'sheet-patch': 'printed', prediction: 'predicted', measured: 'measured' }[o.source];
   const why = { confirmed: 'its sheet values, which printed within tolerance', result: 'its latest test-sheet result', 'sheet-patch': 'the best patch printed so far – the result is still a rough estimate', prediction: 'the color space prediction', measured: 'a patch the color space measured' }[o.source];
   return `<span class="block text-xs text-indigo-600 dark:text-indigo-400" title="The L*a*b* the library file gives this color (${why}, ${DE().label} ${o.dE.toFixed(2)} from the reference) – enter it for the named color in the RIP">→ ${swatch(o.lab)} <span class="font-mono">${o.lab.map(fmt1).join(' / ')}</span> · ${from} ${o.dE.toFixed(2)}</span>`;
 }
+
+/** A color's output (see outputOf) as text – L*a*b* or, set by hand, CMYK – and as a display color. */
+const outputText = (o) => (o.cmyk ? `C${fmt1(o.cmyk[0])} M${fmt1(o.cmyk[1])} Y${fmt1(o.cmyk[2])} K${fmt1(o.cmyk[3])}` : o.lab.map(fmt1).join(' / '));
+const outputHex = (o) => (o.cmyk ? cmykPreviewHex(o.cmyk, o.cmyk[3]) : displayHex(o.lab));
 
 /** Draw the whole Print match view from the job. */
 function renderMatch() {
@@ -514,6 +525,16 @@ function renderReferenceCard(c) {
   const prediction = spacePredictionHtml(c);
   $('mSpacePred').innerHTML = prediction;
   $('mSpacePred').classList.toggle('hidden', !prediction);
+  // what the spot library gives this color (spot / L*a*b* sheets): the recommendation, or values set by hand
+  const showOutput = !!t && isLabMode(match.mode);
+  $('mFixedRow').classList.toggle('hidden', !showOutput);
+  if (showOutput) {
+    const o = outputOf(c, { later: true });
+    $('mFixedText').innerHTML = c.noLibrary ? 'left out of the spot library and the proof sheet (tick it in the color list to include it)' : c.fixed
+      ? `<span class="inline-block h-3 w-3 rounded-sm align-middle ring-1 ring-black/10" style="background:${outputHex(o)}"></span> <span class="font-mono">${outputText(o)}</span> – <b>set by hand</b>`
+      : o ? `<span class="font-mono">${outputText(o)}</span> – the recommendation` : 'its reference, until there is a recommendation';
+    $('btnFixedSet').textContent = c.fixed ? 'Change…' : 'Set by hand…';
+  }
 }
 
 /** The Settings card, the Measuring & matching dialog and the tips. */
@@ -787,6 +808,7 @@ function resultHtml(c) {
       <span>${u.measured ? 'printed' : 'predicted'} ${DE().label} <b class="tabular-nums">${u.dE.toFixed(2)}</b> (tolerance ${match.tol})</span>
     </div>
     ${note}
+    ${c.fixed && isLabMode(r.mode) ? `<p class="text-xs text-indigo-600 dark:text-indigo-400">The output is set by hand (${outputText(outputOf(c))}) – the spot library and the proof sheet give this color that instead of these values.</p>` : ''}
     ${gamut === 'outside' || gamut === 'edge' ? `<p class="text-xs">${gamutHtml(c)}</p>` : ''}
     <dl class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
       <div><dt class="text-slate-500">Centre patch</dt><dd class="font-mono">${DE().label} ${res.centreDE != null ? res.centreDE.toFixed(2) : '–'}</dd></div>
@@ -1130,11 +1152,14 @@ const libraryName = () => (match.libraryName ?? '').trim() || DEFAULT_LIBRARY_NA
 
 /**
  * A color's recommended L*a*b* for the RIP: the values to use now from its latest test-sheet result (useNow – values
- * a sheet backs up), else what the color space predicts (a measured patch when one printed closer). Returns
- * { lab, dE, source: 'confirmed' | 'result' | 'sheet-patch' | 'prediction' | 'measured' }, null when there is neither,
- * or – `later` – undefined while the prediction is still to be worked out (it is, in the background).
+ * a sheet backs up), else what the color space predicts (a measured patch when one printed closer) – unless the
+ * output is set by hand (c.fixed), which always wins. Returns { lab, cmyk (set by hand in CMYK; lab is then null), dE
+ * (null when set by hand), source: 'fixed' | 'confirmed' | 'result' | 'sheet-patch' | 'prediction' | 'measured' },
+ * null when there is nothing, or – `later` – undefined while the prediction is still to be worked out (it is, in the
+ * background).
  */
 function outputOf(c, { later = false } = {}) {
+  if (c.fixed) return { lab: c.fixed.space === 'lab' ? c.fixed.v : null, cmyk: c.fixed.space === 'cmyk' ? c.fixed.v : null, dE: null, source: 'fixed' };
   const r = [...c.rounds].reverse().find((x) => x.result && isLabMode(x.mode));
   if (r) {
     const u = useNow(c, r);
@@ -1146,45 +1171,75 @@ function outputOf(c, { later = false } = {}) {
   return p ? { lab: p.x, dE: p.predictedDeltaE, source: p.measured ? 'measured' : 'prediction' } : null;
 }
 
-/** What the library file holds: every color with a reference, under its name, with its recommended L*a*b* – or its reference where there is none yet. */
+/**
+ * What the library file and the proof sheet hold: every color with a reference that is not left out (noLibrary), under
+ * its name, with its output – set by hand (L*a*b* or CMYK), recommended, or its reference where there is none yet.
+ */
 function libraryColors() {
-  return match.colors.filter((c) => c.target).map((c) => {
+  return match.colors.filter((c) => c.target && !c.noLibrary).map((c) => {
     const o = outputOf(c);
-    return { name: colorLabel(c), lab: o ? o.lab : c.target, fromReference: !o };
+    return { name: colorLabel(c), lab: o ? o.lab : c.target, cmyk: o?.cmyk ?? null, fromReference: !o, fixed: o?.source === 'fixed' };
   });
+}
+
+/**
+ * "Proof sheet": every color as one patch, named exactly like it, with the value the library gives it – printed
+ * through the RIP with the library imported, it checks every color at once (spot / L*a*b* sheets).
+ */
+function downloadProofSheet() {
+  const colors = libraryColors();
+  if (!isLabMode(match.mode) || !colors.length) return;
+  const patches = colors.map((c, i) => ({ n: i + 1, x: c.lab ?? [50, 0, 0], cmyk: c.cmyk ?? undefined, name: c.name }));
+  const title = `Spot color proof - ${libraryName()}`;
+  try {
+    downloadFile(buildSheetPdf({ mode: match.mode, groups: [{ label: `${colors.length} colors`, target: null, patches, kFixed: 0 }], round: 1, media: mediaMm(), patchMm: match.patchMm, title }),
+      'application/pdf', `${safeFileName(libraryName())} - proof.pdf`);
+    debugLog('match', 'proof sheet downloaded', { colors: colors.length, byHand: colors.filter((c) => c.fixed).length });
+  } catch (e) { toast(e.message, 'error'); }
 }
 
 /** "Download library": every color (see libraryColors) as a library file in the chosen format, named after the library. */
 function downloadColorLibrary() {
   const ex = RIP_EXPORTS[match.ripFormat];
-  const colors = libraryColors();
+  // a color set by hand in CMYK only goes into a format that holds CMYK (the others are L*a*b* only)
+  const all = libraryColors(), colors = all.filter((c) => !c.cmyk || ex?.cmyk);
   if (!ex || !colors.length) return;
-  const library = libraryName(), asReference = colors.filter((c) => c.fromReference).length;
+  const library = libraryName(), asReference = colors.filter((c) => c.fromReference).length, leftOut = all.length - colors.length;
   const description = `${colors.length} color(s) from SD-10 Print match – recommended values${asReference ? `, ${asReference} still their reference` : ''}; CIE L*a*b* D50/2°`;
-  downloadFile(ex.build({ library, description, colors: colors.map(({ name, lab }) => ({ name, lab: lab.map(round2) })) }), ex.mime, `${safeFileName(library)}.${ex.ext}`);
-  debugLog('match', `library downloaded (${ex.label})`, { colors: colors.length, asReference });
+  downloadFile(ex.build({ library, description, colors: colors.map(({ name, lab, cmyk }) => (cmyk ? { name, cmyk: cmyk.map(round2) } : { name, lab: lab.map(round2) })) }), ex.mime, `${safeFileName(library)}.${ex.ext}`);
+  debugLog('match', `library downloaded (${ex.label})`, { colors: colors.length, asReference, leftOut });
+  if (leftOut) toast(`${leftOut} color${leftOut === 1 ? ' is' : 's are'} set by hand in CMYK – ${ex.label} libraries hold L*a*b* only, so ${leftOut === 1 ? 'it was' : 'they were'} left out: set ${leftOut === 1 ? 'it' : 'them'} in the RIP, or use Edge Print.`);
 }
 
 /** The Colors card's export row: the format, the download button and what the file will hold. */
 function renderLibraryExport() {
   const ex = RIP_EXPORTS[match.ripFormat] ?? RIP_EXPORTS.cxf;
-  const lab = isLabMode(match.mode), withRef = match.colors.filter((c) => c.target);
+  const lab = isLabMode(match.mode), withRef = match.colors.filter((c) => c.target && !c.noLibrary);
+  const leftOutByHand = match.colors.filter((c) => c.target && c.noLibrary).length;
   $('mRipFormat').value = match.ripFormat;
   $('mRipFormat').disabled = !lab;
   const btn = $('btnLibDownload');
   btn.disabled = !lab || !withRef.length;
+  $('btnLibProof').disabled = btn.disabled;
   btn.title = lab ? `Every color under its name with its recommended L*a*b* (its reference until it has one), as a ${ex.label} file for the RIP – the library's name is under Measuring & matching` : 'Spot color libraries hold L*a*b* values – for spot color or L*a*b* sheets';
   if (document.activeElement !== $('mLibName')) $('mLibName').value = libraryName();
-  if (!lab || !withRef.length) { $('mLibNote').textContent = ''; return; }
+  if (!lab || !withRef.length) {
+    $('mLibNote').className = 'text-xs text-slate-500';
+    $('mLibNote').textContent = lab && leftOutByHand ? 'Every color is left out – tick the ones to include in the color list.' : '';
+    return;
+  }
   const outs = withRef.map((c) => outputOf(c, { later: true }));
   const pending = outs.filter((o) => o === undefined).length, asRef = outs.filter((o) => o === null).length;
   const parts = [];
+  if (leftOutByHand) parts.push(`${withRef.length} color${withRef.length === 1 ? '' : 's'} included, ${leftOutByHand} left out`);
   if (asRef) parts.push(`${asRef} of ${withRef.length} without a recommendation yet go in with their reference`);
   if (pending) parts.push('working out predictions…');
+  const cmykByHand = outs.filter((o) => o?.cmyk).length;
+  if (cmykByHand && !ex.cmyk) parts.push(`${cmykByHand} set by hand in CMYK stay${cmykByHand === 1 ? 's' : ''} out of ${ex.label} libraries (L*a*b* only) – set ${cmykByHand === 1 ? 'it' : 'them'} in the RIP`);
   // formats with reduced L*a*b* precision round the values: say what that costs when it matters
   let worst = 0;
   if (ex.quantize) {
-    worst = Math.max(0, ...withRef.map((c, i) => { const v = outs[i]?.lab ?? c.target; return deltaE2000(v, ex.quantize(v)); }));
+    worst = Math.max(0, ...withRef.map((c, i) => { const v = outs[i] ? outs[i].lab : c.target; return v ? deltaE2000(v, ex.quantize(v)) : 0; }));
     if (worst >= 0.1) parts.push(`${ex.label} stores ${ex.precision} – rounding costs up to ΔE00 ${worst.toFixed(2)}; for full precision use CxF3`);
   }
   $('mLibNote').textContent = parts.join(' · ');
@@ -1562,7 +1617,10 @@ function wireColors() {
     if (item === 'chart') { selectChart(); return; }
     const i = +item;
     const c = match.colors[i];
-    if (b.dataset.colorAct === 'remove') {
+    if (b.dataset.colorAct === 'library') {
+      if (b.checked) delete c.noLibrary; else c.noLibrary = true;
+      debugLog('match', `${colorLabel(c)} ${b.checked ? 'included in' : 'left out of'} the spot library`);
+    } else if (b.dataset.colorAct === 'remove') {
       if (c.rounds.length && !confirm(`Remove ${colorLabel(c)} and its measurements?`)) return;
       match.colors.splice(i, 1);
       if (match.active >= match.colors.length) match.active = match.colors.length - 1;
@@ -1690,7 +1748,62 @@ function wireSpaceCard() {
 function wireLibrary() {
   $('mRipFormat').onchange = () => { match.ripFormat = $('mRipFormat').value; commit(); };
   $('btnLibDownload').onclick = downloadColorLibrary;
+  $('btnLibProof').onclick = downloadProofSheet;
+  wireFixedOutput();
   $('mLibName').onchange = () => { match.libraryName = $('mLibName').value.trim().slice(0, 60); commit(); };
+}
+
+/**
+ * "Set by hand…": a color's output for the RIP hard-set – L*a*b*, or CMYK (only Edge Print libraries hold CMYK; the
+ * proof sheet prints it either way) – with presets for paper white and black; "Use the recommendation again" clears it.
+ */
+function wireFixedOutput() {
+  const LAB = ['fixL', 'fixA', 'fixB'], CMYK = ['fixC', 'fixM', 'fixY', 'fixK'];
+  const space = () => document.querySelector('input[name=fixedSpace]:checked')?.value ?? 'lab';
+  const show = (sp) => {
+    for (const r of document.querySelectorAll('input[name=fixedSpace]')) r.checked = r.value === sp;
+    $('mFixedLab').classList.toggle('hidden', sp !== 'lab');
+    $('mFixedCmyk').classList.toggle('hidden', sp !== 'cmyk');
+    const ex = RIP_EXPORTS[match.ripFormat];
+    $('mFixedNote').textContent = sp === 'cmyk' && !ex?.cmyk
+      ? `${ex?.label ?? 'This'} libraries hold L*a*b* only, so a CMYK color stays out of the library – set it in the RIP (the proof sheet prints it in CMYK). Edge Print libraries take CMYK.`
+      : sp === 'cmyk' ? 'Goes into the Edge Print library as CMYK, and onto the proof sheet as CMYK.' : 'Goes into the spot library and onto the proof sheet as these L*a*b* values.';
+  };
+  const fill = (sp, v) => { show(sp); (sp === 'lab' ? LAB : CMYK).forEach((id, i) => { $(id).value = v[i]; }); };
+  $('btnFixedSet').onclick = () => {
+    const c = activeColor();
+    $('mFixedFor').textContent = `${colorLabel(c)} – the values the spot library and the proof sheet give this color, instead of the recommendation.`;
+    const o = outputOf(c);
+    if (c.fixed) fill(c.fixed.space, c.fixed.v);
+    else fill('lab', (o?.lab ?? c.target).map((v) => round2(v)));
+    if (!c.fixed) CMYK.forEach((id) => { $(id).value = ''; });
+    $('mFixedDialog').showModal();
+  };
+  for (const r of document.querySelectorAll('input[name=fixedSpace]')) r.onchange = () => show(space());
+  $('mFixedDialog').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-fixed-preset]');
+    if (!b) return;
+    const preset = { paper: ['cmyk', [0, 0, 0, 0]], rich: ['cmyk', [60, 40, 40, 100]], black: ['lab', [0, 0, 0]] }[b.dataset.fixedPreset];
+    fill(...preset);
+  });
+  $('btnFixedSave').onclick = () => {
+    const sp = space(), ids = sp === 'lab' ? LAB : CMYK;
+    const v = ids.map((id) => parseFloat($(id).value));
+    const ok = v.every(Number.isFinite) && (sp === 'lab' ? v[0] >= 0 && v[0] <= 100 && Math.abs(v[1]) <= 128 && Math.abs(v[2]) <= 128 : v.every((x) => x >= 0 && x <= 100));
+    if (!ok) { toast(sp === 'lab' ? 'Enter L* (0–100), a* and b* (−128–127).' : 'Enter C, M, Y and K in percent (0–100).', 'error'); return; }
+    const c = activeColor();
+    c.fixed = { space: sp, v: v.map(round2) };
+    debugLog('match', `output of ${colorLabel(c)} set by hand`, c.fixed);
+    $('mFixedDialog').close();
+    commit();
+  };
+  $('btnFixedClear').onclick = () => {
+    const c = activeColor();
+    delete c.fixed;
+    debugLog('match', `output of ${colorLabel(c)} back to the recommendation`);
+    $('mFixedDialog').close();
+    commit();
+  };
 }
 
 /** Called once by app.js with the Console's state and helpers; wires Print match and the Color space view, opens the view in the URL. */

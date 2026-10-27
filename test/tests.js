@@ -220,6 +220,12 @@ async function matchCheck() {
   // spot sheet: one Separation per patch, uniquely named, Lab alternate = the patch value at tint 1
   const spotPatches = designPatches('spot', [55, 40, 50], [4, 6, 6]).map((p) => ({ ...p, name: patchSpotName('AB12', 3, p.n) }));
   const spotPdf = new TextDecoder('latin1').decode(buildSheetPdf({ mode: 'spot', patches: spotPatches, target: [55, 40, 50], round: 3 }));
+  // a proof patch whose output is set by hand in CMYK: its Separation has a CMYK alternate
+  const proofPdf = new TextDecoder('latin1').decode(buildSheetPdf({ mode: 'spot', groups: [{ label: '2 colors', target: null, kFixed: 0, patches: [
+    { n: 1, x: [50, 0, 0], cmyk: [60, 40, 40, 100], name: 'Rich Black' }, { n: 2, x: [55, 40, 50], name: 'Brand Red' }] }], round: 1 }));
+  check('proof sheet: a spot color set by hand in CMYK is a Separation with a CMYK alternate, the others keep L*a*b*',
+    proofPdf.includes('/Separation /Rich#20Black /DeviceCMYK << /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0.60 0.40 0.40 1.00] /N 1 >>') &&
+    /\/Separation \/Brand#20Red \[\/Lab/.test(proofPdf) && proofPdf.includes('(C60.0 M40.0 Y40.0 K100.0)'));
   const seps = [...spotPdf.matchAll(/\/SP(\d+) \[\/Separation \/(\S+) \[\/Lab << \/WhitePoint \[0\.9642 1 0\.8249\][^\]]*\] >>\] << \/FunctionType 2 \/Domain \[0 1\] \/C0 \[100 0 0\] \/C1 \[([-\d. ]+)\] \/N 1 >>\]/g)];
   const sepOk = seps.length === 16 && seps.every((m, i) => m[2] === `SD10-AB12-R3-${String(i + 1).padStart(2, '0')}` && m[3] === spotPatches[i].x.map((v) => v.toFixed(2)).join(' '));
   check('spot sheet: 16 named Separation colors (SD10-<job>-R<round>-<n>) with Lab D50 alternates', sepOk && (spotPdf.match(/ cs 1 scn\n/g) || []).length === 16 && spotPdf.includes('(SD10-AB12-R3-07) Tj'), `${seps.length} separations`);
@@ -373,6 +379,11 @@ async function matchCheck() {
       lib.colors.map((c) => c.name).join('|') === 'Red, Hot|-0.5' && lib.colors[0].lab.join() === '45.5,60.1,30' && lib.skipped.join() === 'Subli Orange', JSON.stringify(lib));
     const rt = readLibrary(RIP_EXPORTS.epcc.build({ library: 'House', colors: [{ name: 'Brand Red', lab: [45.62, 60.44, -30.38] }] }), 'x.epcc');
     check('Edge Print export reads back (one decimal)', rt.library === 'House' && rt.colors[0].name === 'Brand Red' && rt.colors[0].lab.join() === '45.6,60.4,-30.4', JSON.stringify(rt));
+    // a color set by hand in CMYK goes in as Edge Print's own CMYK entries do (type 1, 4 values in percent)
+    const mixed = RIP_EXPORTS.epcc.build({ library: 'Mix', colors: [{ name: 'Paper', cmyk: [0, 0, 0, 0] }, { name: 'Ink', lab: [40, 10, -5] }] });
+    const mixedText = new TextDecoder('utf-16le').decode(mixed.subarray(2));
+    check('Edge Print export: a color set by hand in CMYK as a CMYK entry, read back as one (skipped as L*a*b*)',
+      /\r\n0,5,Paper,1,4,0;0;0;0\r\n0,3,Ink,0,3,40;10;-5\r\n$/.test(mixedText) && readLibrary(mixed, 'mix.epcc').skipped.join() === 'Paper' && RIP_EXPORTS.epcc.cmyk && !RIP_EXPORTS.versaworks.cmyk, mixedText);
   }
 
   // textile color differences vs. colour-science 0.4 (CMC l:c 2:1 and CIEDE2000 with kL = 2)

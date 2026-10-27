@@ -291,6 +291,53 @@
       [...d.querySelectorAll('#mColorList [data-color]')].find((x) => /Brand Red/.test(x.textContent))?.querySelector('[data-color-act=select]').click();
       log(job().colors.every((c) => !['Rounding', 'Dropped'].includes(c.name)) && $('mSpotName').value === 'Brand Red', 'imported colors can be removed again');
 
+      // an output set by hand: paper white in CMYK – into Edge Print libraries and onto the proof sheet; formats that hold
+      // L*a*b* only leave it out (and say so); "Use the recommendation again" clears it
+      const brandRed = () => job().colors.find((c) => c.name === 'Brand Red');
+      $('btnFixedSet').click();
+      d.querySelector('[data-fixed-preset=paper]').click();
+      $('btnFixedSave').click();
+      log(brandRed().fixed?.space === 'cmyk' && brandRed().fixed.v.join() === '0,0,0,0' && /C0\.0 M0\.0 Y0\.0 K0\.0.*set by hand/.test($('mFixedText').textContent) &&
+        /set by hand/.test([...d.querySelectorAll('#mColorList [data-color]')].find((li) => /Brand Red/.test(li.textContent))?.textContent ?? ''),
+        'an output can be set by hand (paper white, CMYK 0 0 0 0) – the Reference card and the color list show it');
+      setSel('mRipFormat', 'epcc');
+      $('btnLibDownload').click();
+      const epccFile = files.find((f) => f.name === 'House colors.epcc');
+      const epccText = epccFile ? new TextDecoder('utf-16le').decode(new Uint8Array(await (await fetch(epccFile.href)).arrayBuffer()).subarray(2)) : '';
+      log(/\r\n0,9,Brand Red,1,4,0;0;0;0\r\n/.test(epccText), 'an Edge Print library takes the CMYK set by hand');
+      setSel('mRipFormat', 'versaworks');
+      log(/set by hand in CMYK stays out of VersaWorks \.spot libraries/.test($('mLibNote').textContent), `a library format without CMYK leaves it out and says so (${$('mLibNote').textContent.slice(0, 80)})`);
+      $('btnLibProof').click();
+      const proofFile = files.find((f) => f.name === 'House colors - proof.pdf');
+      const proofText = proofFile ? await readFile(proofFile) : '';
+      log(proofText.includes('/Separation /Brand#20Red /DeviceCMYK') && /^%PDF-1\.4/.test(proofText), 'the proof sheet holds every color as a named spot color – the one set by hand in CMYK');
+      $('btnFixedSet').click();
+      $('btnFixedClear').click();
+      log(!brandRed().fixed && /the recommendation/.test($('mFixedText').textContent), '"Use the recommendation again" clears the output set by hand');
+      // a color can be left out of the spot library and the proof sheet (the box in its row), and taken back in
+      $('btnColorAdd').click();
+      $('mSpotName').value = 'Kept Green'; $('mSpotName').dispatchEvent(new Event('change'));
+      [['mL', 50], ['mA', -40], ['mB', 20]].forEach(([id, v]) => { $(id).value = String(v); });
+      $('mB').dispatchEvent(new Event('change'));
+      const row = (name) => [...d.querySelectorAll('#mColorList [data-color]')].find((li) => li.textContent.includes(name));
+      row('Brand Red').querySelector('[data-color-act=library]').click();
+      setSel('mRipFormat', 'cxf');
+      log(brandRed().noLibrary === true && /left out of the spot library/.test(row('Brand Red').textContent) && /1 left out/.test($('mLibNote').textContent),
+        `a color can be left out of the library (${$('mLibNote').textContent.slice(0, 60)})`);
+      const filesBefore = files.length;
+      $('btnLibDownload').click();
+      $('btnLibProof').click();
+      const cxfOut = files.slice(filesBefore).find((f) => f.name === 'House colors.cxf'), proofOut = files.slice(filesBefore).find((f) => f.name === 'House colors - proof.pdf');
+      const keptCxf = cxfOut ? await readFile(cxfOut) : '', keptProof = proofOut ? await readFile(proofOut) : '';
+      log(/Name="Kept Green"/.test(keptCxf) && !/Name="Brand Red"/.test(keptCxf) && keptProof.includes('/Kept#20Green') && !keptProof.includes('/Brand#20Red'),
+        'a color left out is in neither the library file nor the proof sheet');
+      row('Brand Red').querySelector('[data-color-act=library]').click();
+      log(!brandRed().noLibrary && $('mSpotName').value === 'Kept Green', 'ticking it again takes it back in (the box does not change the selected color)');
+      w.confirm = () => true;
+      row('Kept Green').querySelector('[data-color-act=remove]').click();
+      row('Brand Red').querySelector('[data-color-act=select]').click();
+      setSel('mRipFormat', 'cxf');
+
       // ---- RGB / raster sheet
       setSel('mMode', 'rgb');
       await until(() => !$('btnMatchSheet').disabled);

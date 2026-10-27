@@ -340,7 +340,30 @@ the *Colors* card, beside **Download library**:
 | Library | Where | What it holds |
 |---|---|---|
 | **Sheet library** | Test sheet card | The current test sheet's patch colors. Import and enable it before printing the sheet, so the patches go through the same named-color path as your artwork. |
-| **Download library** | *Colors* card | Every color under its name (exactly as in your artwork – the RIP finds spot colors by name) with its recommended L\*a\*b\*. A color without a result or prediction yet goes in with its reference, and the card says how many. The file is named after the **Spot library name** (under *Measuring & matching*). |
+| **Download library** | *Colors* card | Every ticked color under its name (exactly as in your artwork – the RIP finds spot colors by name) with its recommended L\*a\*b\*. A color without a result or prediction yet goes in with its reference, and the card says how many. The file is named after the **Spot library name** (under *Measuring & matching*). |
+
+**Setting a color's output by hand**
+
+Any color's output for the RIP can be hard-set: **Set by hand…** on the *Reference* card takes L\*a\*b\* or CMYK
+values, with presets for paper white (CMYK 0 0 0 0 – for a white that prints no ink), rich black (CMYK 60 40 40 100)
+and L\*a\*b\* 0 0 0. Values set by hand replace the recommendation in the color list, the library and the proof
+sheet; **Use the recommendation again** clears them.
+
+| Format | L\*a\*b\* set by hand | CMYK set by hand |
+|---|---|---|
+| Edge Print | ✓ | ✓ (as Edge Print's own CMYK entries) |
+| CxF3, Adobe Color Book, VersaWorks | ✓ | left out of the file – the card says so; set the color in the RIP |
+
+**Choosing the colors**
+
+Each color in the list has a box: untick it to leave that color out of the spot library and the proof sheet (the
+card says how many are included and left out); tick it to take it back in. It does not change the selected color.
+
+**Proof sheet**
+
+**Proof sheet of all colors (PDF)** on the *Colors* card prints every color as one patch, named exactly like it, with
+the value the library gives it (a color set by hand in CMYK gets a CMYK alternate). Import the library into the RIP,
+print the proof like the final job, and check every color at once.
 
 **Getting files in**
 
@@ -370,10 +393,10 @@ Open these pages in Chrome – on the live site (e.g. [sd-10.com/test/](https://
 
 | Page | Checks | What it covers |
 |---|---|---|
-| [`test/index.html`](https://sd-10.com/test/index.html) | 120 | The core code (see below) |
+| [`test/index.html`](https://sd-10.com/test/index.html) | 123 | The core code (see below) |
 | [`test/ui-smoke.html`](https://sd-10.com/test/ui-smoke.html) | 34 | The Console against the simulated SD-10: calibrate, measure, compare, line scan, history sync, palettes, settings, custom ICC profiles |
 | [`test/mobile-check.html`](https://sd-10.com/test/mobile-check.html) | – | The layout at phone width (no sideways scrolling) and the compare / reference flows |
-| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 50 | Print match against the simulated device and printer: matching to within tolerance, several colors at once, media sizes and limits, readings per patch, textile ΔE, metamerism and gamut checks, spot color sheets and libraries, colors imported from a swatch file, RGB sheets |
+| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 58 | Print match against the simulated device and printer: matching to within tolerance, several colors at once, media sizes and limits, readings per patch, textile ΔE, metamerism and gamut checks, spot color sheets and libraries, colors imported from a swatch file, RGB sheets |
 | [`test/space-smoke.html`](https://sd-10.com/test/space-smoke.html) | 38 | The color space workflow against the simulated device and printer (see below) |
 
 **`test/index.html` checks**
