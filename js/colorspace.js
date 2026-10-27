@@ -307,7 +307,34 @@ export function invert(space, target, { formula = 'de00', kFixed = null } = {}) 
   if (m.p && (!best || m.d < best.predictedDeltaE)) {
     best = { x: m.p.x.slice(0, 3), k: mode === 'cmyk' ? m.p.x[3] : 0, predicted: m.p.lab, predictedDeltaE: m.d, rms: 0, d1: 0, sparse: false, measured: true };
   }
-  return best;
+  return best && !best.measured ? mildest(space, target, best, { dE, stats, withinReach }) : best;
+}
+
+/** How much worse (ΔE) a milder request may be predicted to print and still count as printing alike. */
+const PRINTS_ALIKE = 0.1;
+/** Beyond this predicted ΔE the reference is out of reach, and the search ends up at extreme requests. */
+const OUT_OF_REACH = 1;
+
+/**
+ * Beyond the printer's edge every "more" request prints alike – a reference darker than the printer's black is best
+ * served by L* 0 as much as by L* 18 – so the search can end at an extreme request. Of the requests that print alike
+ * (within PRINTS_ALIKE of the best), take the one nearest the reference: on the line from the best request towards the
+ * reference, as far as the prediction allows. L*a*b* sheets only (there the request and the reference are comparable).
+ */
+function mildest(space, target, best, { dE, stats, withinReach }) {
+  const mode = space.mode;
+  if ((mode !== 'spot' && mode !== 'lab') || best.predictedDeltaE <= OUT_OF_REACH) return best;
+  const { decimals } = MODES[mode];
+  const at = (t) => best.x.map((v, k) => roundTo(v + t * (target[k] - v), decimals));
+  let done = 0, hiT = 1, found = null;
+  for (let it = 0; it < 10; it++) { // bisect: the print changes steadily along the way
+    const t = (done + hiT) / 2, x = at(t);
+    const f = localFit(space, pointX(mode, x, best.k), space.points, { stats });
+    if (withinReach(f) && dE(target, f.lab) <= best.predictedDeltaE + PRINTS_ALIKE) { done = t; found = { x, f }; } else hiT = t;
+  }
+  if (!found) return best;
+  const { x, f } = found;
+  return { ...best, x, predicted: f.lab, predictedDeltaE: dE(target, f.lab), rms: f.rms, d1: f.d1, sparse: f.sparse };
 }
 
 // ---------------------------------------------------------------- quality and drift

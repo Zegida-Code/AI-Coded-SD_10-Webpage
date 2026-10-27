@@ -1210,18 +1210,26 @@ function queuePredictions() {
   }, 30);
 }
 
-/** Reference card: the values the color space predicts for the reference, and how close they should print. */
+/** What to do with the values of a prediction or result, by sheet type. */
+const ASK_FOR = { spot: 'Ask the RIP for', lab: 'Use in your document', cmyk: 'Use in your document', rgb: 'Use in your artwork' };
+
+/**
+ * Reference card: the values the color space recommends asking for, and – separately, since they differ beyond the
+ * printer's reach – the color those values print and how close that is to the reference.
+ */
 function spacePredictionHtml(c) {
   const p = spacePrediction(c);
   if (!p) return '';
   const s = usableSpace(), st = spaceStats(s);
   const rough = st.spacing != null && p.d1 > 2 * st.spacing; // no measured patches nearby
-  const lab = `<span class="font-mono">${labText(p.predicted)}</span>`;
+  const reached = p.predictedDeltaE <= 2;
   return `<div class="flex flex-wrap items-baseline justify-between gap-2"><h4 class="text-sm font-semibold">Predicted by the color space</h4><span class="text-xs text-slate-500">${escapeHtml(s.name)}</span></div>
-    ${valueTilesHtml(match.mode, p.x, p.k)}
-    <p class="text-xs">${p.predictedDeltaE <= 2
-      ? `<span class="text-emerald-600">${p.measured ? 'Measured' : 'Predicted'} to print ${DE().label} ${p.predictedDeltaE.toFixed(2)} from the reference.</span>`
-      : `<span class="text-rose-600"><b>Beyond what this printer reached in the color space.</b> The closest it prints is ${lab}, ${DE().label} ${p.predictedDeltaE.toFixed(2)} from the reference.</span>`}
+    <div class="space-y-1"><div class="text-xs font-medium text-slate-500">${ASK_FOR[match.mode]}</div>${valueTilesHtml(match.mode, p.x, p.k)}</div>
+    <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs"><span class="font-medium text-slate-500">It prints</span>
+      <span class="inline-block h-4 w-4 rounded ring-1 ring-black/10" style="background:${displayHex(p.predicted)}"></span>
+      <span class="font-mono">${labText(p.predicted)}</span>
+      <span class="${reached ? 'text-emerald-600' : 'text-rose-600'}">– ${DE().label} ${p.predictedDeltaE.toFixed(2)} from the reference${p.measured ? ' (measured)' : ''}</span></p>
+    <p class="text-xs">${reached ? '' : `<span class="text-rose-600"><b>Beyond what this printer reached in the color space</b> – no values print closer.${isLabMode(match.mode) ? ' Past the printer’s limit, more extreme values print alike, so these are the ones nearest the reference.' : ''}</span>`}
       ${p.measured ? '<span class="text-slate-500">These are the values of a patch already measured – no prediction prints closer.</span>' : ''}
       <span class="text-slate-500">The color space is typically accurate to ΔE00 ${st.accuracy ? st.accuracy.median.toFixed(2) : '–'}${rough ? ', but it has few measured patches near this color, so treat this as a first estimate' : ''}. The first test sheet starts from these values${rough ? '' : ' with finer steps'} and confirms them.</span></p>
     <div class="flex flex-wrap gap-2"><button type="button" data-pred-act="copy" class="btn btn-ghost">Copy values</button></div>`;

@@ -111,7 +111,7 @@
       [['mL', 0], ['mA', 1], ['mB', 2]].forEach(([id, i]) => { $(id).value = target[i].toFixed(2); });
       $('mB').dispatchEvent(new Event('change'));
       await until(() => !$('mSpacePred').classList.contains('hidden'));
-      const predDE = parseFloat(text('mSpacePred').match(/Predicted to print ΔE00 ([\d.]+)/)?.[1]);
+      const predDE = parseFloat(text('mSpacePred').match(/ΔE00 ([\d.]+) from the reference/)?.[1]);
       const predVals = [...d.querySelectorAll('#mSpacePred .font-mono')].slice(0, 3).map((e) => parseFloat(e.textContent));
       const predPrints = predVals.length === 3 ? deltaE2000(target, prints(predVals)) : NaN;
       log(predDE < 1.5 && predPrints < 2, `the reference gets predicted values straight away (predicted ΔE00 ${predDE}; they print ${predPrints.toFixed(2)})`);

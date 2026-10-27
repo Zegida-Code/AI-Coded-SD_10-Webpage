@@ -629,6 +629,21 @@ async function spaceCheck() {
       staleDrift && redone && !driftOf(clip, 'sheet:edge')?.drift && !refreshChecks(clip));
   }
 
+  // a printer whose black stops at L* 22: every darker request prints alike. A reference darker than that gets the
+  // mildest request that prints as close as any – not L* 0, which only looks like a different color in the library
+  {
+    const floorPrinter = ([L, a, b]) => [Math.max(22, 3 + 0.95 * L), 0.95 * a, 0.95 * b];
+    const dark = newSpace({ name: 'Black at L* 22', mode: 'spot', now: T0 });
+    for (const p of designChart('spot', 400, 5)) learn(dark, { session: 'chart', kind: 'chart', label: 'Chart', n: p.n, x: p.x, lab: noise(floorPrinter(p.x)), now: T0 });
+    const navy = [18, 2, -7];
+    const r = invert(dark, navy);
+    const prints = deltaE2000(navy, floorPrinter(r.x));
+    let bestBrute = Infinity;
+    for (let L = 0; L <= 40; L += 1) for (let a = -10; a <= 10; a += 1) for (let b = -15; b <= 5; b += 1) bestBrute = Math.min(bestBrute, deltaE2000(navy, floorPrinter([L, a, b])));
+    check(`beyond the printer's darkest black the request stays mild (asks for L* ${r.x[0].toFixed(1)}, prints ΔE00 ${prints.toFixed(2)}; the best possible is ${bestBrute.toFixed(2)})`,
+      r.x[0] >= 10 && prints <= bestBrute + 0.5 && Math.abs(r.predictedDeltaE - prints) < 0.6);
+  }
+
   // drift: the printer changed (darker, duller, yellower)
   const changed = (x) => { const [L, a, b] = printer(x); return [L - 4, a * 0.9, b * 0.9 + 3]; };
   const check24 = designChart('spot', 24, 9);
