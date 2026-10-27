@@ -95,7 +95,7 @@
           $('btnMatchMeasure').click();
           await until(() => $('mProgress').textContent.startsWith(`${i + 1} /`) || !$('mResultCard').classList.contains('hidden'));
         }
-        return until(() => !$('mResultCard').classList.contains('hidden') && /predicted ΔE00/.test($('mResult').textContent));
+        return until(() => !$('mResultCard').classList.contains('hidden') && /(predicted|printed) ΔE00/.test($('mResult').textContent));
       }
       log(await scanAll(1), 'round 1 scanned -> result shown');
       const r1 = $('mResult').textContent.replace(/\s+/g, ' ');
@@ -208,17 +208,28 @@
       log(/named color Brand Red/.test($('mResult').textContent), 'spot result names the color');
       log(/Metamerism check \(best patch #\d+ vs reference\)/.test($('mResult').textContent) && /Tri-band shop light/.test($('mResult').textContent), `metamerism check compares the best patch with the measured reference under other lights (${($('mResult').textContent.match(/Metamerism check.{0,120}/) || [''])[0]})`);
       setSel('matchFormula', 'cmc21');
-      log(/predicted ΔE CMC 2:1/.test($('mResult').textContent) && /Centre patch\s*ΔE CMC 2:1/.test($('mResult').textContent), 'switching to ΔE CMC 2:1 re-judges the result');
+      log(/(predicted|printed) ΔE CMC 2:1/.test($('mResult').textContent) && /Centre patch\s*ΔE CMC 2:1/.test($('mResult').textContent), 'switching to ΔE CMC 2:1 re-judges the result');
       setSel('matchFormula', 'de00');
       // the Colors card is the spot library: every color under its name with its recommended L*a*b* (its result; its
       // reference until it has one), downloaded as one file
       const job = () => JSON.parse(w.localStorage.getItem('sd10.match'));
+      // (the values to use now: a patch that printed within tolerance – the sheet's centre unless another printed clearly
+      // closer – else the best measured patch while the result is only a rough estimate beyond the sheet, else the result)
+      const useNowX = (c, r) => {
+        const res = r.result, tol = job().tol;
+        const rr = c.rounds.find((x) => x.round === (res.bestEver?.round ?? r.round));
+        const best = rr?.patches.find((q) => q.n === (res.bestEver?.n ?? res.best.n)), bestDE = res.bestEver?.dE ?? res.best.dE;
+        const centreOk = res.centreDE != null && res.centreDE <= tol;
+        if (centreOk && !(best && res.centreDE - bestDE > Math.max(0.3, res.repeatability ?? 0))) return r.centre;
+        if (best && (bestDE <= tol || res.extrapolated)) return best.x;
+        return res.x;
+      };
       const outputs = () => Object.fromEntries(job().colors.filter((c) => c.target).map((c) => {
         const r = [...c.rounds].reverse().find((x) => x.result);
-        return [c.name, (r ? r.result.x : c.target).map((v) => v.toFixed(2)).join()];
+        return [c.name, (r ? useNowX(c, r) : c.target).map((v) => v.toFixed(2)).join()];
       }));
       const redItem = [...d.querySelectorAll('#mColorList [data-color]')].find((li) => /Brand Red/.test(li.textContent));
-      log(/→ .*result [\d.]+/.test(redItem?.textContent ?? ''), `each color shows the L*a*b* recommended for the RIP (${redItem?.textContent.replace(/\s+/g, ' ').trim().slice(0, 90)})`);
+      log(/→ .*(result|printed|confirmed) [\d.]+/.test(redItem?.textContent ?? ''), `each color shows the L*a*b* recommended for the RIP (${redItem?.textContent.replace(/\s+/g, ' ').trim().slice(0, 90)})`);
       $('btnLibDownload').click();
       const libFile = files.find((f) => f.name === 'SD-10 spot colors.spot');
       const libSpot = libFile ? await readFile(libFile) : '';

@@ -394,12 +394,44 @@ export function matchControls(busyLabel) {
   $('btnMatchTarget').textContent = `Measure reference${color.refReads.length ? reading(color.refReads.length) : ''}`;
 }
 
+/**
+ * The values to use for a color now – what the result card shows big, what Copy values copies and what the spot library
+ * gets – from a round's result (default: the latest round with one):
+ *   confirmed – a patch printed within tolerance: a measured answer beats any refinement. The sheet's centre values,
+ *               unless another patch printed clearly closer (by more than the measuring noise) – then that patch's;
+ *   measured  – the result is only a rough estimate beyond the sheet's patches: until a sheet confirms it, the best patch
+ *               measured so far (values that really printed);
+ *   result    – the result itself (interpolated within the sheet, or a measured patch already).
+ * Returns { x, k, mode, dE, measured (dE was measured, not predicted), why, round, n (the patch, when not the centre) }
+ * or null.
+ */
+function useNow(c, r = [...c.rounds].reverse().find((x) => x.result)) {
+  const res = r?.result;
+  if (!res) return null;
+  // the best patch printed so far (on this sheet or an earlier one) – its values and how close it printed
+  const bestRound = res.bestEver?.round ?? r.round, bestN = res.bestEver?.n ?? res.best.n, bestDE = res.bestEver?.dE ?? res.best.dE;
+  const rr = c.rounds.find((x) => x.round === bestRound), bp = rr?.patches.find((q) => q.n === bestN);
+  const bestPatch = bp && { x: bp.x, k: bp.k ?? rr.kFixed, mode: rr.mode, dE: bestDE, measured: true, round: bestRound, n: bestN };
+  const centreOk = res.centreDE != null && res.centreDE <= match.tol;
+  const noise = Math.max(0.3, res.repeatability ?? 0);
+  if (centreOk && !(bestPatch && res.centreDE - bestDE > noise)) {
+    return { x: r.centre, k: r.kFixed, mode: r.mode, dE: res.centreDE, measured: true, why: 'confirmed', round: r.round };
+  }
+  if (bestPatch && bestDE <= match.tol) return { ...bestPatch, why: 'confirmed' };
+  if (res.extrapolated && bestPatch) return { ...bestPatch, why: 'measured' };
+  const measured = res.source === 'best-patch' || res.source === 'best-earlier';
+  return { x: res.x, k: r.kFixed, mode: r.mode, dE: res.predictedDeltaE, measured, why: 'result', round: r.round };
+}
+
 function colorStatus(c) {
   if (!c.target) return 'no reference yet';
   if (c.accepted) return 'accepted';
   const r = latest(c);
   if (!r) return 'no sheet yet';
-  if (r.result) return `round ${r.round} · predicted ${DE().label} ${r.result.predictedDeltaE.toFixed(2)}`;
+  if (r.result) {
+    const u = useNow(c, r);
+    return u.why === 'confirmed' ? `done · printed ${DE().label} ${u.dE.toFixed(2)}` : `round ${r.round} · ${u.measured ? 'printed' : 'predicted'} ${DE().label} ${u.dE.toFixed(2)}`;
+  }
   return `round ${r.round} · ${scannedCount(r)}/${r.patches.length} scanned`;
 }
 
@@ -438,8 +470,8 @@ function outputLineHtml(c) {
   const swatch = (lab) => `<span class="inline-block h-2.5 w-2.5 rounded-sm align-middle ring-1 ring-black/10" style="background:${displayHex(lab)}"></span>`;
   if (o === undefined) return '<span class="block text-xs text-slate-400">→ working out the prediction…</span>';
   if (!o) return '<span class="block text-xs text-slate-400" title="No test sheet result or color space prediction yet – the library gives the reference">→ the reference (no recommendation yet)</span>';
-  const from = { result: 'result', prediction: 'predicted', measured: 'measured' }[o.source];
-  const why = { result: 'its latest test-sheet result', prediction: 'the color space prediction', measured: 'a patch the color space measured' }[o.source];
+  const from = { confirmed: 'confirmed', result: 'result', 'sheet-patch': 'printed', prediction: 'predicted', measured: 'measured' }[o.source];
+  const why = { confirmed: 'its sheet values, which printed within tolerance', result: 'its latest test-sheet result', 'sheet-patch': 'the best patch printed so far – the result is still a rough estimate', prediction: 'the color space prediction', measured: 'a patch the color space measured' }[o.source];
   return `<span class="block text-xs text-indigo-600 dark:text-indigo-400" title="The L*a*b* the library file gives this color (${why}, ${DE().label} ${o.dE.toFixed(2)} from the reference) – enter it for the named color in the RIP">→ ${swatch(o.lab)} <span class="font-mono">${o.lab.map(fmt1).join(' / ')}</span> · ${from} ${o.dE.toFixed(2)}</span>`;
 }
 
@@ -702,43 +734,60 @@ function pickNote(res) {
   return ` Patch ${where(lowest.round, lowest.n)} measured slightly lower (${DE().label} ${lowest.dE.toFixed(2)} against ${res.predictedDeltaE.toFixed(2)}) – within the measuring noise – but #${res.pickN}'s values are nearer the reference: where patches print alike, more extreme values only measure better by chance.`;
 }
 
-/** Card 4: one color's result – the values to use, how close they should print, why, and the round history. */
+/**
+ * Card 4: one color's result – the values to use now (see useNow), how close they print, the one thing to know about
+ * them, and the round history.
+ */
 function resultHtml(c) {
   const r = latest(c);
   const res = r.result;
-  const within = res.predictedDeltaE <= match.tol && !res.extrapolated;
-  const verified = r.round > 1 && res.centreDE != null && res.centreDE <= match.tol;
-  const prevVals = valuesText(r.mode, r.centre, r.kFixed);
+  const u = useNow(c, r);
+  const fmt = (x, k) => `<span class="font-mono">${valuesText(r.mode, x, k)}</span>`;
+  const differs = u.x.some((v, k) => Math.abs(v - res.x[k]) >= 0.05);
+  const within = u.why === 'confirmed' || (u.dE <= match.tol && !res.extrapolated);
   const gamut = gamutClass(gamutFor(c));
   const bestElsewhere = res.bestEver && res.bestEver.round !== r.round;
+  const where = (round, n) => (round !== r.round ? `patch #${n} of sheet ${round}` : `patch #${n}`);
+  // the one message that explains these values – the most important situation wins
+  let note = '';
+  if (u.why === 'confirmed') {
+    note = `<div class="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"><b>Done.</b> ${u.n != null ? `The values of ${where(u.round, u.n)}` : "This sheet's centre values"} printed within tolerance (${DE().label} ${u.dE.toFixed(2)}) – use them, and accept the color.${differs && res.predictedDeltaE < u.dE ? ` Another sheet could still try ${fmt(res.x, r.kFixed)} (predicted ${DE().label} ${res.predictedDeltaE.toFixed(2)}${res.extrapolated ? ', a rough estimate' : ''}), but it isn't needed.` : ''}</div>`;
+  } else if (res.regressed) {
+    note = `<p class="text-xs text-amber-600"><b>The last change made the color worse</b> (this sheet's centre printed ${DE().label} ${res.centreDE.toFixed(2)}), so these are the values of ${where(res.pickRound ?? res.bestEver.round, res.pickN ?? res.bestEver.n)}, the best so far; the next sheet searches around them in smaller steps.</p>`;
+  } else if (res.gamutLimited && u.dE > match.tol) {
+    note = gamut === 'inside'
+      ? `<p class="text-xs text-rose-600"><b>Your printer profile says this color is printable, but the prints stop getting closer at ${DE().label} ${u.dE.toFixed(2)}.</b> The profile probably doesn't describe how this printer, ink and media really print – or the measuring conditions differ (M-factor, drying, lamination). Re-profiling the media, or checking the RIP's media and ink settings, will help more than further rounds.</p>`
+      : `<p class="text-xs text-rose-600"><b>The reference looks outside what this printer and media can reproduce.</b> Nothing within reach is predicted closer than ${DE().label} ${u.dE.toFixed(2)} – more rounds will not get much closer. Use these values as the closest match. If your RIP shows the color as printable, its media profile probably doesn't match the real prints – check the media, ink limits and color settings.</p>`;
+  } else if (u.why === 'measured') {
+    note = `<p class="text-xs text-amber-600"><b>The best guess lies beyond this sheet's patches</b> – ${fmt(res.x, r.kFixed)}, predicted ${DE().label} ${res.predictedDeltaE.toFixed(2)}, is only a rough estimate${res.clamped ? ' and reaches the limit of what can be asked for, so the color may be at the edge of what this printer can make' : ''}. Until a sheet confirms it, these are the values of ${where(u.round, u.n)}, which printed ${DE().label} ${u.dE.toFixed(2)}. The next sheet is centred on the guess and tests it.</p>`;
+  } else if (res.source === 'best-patch') {
+    note = `<p class="text-xs text-amber-600">No values are predicted to print closer than the patches you measured, so these are the values of patch #${res.pickN ?? res.best.n}.${pickNote(res)} A next sheet with finer steps around it may still gain a little – or accept these.</p>`;
+  } else if (res.source === 'best-earlier') {
+    note = `<p class="text-xs text-amber-600">Nothing on this sheet beats patch #${res.pickN} of sheet ${res.pickRound}, so these are its values; the next sheet looks for something better close to it.${pickNote(res)}</p>`;
+  } else if (res.trustLimited) {
+    note = '<p class="text-xs text-amber-600">This round moves as far as the sheet’s measurements can be trusted; the next sheet continues in that direction.</p>';
+  } else if (res.clamped) {
+    note = '<p class="text-xs text-amber-600">Some values reached their limit – the reference may be outside the colors this printer and media can produce. These are the closest reachable values.</p>';
+  }
   return `<section data-res="${c.id}" class="rounded-xl border border-slate-200 dark:border-slate-800 p-3 space-y-3">
     <div class="flex flex-wrap items-center gap-2">
       <span class="h-5 w-5 rounded ring-1 ring-black/10" style="background:${displayHex(c.target)}"></span>
       <h4 class="font-semibold">${escapeHtml(colorLabel(c))}</h4><span class="text-xs text-slate-500">round ${r.round}</span>
       ${c.accepted ? '<span class="chip bg-emerald-600 text-white">ACCEPTED</span>' : ''}
     </div>
-    ${verified ? `<div class="rounded-lg bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200 p-3 text-sm"><b>Done.</b> The previous round's values (<span class="font-mono">${prevVals}</span>) printed within tolerance – centre patch ${DE().label} ${res.centreDE.toFixed(2)}. Use those, or the refined values below.</div>` : ''}
     <p class="text-sm text-slate-500">${{
     spot: `Enter these L*a*b* values for the named color${c.name ? ` <b>${escapeHtml(c.name)}</b>` : ''} in the RIP’s spot color library:`,
     lab: 'Use these L*a*b* values for the color in your document:',
     cmyk: 'Use these CMYK values for the color in your document:',
     rgb: 'Use this sRGB color in your artwork:',
   }[r.mode]}</p>
-    ${valueTilesHtml(r.mode, res.x, r.kFixed, { large: true })}
+    ${valueTilesHtml(r.mode, u.x, u.k, { large: true })}
     <div class="flex flex-wrap items-center gap-2 text-sm">
-      <span class="rounded-md px-2 py-0.5 text-xs font-bold text-white ${within ? 'bg-emerald-600' : 'bg-amber-500'}">${within ? 'EXPECTED MATCH' : 'NEEDS ANOTHER ROUND'}</span>
-      <span>predicted ${DE().label} <b class="tabular-nums">${res.predictedDeltaE.toFixed(2)}</b>${res.extrapolated ? ' (rough estimate)' : ''} (tolerance ${match.tol})</span>
+      <span class="rounded-md px-2 py-0.5 text-xs font-bold text-white ${u.why === 'confirmed' ? 'bg-emerald-600' : within ? 'bg-emerald-600' : 'bg-amber-500'}">${u.why === 'confirmed' ? 'DONE' : within ? 'EXPECTED MATCH' : 'NEEDS ANOTHER ROUND'}</span>
+      <span>${u.measured ? 'printed' : 'predicted'} ${DE().label} <b class="tabular-nums">${u.dE.toFixed(2)}</b> (tolerance ${match.tol})</span>
     </div>
-    ${res.regressed ? `<p class="text-xs text-amber-600"><b>The last change made the color worse</b> (this sheet's centre printed ${DE().label} ${res.centreDE.toFixed(2)}), so the search goes back to the best patch so far and continues in smaller steps.</p>` : ''}
-    ${res.source === 'best-patch' ? `<p class="text-xs text-amber-600">No values are predicted to print closer than the patches you measured, so these are the values of patch #${res.pickN ?? res.best.n}.${pickNote(res)}</p>` : ''}
-    ${res.source === 'best-earlier' ? `<p class="text-xs text-amber-600">Nothing on this sheet beats patch #${res.pickN} of sheet ${res.pickRound}, so these are its values; the next sheet looks for something better close to it.${pickNote(res)}</p>` : ''}
-    ${res.extrapolated ? '<p class="text-xs text-amber-600">The answer lies outside this sheet’s patch range, so the prediction is only a rough estimate. The next sheet is centred on it and will confirm.</p>' : ''}
-    ${res.trustLimited ? '<p class="text-xs text-amber-600">This round moves as far as the sheet’s measurements can be trusted; the next sheet continues in that direction.</p>' : ''}
-    ${res.gamutLimited && res.predictedDeltaE > match.tol ? (gamut === 'inside'
-    ? `<p class="text-xs text-rose-600"><b>Your printer profile says this color is printable, but the prints stop getting closer at ${DE().label} ${res.predictedDeltaE.toFixed(2)}.</b> The profile probably doesn't describe how this printer, ink and media really print – or the measuring conditions differ (M-factor, drying, lamination). Re-profiling the media, or checking the RIP's media and ink settings, will help more than further rounds.</p>`
-    : `<p class="text-xs text-rose-600"><b>The reference looks outside what this printer and media can reproduce.</b> Nothing within reach is predicted closer than ${DE().label} ${res.predictedDeltaE.toFixed(2)} – more rounds will not get much closer. Use these values as the closest match. If your RIP shows the color as printable, its media profile probably doesn't match the real prints – check the media, ink limits and color settings.</p>`) : ''}
+    ${note}
     ${gamut === 'outside' || gamut === 'edge' ? `<p class="text-xs">${gamutHtml(c)}</p>` : ''}
-    ${res.clamped ? '<p class="text-xs text-amber-600">Some values reached their limit – the reference may be outside the colors this printer and paper can produce. These are the closest reachable values.</p>' : ''}
     <dl class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
       <div><dt class="text-slate-500">Centre patch</dt><dd class="font-mono">${DE().label} ${res.centreDE != null ? res.centreDE.toFixed(2) : '–'}</dd></div>
       <div><dt class="text-slate-500">${bestElsewhere ? 'Best so far' : 'Best patch'}</dt><dd class="font-mono">${bestElsewhere ? `sheet ${res.bestEver.round} #${res.bestEver.n} · ${DE().label} ${res.bestEver.dE.toFixed(2)}` : `#${res.best.n} · ${DE().label} ${res.best.dE.toFixed(2)}`}</dd></div>
@@ -757,11 +806,11 @@ function resultHtml(c) {
   </section>`;
 }
 
-/** Copy a color's result – or other values for it (`res`, e.g. the color space prediction) – as text. */
-function copyMatchValues(c, res = latest(c)?.result, mode = latest(c)?.mode, k = latest(c)?.kFixed) {
-  if (!res) return;
-  const text = `${colorLabel(c)} – ${{ spot: 'L*a*b*', lab: 'L*a*b*', cmyk: 'CMYK', rgb: 'sRGB' }[mode]}: ` + formatValues(mode, res.x, k).map(([key, v]) => `${key} ${v}`).join(', ') +
-    ` (predicted ${DE().label} ${res.predictedDeltaE.toFixed(2)} to reference L*a*b* ${c.target.map((v) => v.toFixed(2)).join(' / ')})`;
+/** Copy values – `v`: { x, k, mode, dE, measured } (a color's values to use now, or the color space's prediction) – as text. */
+function copyMatchValues(c, v) {
+  if (!v) return;
+  const text = `${colorLabel(c)} – ${{ spot: 'L*a*b*', lab: 'L*a*b*', cmyk: 'CMYK', rgb: 'sRGB' }[v.mode]}: ` + formatValues(v.mode, v.x, v.k).map(([key, val]) => `${key} ${val}`).join(', ') +
+    ` (${v.measured ? 'printed' : 'predicted'} ${DE().label} ${v.dE.toFixed(2)} to reference L*a*b* ${c.target.map((n) => n.toFixed(2)).join(' / ')})`;
   navigator.clipboard?.writeText(text).then(() => toast('Values copied', 'ok'), () => toast('Clipboard not available', 'error'));
 }
 
@@ -1080,13 +1129,17 @@ function downloadSheetLibrary() {
 const libraryName = () => (match.libraryName ?? '').trim() || DEFAULT_LIBRARY_NAME;
 
 /**
- * A color's recommended L*a*b* for the RIP: its latest test-sheet result, else what the color space predicts (a
- * measured patch when one printed closer). Returns { lab, dE, source: 'result' | 'prediction' | 'measured' }, null when
- * there is neither, or – `later` – undefined while the prediction is still to be worked out (it is, in the background).
+ * A color's recommended L*a*b* for the RIP: the values to use now from its latest test-sheet result (useNow – values
+ * a sheet backs up), else what the color space predicts (a measured patch when one printed closer). Returns
+ * { lab, dE, source: 'confirmed' | 'result' | 'sheet-patch' | 'prediction' | 'measured' }, null when there is neither,
+ * or – `later` – undefined while the prediction is still to be worked out (it is, in the background).
  */
 function outputOf(c, { later = false } = {}) {
   const r = [...c.rounds].reverse().find((x) => x.result && isLabMode(x.mode));
-  if (r) return { lab: r.result.x, dE: r.result.predictedDeltaE, source: 'result' };
+  if (r) {
+    const u = useNow(c, r);
+    return { lab: u.x, dE: u.dE, source: { confirmed: 'confirmed', measured: 'sheet-patch', result: 'result' }[u.why] };
+  }
   if (!isLabMode(match.mode) || !c.target) return null;
   const p = spacePrediction(c, { later });
   if (p === undefined) return undefined;
@@ -1532,7 +1585,7 @@ function wireColors() {
     const b = e.target.closest('[data-pred-act]');
     const c = activeColor(), p = b && spacePrediction(c);
     if (!p) return;
-    if (b.dataset.predAct === 'copy') copyMatchValues(c, p, match.mode, p.k);
+    if (b.dataset.predAct === 'copy') copyMatchValues(c, { x: p.x, k: p.k, mode: match.mode, dE: p.predictedDeltaE, measured: p.measured });
   };
 }
 
@@ -1612,7 +1665,7 @@ function wireSheetCards() {
     const c = b && match.colors.find((x) => x.id === b.closest('[data-res]').dataset.res);
     if (!c) return;
     if (b.dataset.resAct === 'accept') { c.accepted = !c.accepted; commit(); }
-    else if (b.dataset.resAct === 'copy') copyMatchValues(c);
+    else if (b.dataset.resAct === 'copy') copyMatchValues(c, useNow(c));
   };
 }
 

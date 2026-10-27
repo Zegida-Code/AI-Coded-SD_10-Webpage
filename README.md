@@ -144,7 +144,7 @@ closest to the reference, with the predicted color difference.
 | Button / state | What it does |
 |---|---|
 | **Make next sheet** | Prints a finer sheet centered on that answer; its center patches check it |
-| **Done** | Shown once a color's values print within your tolerance |
+| **Done** | Shown once a patch prints within your tolerance – the sheet's centre values, or another patch that printed clearly closer. Those measured values are shown and go into the spot library. |
 | **Accept** | Stops making sheets for that color |
 
 **How the search stays safe**
@@ -152,6 +152,8 @@ closest to the reference, with the predicted color difference.
 - Each round only moves as far as the sheet's measurements can be trusted.
 - It never recommends values predicted to print worse than the best patch measured so far – on this sheet or an
   earlier one.
+- When the best guess lies beyond the sheet's patches, it is only a rough estimate: the card and the spot library use
+  the best patch actually printed until the next sheet (centred on the guess) confirms it.
 - If a sheet comes out worse than an earlier one, the last move is undone: the next sheet goes back to the best patch
   and searches around it in smaller steps.
 - If a reference is beyond what the printer and media can reproduce, it says so and gives the closest values instead
