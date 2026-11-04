@@ -288,11 +288,15 @@ for example a sheet printed on the wrong media.
 |---|---|
 | **Export** | Saves the color space as a file to keep, move to another computer or share |
 | **Import…** | Loads it again – or drop the file on the page |
-| **CGATS** | Writes the measurements as a CGATS.17 text file (device values and measured L\*a\*b\*) – the format profiling software reads |
+| **CGATS** | Writes the measurements as a CGATS.17 text file (device values and measured L\*a\*b\*, plus the spectra `SPECTRAL_NM400` … `SPECTRAL_NM700` when every patch has one) – the format profiling software reads |
 | **Rename** / **Delete** | As named |
 
 CGATS / IT8 files from other software (CMYK or RGB charts with L\*a\*b\* values, including ArgyllCMS `.ti3`) can be
-imported as a color space too.
+imported as a color space too. Their spectra come along when the file has them.
+
+Every patch scanned into a color space keeps its measured spectrum, as well as its L\*a\*b\*. L\*a\*b\* is worked out
+for one light (D50) and one observer; the spectrum is the measurement itself, so the data can be recomputed later
+without scanning again. Patches scanned before this, or imported without spectra, have L\*a\*b\* only.
 
 > **Make a separate color space for each printer, ink, media and RIP setting.** A color space only predicts for the
 > sheet type it was measured with.
@@ -399,17 +403,41 @@ Support for other RIPs' formats can be added from a sample library exported by t
 **Your own profiles** can be CMYK output profiles in ICC v2 or v4 (Lab or XYZ connection space). They are kept in
 this browser (IndexedDB); if the browser blocks storage, they work for the current session only.
 
+## Your data and backups
+
+Everything the app keeps stays in this browser on this computer:
+
+| What | Where |
+|---|---|
+| The Print match job (colors, sheets, results), color spaces, measurement history | IndexedDB (no practical size limit) |
+| Settings, saved media sizes, layout choices | localStorage |
+| ICC profiles you added | IndexedDB |
+
+Measured references, test-sheet patches, color space patches and the Console history all keep their spectra.
+
+**Clearing the browser's site data deletes all of it** (in Chrome: *Delete browsing data → Cookies and other site
+data*). Keep a backup outside the browser with **Backups…** at the bottom of the page:
+
+| Option | What it does |
+|---|---|
+| **Automatic backup to a folder** | Chrome or Edge on a computer. Choose a folder once – one synced to the cloud is best. After every change the app writes `SD-10 backup.json` there, plus one dated copy per day (the last 30 are kept), and your ICC profiles into a `profiles` folder. Chrome may ask you to allow access again on a later visit. It never overwrites a backup with an empty one, and choosing a folder that already holds a backup offers to restore it. |
+| **Download backup** | One file with everything, profiles included. Works in every browser. |
+| **Restore from backup…** | Replaces this browser's data with a backup file and reloads. What was there is downloaded first. For a folder backup, pick `SD-10 backup.json` together with the `.icc` files from its `profiles` folder. |
+
+The bottom of the page says when the last backup was made. The app also asks the browser to keep its data when the
+disk runs low (Chrome decides without asking you). That does not protect against clearing site data.
+
 ## Tests
 
 Open these pages in Chrome – on the live site (e.g. [sd-10.com/test/](https://sd-10.com/test/)) or a local copy.
 
 | Page | Checks | What it covers |
 |---|---|---|
-| [`test/index.html`](https://sd-10.com/test/index.html) | 126 | The core code (see below) |
+| [`test/index.html`](https://sd-10.com/test/index.html) | 127 | The core code (see below) |
 | [`test/ui-smoke.html`](https://sd-10.com/test/ui-smoke.html) | 34 | The Console against the simulated SD-10: calibrate, measure, compare, line scan, history sync, palettes, settings, custom ICC profiles |
 | [`test/mobile-check.html`](https://sd-10.com/test/mobile-check.html) | – | The layout at phone width (no sideways scrolling) and the compare / reference flows |
-| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 60 | Print match against the simulated device and printer: matching to within tolerance, several colors at once, media sizes and limits, readings per patch, textile ΔE, metamerism and gamut checks, spot color sheets and libraries, colors imported from a swatch file, RGB sheets |
-| [`test/space-smoke.html`](https://sd-10.com/test/space-smoke.html) | 39 | The color space workflow against the simulated device and printer (see below) |
+| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 64 | Print match against the simulated device and printer: matching to within tolerance, several colors at once, media sizes and limits, readings per patch, textile ΔE, metamerism and gamut checks, spot color sheets and libraries, colors imported from a swatch file, RGB sheets, backups (download, restore, automatic folder backup) |
+| [`test/space-smoke.html`](https://sd-10.com/test/space-smoke.html) | 40 | The color space workflow against the simulated device and printer (see below) |
 
 **`test/index.html` checks**
 
@@ -425,7 +453,7 @@ Open these pages in Chrome – on the live site (e.g. [sd-10.com/test/](https://
 
 **`test/space-smoke.html` checks**
 
-- charts, scanning into the color space, import / export
+- charts, scanning into the color space (with each patch's spectrum), import / export
 - predictions, and a first sheet that starts from them
 - learning, the drift check, removing measurements, undoing a scan
 - fill-in patches and fill-gaps charts
@@ -443,6 +471,7 @@ js/match-view.js    Print match view (colors and their library file, sheets, sca
 js/space-view.js    Color space view: the 3-D picture of a color space (gamut surface, comparison, volume)
 js/ui.js            DOM and formatting helpers shared by the views
 js/debug.js         debug report: journal of actions, messages and errors; the report file
+js/backup.js        backups: download / restore, automatic backup to a folder
 
 js/session.js       SD-10 session: byte routing, command queue with FF / FE acks, handshake, operations
 js/protocol.js      command builders and reply parsers
@@ -456,7 +485,7 @@ js/colorspace.js    color spaces: chart design, prediction from measured patches
 js/rip-export.js    spot color library files (CxF3, Adobe Color Book, Edge Print, VersaWorks): export and import; ASE import
 js/printer-sim.js   simulated CMYK printer (demo and tests)
 js/icc.js           ICC engine (L*a*b* → CMYK, and device → L*a*b* for the gamut check); profile storage
-js/storage.js       browser storage: JSON load / save for every view, history and preferences
+js/storage.js       browser storage: JSON load / save for every view (large values in IndexedDB), history and preferences
 
 icc/                CMYK profiles bundled with the app
 docs/               protocol, feature and development notes

@@ -10,11 +10,11 @@
 // what to use for a color · rendering · measuring · sheets · colors in and out (swatch files, the library for the RIP) ·
 // color space · start-up.
 import {
-  $, DEMO, NEEDS_CALIBRATION, displayHex, downloadFile, escapeHtml, fmt1, formatValues, labText, onFilePicked, readFlag, round2, safeFileName,
+  $, DEMO, NEEDS_CALIBRATION, closableDialog, displayHex, downloadFile, escapeHtml, fmt1, formatValues, labText, onFilePicked, readFlag, round2, safeFileName,
   toast, valuesText, writeFlag,
 } from './ui.js';
 import { METHOD } from './protocol.js';
-import { deltaE2000, labD50ToSrgb, meanSpectrum, rgbHex, spectrumToLab, srgbToLabD50 } from './color.js';
+import { deltaE2000, labD50ToSrgb, meanSpectrum, rgbHex, roundSpectrum, spectrumToLab, srgbToLabD50 } from './color.js';
 import { CUSTOM_PREFIX, PRINTER_PREFIX, loadProfile, printerProfiles } from './icc.js';
 import {
   DESIGNS, DE_FORMULAS, MEDIA, MI_MARGIN, MODES, MODE_NAME, analyseRound, averageReadings, buildSheetPdf, buildSheetPng,
@@ -183,7 +183,6 @@ const isLabMode = (mode) => mode === 'spot' || mode === 'lab';
 
 // ---------------------------------------------------------------- formatting
 const fmtDate = (t) => new Date(t).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-const roundSpectrum = (s) => s.map((v) => Math.round(v * 1e5) / 1e5);
 
 function cmykPreviewHex([c, m, y], k) {
   const ch = (v) => Math.round(255 * (1 - v / 100) * (1 - k / 100));
@@ -1023,8 +1022,8 @@ function measurePatch() {
     debugLog('measure', `${colorLabel(c)}${chart ? '' : ` sheet ${r.round}`} patch #${p.n}`, { x: p.x, k: p.k, lab: p.lab, readings: p.reads.length, spread: p.spread });
     p.spectrum = roundSpectrum(meanSpectrum(p.spectra));
     delete p.spectra; // the mean is enough – keeps the saved job small
-    if (chart) delete p.spectrum; // a chart only feeds the color space, which keeps L*a*b*
     learnPatch(c, r, p);
+    if (chart) delete p.spectrum; // a chart only feeds the color space, whose point keeps the spectrum
     // next: the first unmeasured patch after this one, else any unmeasured patch
     const after = r.patches.findIndex((q, j) => j > k && !q.lab);
     const any = r.patches.findIndex((q) => !q.lab);
@@ -1633,7 +1632,7 @@ function learnPatch(c, r, p) {
   const session = spaceSessionId(c, r);
   const label = chart ? c.name : `${colorLabel(c)} – sheet ${r.round}`;
   const was = driftOf(s, session)?.drift;
-  const check = learn(s, { session, kind: chart ? r.kind : 'sheet', label, n: p.n, x: pointX(r.mode, p.x, p.k ?? r.kFixed), lab: p.lab });
+  const check = learn(s, { session, kind: chart ? r.kind : 'sheet', label, n: p.n, x: pointX(r.mode, p.x, p.k ?? r.kFixed), lab: p.lab, spectrum: p.spectrum });
   saveSpaces();
   const d = driftOf(s, session);
   debugLog('space', `“${s.name}” learned ${label} #${p.n}`, { checkDeltaE: check, points: s.points.length, drift: d });
@@ -1798,14 +1797,7 @@ function wireSettings() {
   $('mTipsBox').open = readFlag('sd10.tipsOpen');
   $('mTipsBox').ontoggle = () => writeFlag('sd10.tipsOpen', $('mTipsBox').open);
   $('btnMoreSettings').onclick = () => $('mMoreDialog').showModal();
-  // dialogs close with their ✕ / Done ([data-close-dialog]), Esc, or a click on the backdrop
-  for (const dialog of $('viewMatch').querySelectorAll('dialog')) {
-    dialog.addEventListener('click', (e) => {
-      if (e.target.closest('[data-close-dialog]')) { dialog.close(); return; }
-      const r = dialog.getBoundingClientRect();
-      if (e.target === dialog && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) dialog.close();
-    });
-  }
+  $('viewMatch').querySelectorAll('dialog').forEach(closableDialog);
 }
 
 /** Sheet, scan and result cards. */

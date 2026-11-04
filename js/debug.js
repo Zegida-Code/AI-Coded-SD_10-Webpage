@@ -4,7 +4,7 @@
 //
 // The journal is kept in this browser (localStorage 'sd10.debugJournal', the newest 1500 entries), so it survives a
 // reload – a problem from earlier in the day is still in the report.
-import { loadJson, saveJson } from './storage.js';
+import { loadJson, saveJson, storedEntries } from './storage.js';
 
 const JOURNAL_KEY = 'sd10.debugJournal';
 const MAX_ENTRIES = 1500;
@@ -101,14 +101,10 @@ function screenText() {
  */
 export function buildDebugReport({ note = '', app = {} } = {}) {
   const storage = {};
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (!k.startsWith('sd10.') || k === JOURNAL_KEY) continue;
-      const v = localStorage.getItem(k);
-      try { storage[k] = JSON.parse(v); } catch { storage[k] = v; }
-    }
-  } catch { /* storage blocked */ }
+  for (const [k, v] of Object.entries(storedEntries())) {
+    if (k === JOURNAL_KEY) continue;
+    try { storage[k] = JSON.parse(v); } catch { storage[k] = v; }
+  }
   return {
     format: 'sd10-debug-report',
     version: 1,

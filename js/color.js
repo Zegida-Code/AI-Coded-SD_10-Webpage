@@ -5,6 +5,8 @@ import { LIGHT_SOURCE_NAME } from './protocol.js';
 
 /** A value to two decimals – how L*a*b* values are kept and written (Lab files, the job, the color spaces). */
 export const round2 = (v) => Math.round(v * 100) / 100;
+/** A reflectance spectrum to 5 decimals – how spectra are kept (the job, the color spaces). */
+export const roundSpectrum = (s) => s.map((v) => Math.round(v * 1e5) / 1e5);
 
 const D = 6 / 29;
 const f = (t) => (t > D ** 3 ? Math.cbrt(t) : t / (3 * D * D) + 4 / 29);

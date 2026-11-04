@@ -16,7 +16,7 @@
 //     patches already planned on sheets not yet scanned as measured.
 // Points belong to sessions (a chart, a check chart, one test sheet, an imported file); a session or a single patch
 // can be removed again.
-import { deltaE2000, round2 } from './color.js';
+import { deltaE2000, round2, roundSpectrum } from './color.js';
 import { DE_FORMULAS, MODES, roundTo, solve, solveForTarget } from './match.js';
 
 /** A space predicts once it holds this many patches. */
@@ -49,7 +49,9 @@ export const newSpaceId = () => (crypto.randomUUID ? crypto.randomUUID() : Strin
 
 /**
  * A new, empty space for one sheet type:
- * { id, name, mode, created, updated (ms), points: [{ x, lab, t (ms), s (session id), n (patch number) }],
+ * { id, name, mode, created, updated (ms), points: [{ x, lab, t (ms), s (session id), n (patch number), sp (measured
+ *   reflectance, 31 values 400–700 nm – kept so the data can be recomputed later; points from older versions or other
+ *   software have none) }],
  *   sessions: [{ id, kind ('chart' | 'check' | 'gaps' | 'sheet' | 'import'), label, time, updated, checks: { n: ΔE00 } }],
  *   chart (the chart being scanned, or null – kept by the app), checkRule (see CHECK_RULE) }
  */
@@ -372,7 +374,7 @@ export function spaceStats(space, { stale = false } = {}) {
  * miss means the space did not know that region, not that the printer changed – and that ΔE00 is kept in the
  * session's checks (see driftOf). Returns the ΔE00, or null when there was nothing to compare with.
  */
-export function learn(space, { session, kind, label, n, x, lab, now = Date.now() }) {
+export function learn(space, { session, kind, label, n, x, lab, spectrum = null, now = Date.now() }) {
   let s = space.sessions.find((q) => q.id === session);
   if (!s) { s = { id: session, kind, label, time: now, updated: now, checks: {} }; space.sessions.push(s); }
   s.updated = now;
@@ -383,7 +385,7 @@ export function learn(space, { session, kind, label, n, x, lab, now = Date.now()
     const f = localFit(space, x, others, { stats });
     if (f && stats.support != null && !f.sparse) { check = deltaE2000(lab, f.lab); s.checks[n] = round2(check); } else delete s.checks[n];
   }
-  const point = { x: x.map(round2), lab: lab.map(round2), t: now, s: session, n };
+  const point = { x: x.map(round2), lab: lab.map(round2), t: now, s: session, n, ...(isSpectrum(spectrum) ? { sp: roundSpectrum(spectrum) } : {}) };
   const i = space.points.findIndex((p) => p.s === session && p.n === n);
   if (i >= 0) space.points[i] = point; else space.points.push(point);
   space.updated = now;
@@ -517,6 +519,11 @@ export function keepFrom(space, time) {
   return old.length;
 }
 
+// ---------------------------------------------------------------- spectra
+/** A measured reflectance spectrum: 31 values, 400–700 nm in 10 nm steps (0..1). */
+const SPECTRUM_NM = Array.from({ length: 31 }, (_, i) => 400 + 10 * i);
+const isSpectrum = (s) => Array.isArray(s) && s.length === SPECTRUM_NM.length && s.every(Number.isFinite);
+
 // ---------------------------------------------------------------- files
 /** The space as JSON (without a chart in progress). */
 export function spaceToJson(space) {
@@ -527,14 +534,18 @@ export function spaceToJson(space) {
 const CGATS_FIELDS = { cmyk: ['CMYK_C', 'CMYK_M', 'CMYK_Y', 'CMYK_K'], rgb: ['RGB_R', 'RGB_G', 'RGB_B'], lab: ['REQ_L', 'REQ_A', 'REQ_B'] };
 const fieldsOf = (mode) => CGATS_FIELDS[mode === 'spot' ? 'lab' : mode];
 
+const SPECTRAL_FIELDS = SPECTRUM_NM.map((nm) => `SPECTRAL_NM${nm}`);
+
 /**
  * The space's measurements as a CGATS.17 text file: one row per patch with its input values and the measured
  * L*a*b* (D50 / 2°). CMYK and RGB use the standard CMYK_ / RGB_ (0–255) fields, which profiling software reads;
- * the requested L*a*b* of spot / Lab sheets go into declared REQ_L / REQ_A / REQ_B fields.
+ * the requested L*a*b* of spot / Lab sheets go into declared REQ_L / REQ_A / REQ_B fields. When every patch has its
+ * spectrum, the reflectance follows in SPECTRAL_NM400 … SPECTRAL_NM700 (0–1).
  */
 export function spaceToCgats(space, created = new Date()) {
   const dev = fieldsOf(space.mode);
-  const fields = ['SAMPLE_ID', ...dev, 'LAB_L', 'LAB_A', 'LAB_B'];
+  const spectral = space.points.length > 0 && space.points.every((p) => isSpectrum(p.sp));
+  const fields = ['SAMPLE_ID', ...dev, 'LAB_L', 'LAB_A', 'LAB_B', ...(spectral ? SPECTRAL_FIELDS : [])];
   const q = (s) => `"${String(s).replace(/"/g, "'")}"`;
   return [
     'CGATS.17',
@@ -542,6 +553,7 @@ export function spaceToCgats(space, created = new Date()) {
     `DESCRIPTOR\t${q(space.name)}`,
     `CREATED\t${q(created.toISOString().replace(/\.\d{3}Z$/, 'Z'))}`,
     '# LAB_L, LAB_A, LAB_B: measured CIE L*a*b*, D50 / 2 degree observer',
+    ...(spectral ? ['# SPECTRAL_NM400 ... SPECTRAL_NM700: measured reflectance, 0-1'] : []),
     'KEYWORD\t"SD10_MODE"',
     `SD10_MODE\t${q(space.mode)}`,
     ...(dev[0].startsWith('REQ') ? dev.map((f) => `KEYWORD\t"${f}"`) : []),
@@ -549,7 +561,7 @@ export function spaceToCgats(space, created = new Date()) {
     'BEGIN_DATA_FORMAT', fields.join('\t'), 'END_DATA_FORMAT',
     `NUMBER_OF_SETS\t${space.points.length}`,
     'BEGIN_DATA',
-    ...space.points.map((p, i) => [i + 1, ...p.x.map(round2), ...p.lab.map((v) => v.toFixed(2))].join('\t')),
+    ...space.points.map((p, i) => [i + 1, ...p.x.map(round2), ...p.lab.map((v) => v.toFixed(2)), ...(spectral ? p.sp.map((v) => v.toFixed(5)) : [])].join('\t')),
     'END_DATA', '',
   ].join('\r\n');
 }
@@ -584,10 +596,15 @@ export function spaceFromCgats(text, fileName = '') {
   if (!mode) throw new Error(`${what} has no CMYK_, RGB_ or requested L*a*b* (REQ_) values`);
   const devCols = fieldsOf(mode).map(col);
   const full = mode === 'rgb' && ti3 ? 100 : 255; // RGB full scale in the file
+  // reflectance 400–700 nm when the file has it (0–1, or percent as ArgyllCMS writes it)
+  const spCols = SPECTRAL_FIELDS.map(col);
+  const spectra = spCols.every((c) => c >= 0) ? rows.map((r) => spCols.map((c) => parseFloat(r[c]))) : null;
+  const spScale = spectra && spectra.some((s) => s.some((v) => v > 1.5)) ? 100 : 1;
   const now = Date.now(), session = `import:${now}`;
   const points = rows.map((r, i) => ({
     x: devCols.map((c) => (mode === 'rgb' ? Math.round((parseFloat(r[c]) * 255) / full) : round2(parseFloat(r[c])))),
     lab: labCols.map((c) => round2(parseFloat(r[c]))), t: now, s: session, n: i + 1,
+    ...(spectra && isSpectrum(spectra[i]) ? { sp: roundSpectrum(spectra[i].map((v) => v / spScale)) } : {}),
   })).filter((p) => [...p.x, ...p.lab].every(Number.isFinite));
   if (!points.length) throw new Error(`${what} holds no complete measurements`);
   const name = meta.DESCRIPTOR || fileName.replace(/^.*[\\/]/, '').replace(/\.[^.]*$/, '') || 'Imported color space';
@@ -606,7 +623,8 @@ export function readSpaceFile(bytes, fileName = '') {
   const D = inputCount(o.mode), now = Date.now();
   const points = (Array.isArray(o.points) ? o.points : [])
     .filter((p) => p?.x?.length === D && p.lab?.length === 3 && [...p.x, ...p.lab].every(Number.isFinite))
-    .map((p, i) => ({ x: p.x.map(Number), lab: p.lab.map(Number), t: Number(p.t) || o.created || now, s: String(p.s ?? 'import'), n: p.n ?? i + 1 }));
+    .map((p, i) => ({ x: p.x.map(Number), lab: p.lab.map(Number), t: Number(p.t) || o.created || now, s: String(p.s ?? 'import'), n: p.n ?? i + 1,
+      ...(isSpectrum(p.sp) ? { sp: p.sp.map(Number) } : {}) }));
   const sessions = (Array.isArray(o.sessions) ? o.sessions : []).filter((s) => s?.id).map((s) => ({ checks: {}, ...s }));
   for (const id of new Set(points.map((p) => p.s))) {
     if (!sessions.some((s) => s.id === id)) sessions.push({ id, kind: 'import', label: `Imported from ${fileName || 'a file'}`, time: now, updated: now, checks: {} });

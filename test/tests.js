@@ -770,6 +770,25 @@ async function spaceCheck() {
   try { readSpaceFile(new TextEncoder().encode('hello'), 'notes.txt'); } catch (e) { bad = e.message; }
   check('CGATS import: charts measured with other software (ArgyllCMS .ti3 RGB 0–100 -> 0–255); other files are rejected',
     ti.mode === 'rgb' && ti.name === 'Argyll chart' && ti.points[0].x.join() === '255,255,255' && ti.points[1].x.join() === '0,128,255' && ti.points[1].lab.join() === '40,10,-50' && /not a CGATS/.test(bad), bad);
+
+  // spectra: learned points keep the measured spectrum; JSON and CGATS (SPECTRAL_NM400 … 700) carry it, percent spectra
+  // (as ArgyllCMS writes them) are scaled back; a space with points lacking one exports L*a*b* only
+  {
+    const sp = Array.from({ length: 31 }, (_, i) => 0.1 + i / 40);
+    const ss = newSpace({ name: 'Spectral', mode: 'spot', now: T0 });
+    learn(ss, { session: 'c', kind: 'chart', label: 'C', n: 1, x: [50, 0, 0], lab: [50, 0, 0], spectrum: sp, now: T0 });
+    learn(ss, { session: 'c', kind: 'chart', label: 'C', n: 2, x: [60, 0, 0], lab: [60, 0, 0], spectrum: sp.map((v) => v / 2), now: T0 });
+    const fromJson = readSpaceFile(new TextEncoder().encode(spaceToJson(ss)), 's.json');
+    const cgs = spaceToCgats(ss);
+    const fromCg = spaceFromCgats(cgs, 's.txt');
+    const pctText = cgs.replace(/(\t[\d.]+){31}\r\n/g, (row) => row.replace(/\t([\d.]+)/g, (m, v) => `\t${(v * 100).toFixed(3)}`));
+    const pct = spaceFromCgats(pctText, 'p.txt');
+    const near = (a, b, tol) => a?.length === 31 && a.every((v, k) => Math.abs(v - b[k]) < tol);
+    check('spectra: color space points keep the measured spectrum; JSON and CGATS (SPECTRAL_NM400 … 700, 0–1 or percent) carry it; spaces without them export L*a*b* only',
+      ss.points.every((p) => p.sp?.length === 31) && fromJson.points[1].sp.join() === ss.points[1].sp.join() &&
+      /\tSPECTRAL_NM400\t/.test(cgs) && /\tSPECTRAL_NM700\r\n/.test(cgs) && fromCg.points.every((p, i) => near(p.sp, ss.points[i].sp, 1e-5)) &&
+      pctText !== cgs && pct.points.every((p, i) => near(p.sp, ss.points[i].sp, 1e-4)) && !/SPECTRAL/.test(spaceToCgats(space)) && !('sp' in cgBack.points[0]));
+  }
 }
 
 function report() {

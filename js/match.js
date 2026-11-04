@@ -273,7 +273,7 @@ export const MI_MARGIN = 0.5;
  * other lights than `chosen` – its worst metamerism index lower by more than MI_MARGIN. Returns { patch, mi, insteadMi }
  * or null (no reference spectrum, or no clear difference).
  */
-export function steadierPatch(refSpectrum, alike, chosen, formula = 'de00') {
+function steadierPatch(refSpectrum, alike, chosen, formula = 'de00') {
   if (!refSpectrum || !chosen?.spectrum) return null;
   const mi = (p) => metamerism(refSpectrum, p.spectrum, formula).worst.mi;
   const insteadMi = mi(chosen);

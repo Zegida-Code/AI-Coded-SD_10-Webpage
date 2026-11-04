@@ -21,9 +21,18 @@
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     async function until(fn, ms = 30000) { const t = Date.now(); while (Date.now() - t < ms) { if (fn()) return true; await sleep(50); } return false; }
     const frame = document.getElementById('app');
+    // the app's own storage (large values live in IndexedDB), which the demo page exposes once it has started
+    async function appStorage(win) {
+      await until(() => win.document.documentElement.dataset.ready === '1' && win.sd10Storage);
+      return win.sd10Storage;
+    }
 
     frame.onload = async () => {
+      if (frame.dataset.started) return; // restoring a backup reloads the app
+      frame.dataset.started = '1';
       const w = frame.contentWindow, d = frame.contentDocument, $ = (id) => d.getElementById(id);
+      await until(() => d.documentElement.dataset.ready === '1');
+      const store = await appStorage(w);
       const errors = [];
       w.addEventListener('error', (e) => errors.push(e.message));
       w.addEventListener('unhandledrejection', (e) => errors.push(String(e.reason)));
@@ -62,7 +71,7 @@
         JSON.parse(w.localStorage.getItem('sd10.mediaSizes'))[0].h === 80 && !$('btnMediaRemove').classList.contains('hidden');
       setSel('mPaper', 'a4');
       setSel('mPaper', 'size:Vinyl strip');
-      const reselect = $('mMediaW').value === '700' && $('mMediaH').value === '80' && JSON.parse(w.localStorage.getItem('sd10.match')).media === 'size:Vinyl strip';
+      const reselect = $('mMediaW').value === '700' && $('mMediaH').value === '80' && store.loadJson('sd10.match').media === 'size:Vinyl strip';
       $('btnMediaRemove').click();
       log(savedOk && reselect && $('mPaper').value === 'custom' && !/Vinyl strip/.test($('mPaper').textContent), 'a media size can be saved by name, chosen again (and is remembered), and removed');
       $('mMediaW').value = '210'; $('mMediaW').dispatchEvent(new Event('change'));
@@ -215,7 +224,7 @@
       setSel('matchFormula', 'de00');
       // the Colors card is the spot library: every color under its name with its recommended L*a*b* (its result; its
       // reference until it has one), downloaded as one file
-      const job = () => JSON.parse(w.localStorage.getItem('sd10.match'));
+      const job = () => store.loadJson('sd10.match');
       // (the values to use now: a patch that printed within tolerance – the sheet's centre unless another printed clearly
       // closer – else the best measured patch while the result is only a rough estimate beyond the sheet, else the result)
       const useNowX = (c, r) => {
@@ -398,7 +407,7 @@
         };
         const bytes = [...[...'ASEF'].map((c) => c.charCodeAt(0)), ...be(2, 1), ...be(2, 0), ...be(4, 2),
           ...swatch('Swatch Teal', [0.456, -41, -16]), ...swatch('Swatch Gold', [0.7638, 20.16, 75.13])];
-        const job = () => JSON.parse(w.localStorage.getItem('sd10.match'));
+        const job = () => store.loadJson('sd10.match');
         const before = job().colors.length;
         const adt = new w.DataTransfer();
         adt.items.add(new w.File([new Uint8Array(bytes)], 'artwork.ase', { type: 'application/octet-stream' }));
@@ -433,6 +442,58 @@
         rep.screen?.view === 'viewMatch' && rep.screen.cards.some((c) => /Settings/.test(c.title)) && rep.browser?.userAgent,
         `debug report saved ${Object.entries(repChecks).filter(([, v]) => !v).map(([k]) => 'MISSING ' + k).join(' ')}(${repFile?.name}: ${rep.journal?.length} journal entries – ${[...kinds].join(', ')}; ${rep.screen?.cards?.length} cards of screen text)`);
       log(errors.length === 0, `no JS errors ${errors.join(' | ')}`);
+
+      // ---- backups: one file with everything (profiles included); restoring it brings the data back after a reload
+      const nB = files.length;
+      $('btnBackups').click();
+      $('btnBkDownload').click();
+      await until(() => files.length > nB);
+      const bFile = files.slice(nB).find((f) => /^SD-10 backup \d{4}-\d{2}-\d{2}\.json$/.test(f.name));
+      const backup = bFile ? JSON.parse(await readFile(bFile)) : {};
+      const names = (job) => job.colors.map((c) => c.name).join('|');
+      const namesBefore = names(store.loadJson('sd10.match')), profOpts = $('mPrinterProfile').options.length;
+      await until(() => /last backup downloaded just now/.test($('backupStatus').textContent));
+      log(backup.format === 'sd10-backup' && backup.data?.['sd10.match']?.colors?.length >= 1 && backup.profiles?.some((p) => p.data && p.key.startsWith('printer:')) &&
+        !backup.data['sd10.debugJournal'] && /last backup downloaded just now/.test($('backupStatus').textContent),
+        `Download backup: one file with the job and the printer profile (${bFile?.name}; ${$('backupStatus').textContent})`);
+      $('backupDialog').close();
+      d.querySelector('#mColorList [data-color-act=remove]').click();
+      await until(() => names(store.loadJson('sd10.match')) !== namesBefore);
+      const nR = files.length;
+      const rdt = new w.DataTransfer();
+      rdt.items.add(new w.File([JSON.stringify(backup)], bFile?.name ?? 'x.json', { type: 'application/json' }));
+      $('bkRestoreFile').files = rdt.files;
+      $('bkRestoreFile').dispatchEvent(new w.Event('change'));
+      await until(() => frame.contentDocument !== d && frame.contentDocument?.documentElement.dataset.ready === '1', 30000);
+      const d2 = frame.contentDocument, store2 = await appStorage(frame.contentWindow);
+      await until(() => d2.getElementById('mPrinterProfile').options.length === profOpts);
+      log(names(store2.loadJson('sd10.match')) === namesBefore && d2.getElementById('mPrinterProfile').options.length === profOpts &&
+        files.slice(nR).some((f) => / \(before restore\)\.json$/.test(f.name)),
+        'Restore: the backup replaces the data (what was there is downloaded first), the page reloads with it and the profile');
+
+      // ---- automatic backup to a folder: the browser's private file system stands in for a folder chosen with the picker
+      const opfs = await frame.contentWindow.navigator.storage.getDirectory();
+      for await (const [name] of opfs.entries()) await opfs.removeEntry(name, { recursive: true });
+      await store2.setStoredFile('backupFolder', opfs);
+      frame.contentWindow.location.reload();
+      await until(() => frame.contentDocument !== d2 && frame.contentDocument?.documentElement.dataset.ready === '1', 30000);
+      const d3 = frame.contentDocument, $3 = (id) => d3.getElementById(id);
+      const folder = await frame.contentWindow.navigator.storage.getDirectory(); // (the old page's handle went with it)
+      const readOpfs = async (name) => { try { return JSON.parse(await (await (await folder.getFileHandle(name)).getFile()).text()); } catch { return null; } };
+      const list = async (dir) => { const n = []; if (dir) for await (const [name] of dir.entries()) n.push(name); return n; };
+      let latest = null;
+      for (let i = 0; i < 100 && !latest; i++) { await sleep(100); latest = await readOpfs('SD-10 backup.json'); }
+      await until(() => /Backed up automatically to the folder/.test($3('backupStatus').textContent));
+      const daily = (await list(folder)).filter((n) => /^SD-10 backup \d{4}-\d{2}-\d{2}\.json$/.test(n));
+      const iccFiles = await list(await folder.getDirectoryHandle('profiles').catch(() => null));
+      log(latest?.format === 'sd10-backup' && latest.data['sd10.match']?.colors?.length >= 1 && daily.length === 1 && latest.profiles?.length >= 1 &&
+        latest.profiles.every((q) => !q.data && iccFiles.includes(q.file)),
+        `automatic folder backup on start: latest + today's copy, profiles as .icc files (${$3('backupStatus').textContent}; ${daily.join()}; ${iccFiles.join()})`);
+      $3('mSpotName').value = 'Renamed for the backup'; $3('mSpotName').dispatchEvent(new Event('change'));
+      $3('btnBkNow').click();
+      let again = null;
+      for (let i = 0; i < 50 && !JSON.stringify(again?.data['sd10.match'] ?? '').includes('Renamed for the backup'); i++) { await sleep(100); again = await readOpfs('SD-10 backup.json'); }
+      log(JSON.stringify(again?.data['sd10.match']).includes('Renamed for the backup'), 'Back up now writes the latest change to the folder');
       const pass = lines.filter((l) => l.startsWith('PASS')).length;
       out.textContent += `\n${pass}/${lines.length}`;
       document.title = pass === lines.length ? 'ALL PASS' : 'FAILURES';

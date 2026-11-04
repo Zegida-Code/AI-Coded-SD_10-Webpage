@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <link rel="stylesheet" href="css/app.css?v=2026-11-03.374e0f6-191849">
+  <link rel="stylesheet" href="css/app.css?v=2026-11-03.2f678ce-201723">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -607,37 +607,72 @@
     </div>
   </main>
 
-  <!-- debug report: one file to share instead of screenshots (see js/debug.js) -->
-  <footer class="max-w-7xl mx-auto px-3 sm:px-4 pb-6 pt-2 text-xs text-slate-500">
-    Something not working as expected? <button id="btnDebugReport" type="button" class="font-medium text-indigo-600 hover:underline dark:text-indigo-400">Save a debug report</button>
-    – one file with the app’s recent actions, messages, what it shows, settings and data, to share instead of screenshots.
+  <!-- backups (see js/backup.js) and the debug report: one file to share instead of screenshots (see js/debug.js) -->
+  <footer class="max-w-7xl mx-auto px-3 sm:px-4 pb-6 pt-2 text-xs text-slate-500 space-y-1">
+    <p><span id="backupStatus">Your data is kept in this browser.</span>
+      <button id="btnBackups" type="button" class="font-medium text-indigo-600 hover:underline dark:text-indigo-400">Backups…</button></p>
+    <p>Something not working as expected? <button id="btnDebugReport" type="button" class="font-medium text-indigo-600 hover:underline dark:text-indigo-400">Save a debug report</button>
+    – one file with the app’s recent actions, messages, what it shows, settings and data, to share instead of screenshots.</p>
   </footer>
+
+  <dialog id="backupDialog" class="card w-[min(32rem,calc(100vw-2rem))] text-slate-900 shadow-xl backdrop:bg-slate-950/50 dark:text-slate-100">
+    <div class="space-y-4">
+      <div class="flex items-center justify-between gap-2">
+        <h3 class="font-semibold">Backups</h3>
+        <button type="button" data-close-dialog class="btn btn-ghost !px-2" aria-label="Close">✕</button>
+      </div>
+      <div class="space-y-1">
+        <p class="text-sm text-slate-500">Your colors and results, color spaces, measurement history, settings and the ICC profiles you added are stored in this browser only. Clearing the browser’s site data (“Cookies and other site data”) deletes them – a backup outside the browser keeps them safe.</p>
+        <p id="bkPersist" class="text-xs text-slate-500"></p>
+      </div>
+      <section class="space-y-2">
+        <h4 class="text-sm font-semibold">Automatic backup to a folder</h4>
+        <p id="bkFolderInfo" class="text-xs text-slate-500"></p>
+        <div class="flex flex-wrap gap-2">
+          <button id="btnBkFolder" type="button" class="btn btn-primary">Choose folder…</button>
+          <button id="btnBkAllow" type="button" class="btn btn-primary hidden">Allow access again</button>
+          <button id="btnBkNow" type="button" class="btn btn-ghost hidden">Back up now</button>
+          <button id="btnBkStop" type="button" class="btn btn-ghost hidden">Stop</button>
+        </div>
+      </section>
+      <section class="space-y-2">
+        <h4 class="text-sm font-semibold">Backup file</h4>
+        <p class="text-xs text-slate-500">One file with everything, profiles included – to keep anywhere, or to move your data to another computer or browser. To restore a folder backup, pick its <span class="font-mono">SD-10 backup.json</span> together with the .icc files in its <span class="font-mono">profiles</span> folder.</p>
+        <div class="flex flex-wrap gap-2">
+          <button id="btnBkDownload" type="button" class="btn btn-ghost">Download backup</button>
+          <button id="btnBkRestore" type="button" class="btn btn-ghost">Restore from backup…</button>
+          <input id="bkRestoreFile" type="file" accept=".json,.icc,.icm,application/json" multiple class="hidden">
+        </div>
+      </section>
+    </div>
+  </dialog>
 
   <!-- Cache busting for GitHub Pages (files are cached for 10 min): every module URL carries the release
        version, so a page always loads scripts from the same release. Bump with: ./bump-version.sh -->
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-11-03.374e0f6-191849",
-      "./js/transport.js": "./js/transport.js?v=2026-11-03.374e0f6-191849",
-      "./js/mock.js": "./js/mock.js?v=2026-11-03.374e0f6-191849",
-      "./js/session.js": "./js/session.js?v=2026-11-03.374e0f6-191849",
-      "./js/protocol.js": "./js/protocol.js?v=2026-11-03.374e0f6-191849",
-      "./js/color.js": "./js/color.js?v=2026-11-03.374e0f6-191849",
-      "./js/weights.js": "./js/weights.js?v=2026-11-03.374e0f6-191849",
-      "./js/storage.js": "./js/storage.js?v=2026-11-03.374e0f6-191849",
-      "./js/icc.js": "./js/icc.js?v=2026-11-03.374e0f6-191849",
-      "./js/match.js": "./js/match.js?v=2026-11-03.374e0f6-191849",
-      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-11-03.374e0f6-191849",
-      "./js/ui.js": "./js/ui.js?v=2026-11-03.374e0f6-191849",
-      "./js/match-view.js": "./js/match-view.js?v=2026-11-03.374e0f6-191849",
-      "./js/rip-export.js": "./js/rip-export.js?v=2026-11-03.374e0f6-191849",
-      "./js/colorspace.js": "./js/colorspace.js?v=2026-11-03.374e0f6-191849",
-      "./js/debug.js": "./js/debug.js?v=2026-11-03.374e0f6-191849",
-      "./js/space-view.js": "./js/space-view.js?v=2026-11-03.374e0f6-191849"
+      "./js/app.js": "./js/app.js?v=2026-11-03.2f678ce-201723",
+      "./js/transport.js": "./js/transport.js?v=2026-11-03.2f678ce-201723",
+      "./js/mock.js": "./js/mock.js?v=2026-11-03.2f678ce-201723",
+      "./js/session.js": "./js/session.js?v=2026-11-03.2f678ce-201723",
+      "./js/protocol.js": "./js/protocol.js?v=2026-11-03.2f678ce-201723",
+      "./js/color.js": "./js/color.js?v=2026-11-03.2f678ce-201723",
+      "./js/weights.js": "./js/weights.js?v=2026-11-03.2f678ce-201723",
+      "./js/storage.js": "./js/storage.js?v=2026-11-03.2f678ce-201723",
+      "./js/icc.js": "./js/icc.js?v=2026-11-03.2f678ce-201723",
+      "./js/match.js": "./js/match.js?v=2026-11-03.2f678ce-201723",
+      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-11-03.2f678ce-201723",
+      "./js/ui.js": "./js/ui.js?v=2026-11-03.2f678ce-201723",
+      "./js/match-view.js": "./js/match-view.js?v=2026-11-03.2f678ce-201723",
+      "./js/rip-export.js": "./js/rip-export.js?v=2026-11-03.2f678ce-201723",
+      "./js/colorspace.js": "./js/colorspace.js?v=2026-11-03.2f678ce-201723",
+      "./js/backup.js": "./js/backup.js?v=2026-11-03.2f678ce-201723",
+      "./js/debug.js": "./js/debug.js?v=2026-11-03.2f678ce-201723",
+      "./js/space-view.js": "./js/space-view.js?v=2026-11-03.2f678ce-201723"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-11-03.374e0f6-191849"></script>
+  <script type="module" src="js/app.js?v=2026-11-03.2f678ce-201723"></script>
 </body>
 </html>

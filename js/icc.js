@@ -381,6 +381,25 @@ function tx(mode, fn) {
 const memory = new Map();
 const withTimeout = (p, ms = 3000) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('storage did not respond')), ms))]);
 
+/** Every profile stored in this browser (custom CMYK and printer profiles) as [{ key, data: ArrayBuffer }] – for backups. */
+export async function storedProfiles() {
+  const keys = await withTimeout(tx('readonly', (s) => s.getAllKeys())).catch(() => []);
+  const all = [...new Set([...keys.map(String), ...memory.keys()])].sort();
+  const out = [];
+  for (const key of all) {
+    const data = memory.get(key) ?? await withTimeout(tx('readonly', (s) => s.get(key))).catch(() => null);
+    if (data) out.push({ key, data });
+  }
+  return out;
+}
+
+/** Replace the stored profiles with `list` ([{ key, data: ArrayBuffer }], from a backup). */
+export async function restoreProfiles(list) {
+  await withTimeout(tx('readwrite', (s) => { s.clear(); for (const p of list) s.put(p.data, p.key); }), 20000);
+  memory.clear();
+  for (const k of [...cache.keys()]) if (k.startsWith(CUSTOM_PREFIX) || k.startsWith(PRINTER_PREFIX)) cache.delete(k);
+}
+
 export const customProfiles = {
   async list() {
     const stored = await withTimeout(tx('readonly', (s) => s.getAllKeys())).catch(() => []);

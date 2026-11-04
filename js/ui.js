@@ -55,5 +55,14 @@ export function onFilePicked(id, handler) {
 }
 
 // Remembered on/off UI choices (best effort: storage may be blocked).
+/** A dialog closes with its ✕ / Done ([data-close-dialog]), Esc, or a click on the backdrop. */
+export function closableDialog(dialog) {
+  dialog.addEventListener('click', (e) => {
+    if (e.target.closest('[data-close-dialog]')) { dialog.close(); return; }
+    const r = dialog.getBoundingClientRect();
+    if (e.target === dialog && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) dialog.close();
+  });
+}
+
 export function readFlag(key) { try { return localStorage.getItem(key) === '1'; } catch { return false; } }
 export function writeFlag(key, on) { try { localStorage.setItem(key, on ? '1' : '0'); } catch { /* ignore */ } }

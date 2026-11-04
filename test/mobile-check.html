@@ -37,6 +37,7 @@
 
     frame.onload = async () => {
       const d = frame.contentDocument, $ = (id) => d.getElementById(id);
+      await until(() => d.documentElement.dataset.ready === '1');
       try { frame.contentWindow.localStorage.clear(); } catch {}
       await sleep(300);
       audit('disconnected');

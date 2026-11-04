@@ -9,11 +9,13 @@ import {
   WAVELENGTHS, hex,
 } from './protocol.js';
 import { deltaE, describeSpectrum, meanSpectrum, medianLab, spectrumToLab, wavelengthColor, labToLch } from './color.js';
-import { history as historyStore, prefs as prefStore } from './storage.js';
+import * as storage from './storage.js';
+const { history: historyStore, prefs: prefStore } = storage;
 import { CMYK_PROFILES, CUSTOM_PREFIX, customProfiles, loadProfile, printerProfiles } from './icc.js';
 import { $, DEMO, NEEDS_CALIBRATION, displayHex, downloadFile, escapeHtml, fmt, onFilePicked, readFlag, toast, writeFlag } from './ui.js';
 import { initMatch, matchControls, onMatchButton } from './match-view.js';
 import { buildDebugReport, debugLog, installDebugCapture } from './debug.js';
+import { initBackup } from './backup.js';
 
 installDebugCapture(); // before anything else, so start-up errors are in the debug report too
 
@@ -795,6 +797,9 @@ function init() {
   renderHistory();
   initMatch({ state, task, settingsFromUI, updateControls, doCalibrate });
   updateControls();
+  initBackup();
 }
 
 init();
+if (DEMO) window.sd10Storage = storage; // the demo page's tests read what the app stored
+document.documentElement.dataset.ready = '1'; // the app has started (tests wait for this: storage loads first)

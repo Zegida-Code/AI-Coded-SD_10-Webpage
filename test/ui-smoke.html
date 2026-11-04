@@ -23,6 +23,7 @@
 
     frame.onload = async () => {
       const w = frame.contentWindow, d = frame.contentDocument, $ = (id) => d.getElementById(id);
+      await until(() => d.documentElement.dataset.ready === '1');
       const errors = [];
       w.addEventListener('error', (e) => errors.push(e.message));
       w.addEventListener('unhandledrejection', (e) => errors.push(String(e.reason)));
