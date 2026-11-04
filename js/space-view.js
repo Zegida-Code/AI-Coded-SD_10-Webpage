@@ -396,7 +396,7 @@ function renderRefList() {
         <span class="flex h-6 w-12 flex-none overflow-hidden rounded ring-1 ring-black/10" title="Reference · closest measured patch">
           <span class="flex-1" style="background:${ref.hex}"></span><span class="flex-1" style="background:${m ? displayHex(m.p.lab) : 'transparent'}"></span></span>
         <span class="min-w-0 flex-1 truncate font-medium ${selected ? 'text-indigo-700 dark:text-indigo-300' : ''}">${escapeHtml(ref.name)}</span>
-        ${ref.outside ? '<span class="chip bg-rose-600 text-white !px-1.5 !py-0 text-[10px]" title="Outside the measured gamut surface">OUTSIDE</span>' : ''}
+        ${ref.outside ? '<span class="chip !px-1.5 !py-0 text-[10px] leading-4 bg-rose-100 text-rose-700 ring-1 ring-inset ring-rose-600/20 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-400/30" title="Outside the measured gamut surface">outside</span>' : ''}
         <button type="button" data-ref-center class="text-[11px] text-indigo-600 hover:underline dark:text-indigo-400" title="Center the picture on this color and zoom in">center</button>
       </div>
       <div class="mt-0.5 font-mono text-[11px] text-slate-500">${labText(ref.lab)}</div>

@@ -236,6 +236,16 @@ async function matchCheck() {
   const vw = RIP_EXPORTS.versaworks.build({ library: 'Test', colors: [{ name: 'Brand Red', lab: [75, 50, 100] }, { name: 'SpotColor0', lab: [0, 0, 0] }] });
   check('VersaWorks .spot export is identical to a VersaWorks-exported library', vw === VIN_SPOT, vw);
   const vwEsc = RIP_EXPORTS.versaworks.build({ library: 'A&B', colors: [{ name: 'Red "1" <x>', lab: [50.123, -3.456, 7.891] }] });
+  // colors set by hand as ink amounts: a second VersaWorks file – byte for byte as VersaWorks exports CMYK and
+  // CMYK + Orange + Green libraries
+  {
+    const vwCmyk = RIP_EXPORTS.versaworks.inkFile({ library: 'Cmyk', colors: [{ name: 'SpotColor0', ink: { space: 'cmyk', v: [43, 34, 43, 0] } }, { name: 'SpotColor1', ink: { space: 'cmyk', v: [23, 3, 54, 65] } }] });
+    const vwOg = RIP_EXPORTS.versaworks.inkFile({ library: 'CMYKOG', colors: [{ name: 'SpotColor0', ink: { space: 'cmykog', v: [44, 35, 35, 3, 12, 98] } }, { name: 'SpotColor1', ink: { space: 'cmykog', v: [100, 8, 5, 5, 16, 12] } }] });
+    const back = readLibrary(new TextEncoder().encode(vwOg), 'x.spot');
+    check('VersaWorks ink-value files are identical to CMYK and CMYK + Orange + Green libraries exported by VersaWorks (read back: no colors, the entries skipped)',
+      vwCmyk === '<?xml version="1.0" encoding="UTF-8"?>\n<SpotColorLibraryList strVersion="4.3.0.0"><CMYK16SpotColorLibrary name="Cmyk"><m_eMakerType>0</m_eMakerType><m_bUseLibrary>true</m_bUseLibrary><CMYK16SpotColor name="SpotColor0" flags="0" redirectLibraryName="" redirectColorName=""><C VALUE="43.00"/><M VALUE="34.00"/><Y VALUE="43.00"/><K VALUE="0.00"/></CMYK16SpotColor><CMYK16SpotColor name="SpotColor1" flags="0" redirectLibraryName="" redirectColorName=""><C VALUE="23.00"/><M VALUE="3.00"/><Y VALUE="54.00"/><K VALUE="65.00"/></CMYK16SpotColor></CMYK16SpotColorLibrary></SpotColorLibraryList>\n' && vwOg === '<?xml version="1.0" encoding="UTF-8"?>\n<SpotColorLibraryList strVersion="4.3.0.0"><CMYKExtSpotColorLibrary name="CMYKOG"><m_eMakerType>0</m_eMakerType><m_bUseLibrary>true</m_bUseLibrary><CMYKExtSpotColor colorSpaceKey="0" name="SpotColor0" flags="0" redirectLibraryName="" redirectColorName=""><value>44.00</value><value>35.00</value><value>35.00</value><value>3.00</value><value>12.00</value><value>98.00</value></CMYKExtSpotColor><CMYKExtSpotColor colorSpaceKey="0" name="SpotColor1" flags="0" redirectLibraryName="" redirectColorName=""><value>100.00</value><value>8.00</value><value>5.00</value><value>5.00</value><value>16.00</value><value>12.00</value></CMYKExtSpotColor></CMYKExtSpotColorLibrary><colorSpaceList><colorSpace key="0"><plane>Cyan</plane><plane>Magenta</plane><plane>Yellow</plane><plane>Black</plane><plane>Orange</plane><plane>Green</plane></colorSpace></colorSpaceList></SpotColorLibraryList>\n' &&
+      back.colors.length === 0 && back.skipped.join() === 'SpotColor0,SpotColor1' && back.library === 'CMYKOG', vwCmyk + vwOg);
+  }
   check('VersaWorks export escapes names and rounds to 2 decimals', vwEsc.includes('name="A&amp;B"') && vwEsc.includes('name="Red &quot;1&quot; &lt;x&gt;"') && vwEsc.includes('<a VALUE="-3.46"/>') && new DOMParser().parseFromString(vwEsc, 'application/xml').querySelector('parsererror') === null);
 
   // CxF3: written exactly like a Digital Factory export of the same three colors (that file minus the lines that
@@ -423,6 +433,38 @@ async function matchCheck() {
     const d50 = DE_FORMULAS.de00.fn(spectrumToLab(base, 0, 2), spectrumToLab(other, 0, 2));
     check(`metamerism check: identical spectra 0 under every light; a different spectrum drifts (worst ${m.worst.key} ${m.worst.mi.toFixed(2)})`,
       same.worst.mi < 1e-9 && same.d50 < 1e-9 && keys === 'D65,A,F11,F2' && Math.abs(m.d50 - d50) < 1e-9 && m.worst.mi > 0.3);
+  }
+
+  // patches that print alike under D50: the one that holds up clearly better under other lights is recommended. The
+  // sheet's centre prints the reference exactly but is metameric (same D50 color, a different spectrum); a neighbour
+  // prints ΔE ~0.1 off with the reference's own spectrum.
+  {
+    const { weightsFor } = await import('../js/color.js');
+    const base = Array.from({ length: 31 }, (_, i) => 0.25 + 0.4 * Math.exp(-(((400 + 10 * i - 610) / 50) ** 2)));
+    // a "metameric black": a spectral change D50 cannot see (orthogonal to the D50 weights)
+    const w = weightsFor(0, 2), basis = [];
+    for (const v of [w.x, w.y, w.z]) {
+      let u = [...v];
+      for (const b of basis) { const d = u.reduce((s, x, i) => s + x * b[i], 0); u = u.map((x, i) => x - d * b[i]); }
+      const n = Math.hypot(...u); basis.push(u.map((x) => x / n));
+    }
+    let black = base.map((_, i) => Math.sin(i / 1.7));
+    for (const b of basis) { const d = black.reduce((s, x, i) => s + x * b[i], 0); black = black.map((x, i) => x - d * b[i]); }
+    const scale = 0.2 / Math.max(...black.map(Math.abs));
+    const metameric = base.map((v, i) => v + scale * black[i]);
+    const target = spectrumToLab(base, 0, 2);
+    const step = [...MODES.spot.step0];
+    const patches = designPatches('spot', target, step).map((p) => ({ ...p, lab: p.x.map((v) => v + 4) }));
+    patches.filter((p) => p.offset.every((v) => v === 0)).forEach((p) => Object.assign(p, { lab: [...target], spectrum: metameric }));
+    const near = patches.find((p) => p.offset.some((v) => v !== 0));
+    Object.assign(near, { lab: [target[0] + 0.1, target[1], target[2]], spectrum: base });
+    const centreN = patches.find((p) => p.offset.every((v) => v === 0)).n;
+    const plain = analyseRound({ round: 1, mode: 'spot', centre: target, step, patches }, target);
+    const res = analyseRound({ round: 1, mode: 'spot', centre: target, step, patches }, target, 'de00', [], { refSpectrum: base });
+    const mi = metamerism(base, metameric).worst.mi;
+    check(`of patches that print alike, the one that holds up under other lights wins (centre metamerism ${mi.toFixed(2)} -> patch #${res.pickN} ${res.steadier?.mi.toFixed(2)})`,
+      mi > 1 && plain.pickN === centreN && !plain.steadier && res.pickN === near.n && res.steadier.instead.n === centreN && res.steadier.mi < 0.01 &&
+      Math.abs(res.steadier.instead.mi - mi) < 1e-9 && res.pick.n === near.n);
   }
 
   // ICC: AToB (device -> Lab) vs. LittleCMS 2 (Pillow ImageCms, relative colorimetric, 8-bit Lab), and the gamut check

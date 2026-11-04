@@ -1,8 +1,10 @@
 // Spot color library files for RIP software, so the named colors of a test sheet (or the matched colors) can be
 // imported into the RIP – one exporter per format; more can be added as sample library files become available – and
 // reading such files back (plus Adobe Swatch Exchange swatches), so their named colors can come in as colors to match.
-// colors: [{ name, lab: [L, a, b] }] – CIE L*a*b* D50 / 2°; a format with `cmyk: true` also takes { name, cmyk: [C, M, Y, K] }
-// (percent) – a color whose output is set by hand in CMYK. Formats are only extended from sample files the RIP wrote.
+// colors: [{ name, lab: [L, a, b] }] – CIE L*a*b* D50 / 2°. Colors set by hand as ink amounts (percent): a format with
+// `cmyk: true` takes { name, cmyk: [C, M, Y, K] } in the same file; one with `inkFile()` writes them – plain CMYK or
+// CMYK + orange + green, { name, ink: { space: 'cmyk' | 'cmykog', v } } – into a second file. Formats are only extended
+// from sample files the RIP wrote.
 import { spectrumToLab } from './color.js';
 
 const xmlEsc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
@@ -139,6 +141,23 @@ export const RIP_EXPORTS = {
         `<LabSpotColorLibrary name="${xmlEsc(library)}"><m_eMakerType>0</m_eMakerType><m_bUseLibrary>false</m_bUseLibrary>` +
         `${items}</LabSpotColorLibrary></SpotColorLibraryList>\n`;
     },
+    // Colors set by hand as ink amounts go into a second file, as a VersaWorks library holds one color model: a CMYK
+    // library (CMYK16SpotColorLibrary), or – when any color has orange or green – a CMYK + Orange + Green one
+    // (CMYKExtSpotColorLibrary, its planes in a colorSpaceList). Both copied from libraries exported by VersaWorks.
+    inkFile({ library, colors }) {
+      const head = '<?xml version="1.0" encoding="UTF-8"?>\n<SpotColorLibraryList strVersion="4.3.0.0">';
+      const opts = '<m_eMakerType>0</m_eMakerType><m_bUseLibrary>true</m_bUseLibrary>';
+      const attrs = (name) => `name="${xmlEsc(name)}" flags="0" redirectLibraryName="" redirectColorName=""`;
+      const v2 = (v) => v.toFixed(2);
+      if (colors.every(({ ink }) => ink.space === 'cmyk')) {
+        const items = colors.map(({ name, ink }) => `<CMYK16SpotColor ${attrs(name)}>${['C', 'M', 'Y', 'K'].map((k, i) => `<${k} VALUE="${v2(ink.v[i])}"/>`).join('')}</CMYK16SpotColor>`).join('');
+        return `${head}<CMYK16SpotColorLibrary name="${xmlEsc(library)}">${opts}${items}</CMYK16SpotColorLibrary></SpotColorLibraryList>\n`;
+      }
+      const items = colors.map(({ name, ink }) => `<CMYKExtSpotColor colorSpaceKey="0" ${attrs(name)}>${[...ink.v, 0, 0].slice(0, 6).map((v) => `<value>${v2(v)}</value>`).join('')}</CMYKExtSpotColor>`).join('');
+      const planes = ['Cyan', 'Magenta', 'Yellow', 'Black', 'Orange', 'Green'].map((p) => `<plane>${p}</plane>`).join('');
+      return `${head}<CMYKExtSpotColorLibrary name="${xmlEsc(library)}">${opts}${items}</CMYKExtSpotColorLibrary>` +
+        `<colorSpaceList><colorSpace key="0">${planes}</colorSpace></colorSpaceList></SpotColorLibraryList>\n`;
+    },
   },
 };
 
@@ -186,7 +205,10 @@ function readVersaWorks(doc) {
     lab: ['L', 'a', 'b'].map((k) => parseFloat(child(c, k)?.getAttribute('VALUE'))),
   }));
   const ok = colors.filter((c) => c.name && c.lab.every(Number.isFinite));
-  return { format: 'versaworks', library: libs[0]?.getAttribute('name') ?? '', colors: ok, skipped: colors.filter((c) => !ok.includes(c)).map((c) => c.name || '(unnamed)') };
+  // CMYK and CMYK + Orange + Green libraries hold ink amounts, not colors: their entries are skipped
+  const inks = [...byLocal(doc, 'CMYK16SpotColor'), ...byLocal(doc, 'CMYKExtSpotColor')].map((c) => c.getAttribute('name') || '(unnamed)');
+  const name = libs[0]?.getAttribute('name') ?? byLocal(doc, 'CMYK16SpotColorLibrary')[0]?.getAttribute('name') ?? byLocal(doc, 'CMYKExtSpotColorLibrary')[0]?.getAttribute('name') ?? '';
+  return { format: 'versaworks', library: name, colors: ok, skipped: [...colors.filter((c) => !ok.includes(c)).map((c) => c.name || '(unnamed)'), ...inks] };
 }
 
 function readCxf(doc) {

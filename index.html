@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <link rel="stylesheet" href="css/app.css?v=2026-10-26.a86154f-215410">
+  <link rel="stylesheet" href="css/app.css?v=2026-11-03.374e0f6-191849">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -352,6 +352,7 @@
           <div class="flex gap-4 text-sm">
             <label class="flex items-center gap-1.5"><input type="radio" name="fixedSpace" value="lab" class="h-4 w-4"> L*a*b*</label>
             <label class="flex items-center gap-1.5"><input type="radio" name="fixedSpace" value="cmyk" class="h-4 w-4"> CMYK</label>
+            <label class="flex items-center gap-1.5"><input type="radio" name="fixedSpace" value="cmykog" class="h-4 w-4"> CMYK + Orange + Green</label>
           </div>
           <div id="mFixedLab" class="grid grid-cols-3 gap-2">
             <div><label class="label" for="fixL">L*</label><input id="fixL" class="input font-mono" type="number" step="0.01" min="0" max="100"></div>
@@ -363,6 +364,10 @@
             <div><label class="label" for="fixM">M %</label><input id="fixM" class="input font-mono" type="number" step="0.1" min="0" max="100"></div>
             <div><label class="label" for="fixY">Y %</label><input id="fixY" class="input font-mono" type="number" step="0.1" min="0" max="100"></div>
             <div><label class="label" for="fixK">K %</label><input id="fixK" class="input font-mono" type="number" step="0.1" min="0" max="100"></div>
+          </div>
+          <div id="mFixedOG" class="grid grid-cols-4 gap-2">
+            <div><label class="label" for="fixO">Or %</label><input id="fixO" class="input font-mono" type="number" step="0.1" min="0" max="100"></div>
+            <div><label class="label" for="fixG">Gr %</label><input id="fixG" class="input font-mono" type="number" step="0.1" min="0" max="100"></div>
           </div>
           <div class="flex flex-wrap items-center gap-2 text-xs"><span class="text-slate-500">Presets:</span>
             <button type="button" data-fixed-preset="paper" class="rounded-md px-2 py-1 ring-1 ring-slate-300 hover:bg-slate-100 dark:ring-slate-700 dark:hover:bg-slate-800">Paper white · CMYK 0 0 0 0</button>
@@ -434,7 +439,7 @@
           <div id="mFixedRow" class="hidden flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 p-3 text-sm dark:border-slate-800">
             <span class="font-medium text-slate-500">Output for the RIP</span>
             <span id="mFixedText" class="min-w-0 flex-1 text-xs"></span>
-            <button id="btnFixedSet" type="button" class="btn btn-ghost" title="Hard-set the values the spot library and proof sheet give this color – L*a*b*, or CMYK where the library format holds it">Set by hand…</button>
+            <button id="btnFixedSet" type="button" class="btn btn-ghost" title="Hard-set the values the spot library and proof sheet give this color – L*a*b*, or ink amounts (CMYK, CMYK + orange + green) where the library format holds them">Set by hand…</button>
           </div>
         </div>
 
@@ -613,26 +618,26 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-10-26.a86154f-215410",
-      "./js/transport.js": "./js/transport.js?v=2026-10-26.a86154f-215410",
-      "./js/mock.js": "./js/mock.js?v=2026-10-26.a86154f-215410",
-      "./js/session.js": "./js/session.js?v=2026-10-26.a86154f-215410",
-      "./js/protocol.js": "./js/protocol.js?v=2026-10-26.a86154f-215410",
-      "./js/color.js": "./js/color.js?v=2026-10-26.a86154f-215410",
-      "./js/weights.js": "./js/weights.js?v=2026-10-26.a86154f-215410",
-      "./js/storage.js": "./js/storage.js?v=2026-10-26.a86154f-215410",
-      "./js/icc.js": "./js/icc.js?v=2026-10-26.a86154f-215410",
-      "./js/match.js": "./js/match.js?v=2026-10-26.a86154f-215410",
-      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-10-26.a86154f-215410",
-      "./js/ui.js": "./js/ui.js?v=2026-10-26.a86154f-215410",
-      "./js/match-view.js": "./js/match-view.js?v=2026-10-26.a86154f-215410",
-      "./js/rip-export.js": "./js/rip-export.js?v=2026-10-26.a86154f-215410",
-      "./js/colorspace.js": "./js/colorspace.js?v=2026-10-26.a86154f-215410",
-      "./js/debug.js": "./js/debug.js?v=2026-10-26.a86154f-215410",
-      "./js/space-view.js": "./js/space-view.js?v=2026-10-26.a86154f-215410"
+      "./js/app.js": "./js/app.js?v=2026-11-03.374e0f6-191849",
+      "./js/transport.js": "./js/transport.js?v=2026-11-03.374e0f6-191849",
+      "./js/mock.js": "./js/mock.js?v=2026-11-03.374e0f6-191849",
+      "./js/session.js": "./js/session.js?v=2026-11-03.374e0f6-191849",
+      "./js/protocol.js": "./js/protocol.js?v=2026-11-03.374e0f6-191849",
+      "./js/color.js": "./js/color.js?v=2026-11-03.374e0f6-191849",
+      "./js/weights.js": "./js/weights.js?v=2026-11-03.374e0f6-191849",
+      "./js/storage.js": "./js/storage.js?v=2026-11-03.374e0f6-191849",
+      "./js/icc.js": "./js/icc.js?v=2026-11-03.374e0f6-191849",
+      "./js/match.js": "./js/match.js?v=2026-11-03.374e0f6-191849",
+      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-11-03.374e0f6-191849",
+      "./js/ui.js": "./js/ui.js?v=2026-11-03.374e0f6-191849",
+      "./js/match-view.js": "./js/match-view.js?v=2026-11-03.374e0f6-191849",
+      "./js/rip-export.js": "./js/rip-export.js?v=2026-11-03.374e0f6-191849",
+      "./js/colorspace.js": "./js/colorspace.js?v=2026-11-03.374e0f6-191849",
+      "./js/debug.js": "./js/debug.js?v=2026-11-03.374e0f6-191849",
+      "./js/space-view.js": "./js/space-view.js?v=2026-11-03.374e0f6-191849"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-10-26.a86154f-215410"></script>
+  <script type="module" src="js/app.js?v=2026-11-03.374e0f6-191849"></script>
 </body>
 </html>

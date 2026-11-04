@@ -176,8 +176,8 @@ measurements.
 
 #### Metamerism check
 
-When the reference was measured with the SD-10, each result compares the best printed patch with the reference under
-four lights:
+When the reference was measured with the SD-10 (a typed-in or imported reference has no spectrum), each result
+compares the patch behind the values to use with the reference under four lights:
 
 | Light | Stands for |
 |---|---|
@@ -189,6 +189,14 @@ four lights:
 It shows the difference you would see and the *metamerism index* – how far the two drift apart once the D50
 difference is taken out. A high index means the ink and the reference reflect light differently, so they can match
 under one light but not another.
+
+The check also steers the result:
+
+- **Ties go to the steadier patch.** When several patches print about as well under D50 (within the measuring noise),
+  the one that holds up clearly better under the other lights is used. "Clearly" means a metamerism index lower by more
+  than 0.5. The result says which patch it was chosen over and why. It never moves a color across the tolerance.
+- **The color list flags drift.** Once a color prints within ΔE 3 and its match drifts apart by more than the
+  tolerance (at least 1) under another light, the list tags it *varies by light*.
 
 > **Tip:** check the color under the light it will be seen in.
 
@@ -345,15 +353,18 @@ the *Colors* card, beside **Download library**:
 
 **Setting a color's output by hand**
 
-Any color's output for the RIP can be hard-set: **Set by hand…** on the *Reference* card takes L\*a\*b\* or CMYK
-values, with presets for paper white (CMYK 0 0 0 0 – for a white that prints no ink), rich black (CMYK 60 40 40 100)
-and L\*a\*b\* 0 0 0. Values set by hand replace the recommendation in the color list, the library and the proof
-sheet; **Use the recommendation again** clears them.
+Any color's output for the RIP can be hard-set: **Set by hand…** on the *Reference* card takes L\*a\*b\* values or
+ink amounts – CMYK, or CMYK + orange + green – with presets for paper white (CMYK 0 0 0 0 – for a white that prints no
+ink), rich black (CMYK 60 40 40 100) and L\*a\*b\* 0 0 0. Values set by hand replace the recommendation in the color
+list, the library and the proof sheet; **Use the recommendation again** clears them.
 
-| Format | L\*a\*b\* set by hand | CMYK set by hand |
-|---|---|---|
-| Edge Print | ✓ | ✓ (as Edge Print's own CMYK entries) |
-| CxF3, Adobe Color Book, VersaWorks | ✓ | left out of the file – the card says so; set the color in the RIP |
+| Format | L\*a\*b\* | CMYK | CMYK + orange + green |
+|---|---|---|---|
+| VersaWorks | ✓ | ✓ in a second file, *… - ink values.spot* – import both | ✓ in that second file |
+| Edge Print | ✓ | ✓ (as Edge Print's own CMYK entries) | left out – set the color in the RIP |
+| CxF3, Adobe Color Book | ✓ | left out – set the color in the RIP | left out – set the color in the RIP |
+
+The card says how many colors go into a second file or are left out. The proof sheet prints every color either way.
 
 **Choosing the colors**
 
@@ -394,10 +405,10 @@ Open these pages in Chrome – on the live site (e.g. [sd-10.com/test/](https://
 
 | Page | Checks | What it covers |
 |---|---|---|
-| [`test/index.html`](https://sd-10.com/test/index.html) | 124 | The core code (see below) |
+| [`test/index.html`](https://sd-10.com/test/index.html) | 126 | The core code (see below) |
 | [`test/ui-smoke.html`](https://sd-10.com/test/ui-smoke.html) | 34 | The Console against the simulated SD-10: calibrate, measure, compare, line scan, history sync, palettes, settings, custom ICC profiles |
 | [`test/mobile-check.html`](https://sd-10.com/test/mobile-check.html) | – | The layout at phone width (no sideways scrolling) and the compare / reference flows |
-| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 58 | Print match against the simulated device and printer: matching to within tolerance, several colors at once, media sizes and limits, readings per patch, textile ΔE, metamerism and gamut checks, spot color sheets and libraries, colors imported from a swatch file, RGB sheets |
+| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 60 | Print match against the simulated device and printer: matching to within tolerance, several colors at once, media sizes and limits, readings per patch, textile ΔE, metamerism and gamut checks, spot color sheets and libraries, colors imported from a swatch file, RGB sheets |
 | [`test/space-smoke.html`](https://sd-10.com/test/space-smoke.html) | 39 | The color space workflow against the simulated device and printer (see below) |
 
 **`test/index.html` checks**

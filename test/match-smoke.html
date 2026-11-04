@@ -206,7 +206,10 @@
       $('btnMatchAnalyse').click();
       await until(() => !$('mResultCard').classList.contains('hidden'));
       log(/named color Brand Red/.test($('mResult').textContent), 'spot result names the color');
-      log(/Metamerism check \(best patch #\d+ vs reference\)/.test($('mResult').textContent) && /Tri-band shop light/.test($('mResult').textContent), `metamerism check compares the best patch with the measured reference under other lights (${($('mResult').textContent.match(/Metamerism check.{0,120}/) || [''])[0]})`);
+      const drifts = /the match changes under other lights/.test($('mResult').textContent);
+      log(/Metamerism check \((best |sheet centre |)patch #\d+|Metamerism check \(sheet centre #\d+/.test($('mResult').textContent) && /Tri-band shop light/.test($('mResult').textContent) &&
+        (drifts && !/still far from the reference/.test($('mResult').textContent)) === /varies by light/.test($('mColorList').textContent),
+        `metamerism check compares the patch in use with the measured reference under other lights; the color list tags a drifting match (${($('mResult').textContent.match(/Metamerism check.{0,120}/) || [''])[0]})`);
       setSel('matchFormula', 'cmc21');
       log(/(predicted|printed) ΔE CMC 2:1/.test($('mResult').textContent) && /Centre patch\s*ΔE CMC 2:1/.test($('mResult').textContent), 'switching to ΔE CMC 2:1 re-judges the result');
       setSel('matchFormula', 'de00');
@@ -305,8 +308,26 @@
       const epccFile = files.find((f) => f.name === 'House colors.epcc');
       const epccText = epccFile ? new TextDecoder('utf-16le').decode(new Uint8Array(await (await fetch(epccFile.href)).arrayBuffer()).subarray(2)) : '';
       log(/\r\n0,9,Brand Red,1,4,0;0;0;0\r\n/.test(epccText), 'an Edge Print library takes the CMYK set by hand');
+      // VersaWorks: colors set by hand as ink amounts go into a second file (CMYK, or CMYK + Orange + Green)
       setSel('mRipFormat', 'versaworks');
-      log(/set by hand in CMYK stays out of VersaWorks \.spot libraries/.test($('mLibNote').textContent), `a library format without CMYK leaves it out and says so (${$('mLibNote').textContent.slice(0, 80)})`);
+      const before = files.length;
+      $('btnLibDownload').click();
+      const vwInk = files.slice(before).find((f) => f.name === 'House colors - ink values.spot');
+      const vwInkText = vwInk ? await readFile(vwInk) : '', vwMain = files.slice(before).find((f) => f.name === 'House colors.spot');
+      log(/1 set by hand as ink amounts goes into a second file/.test($('mLibNote').textContent) && /<CMYK16SpotColor name="Brand Red" [^>]*><C VALUE="0\.00"\/><M VALUE="0\.00"\/>/.test(vwInkText) &&
+        !(vwMain ? await readFile(vwMain) : '').includes('Brand Red'), `VersaWorks: a color set by hand in CMYK goes into a second file (${$('mLibNote').textContent.slice(0, 70)})`);
+      $('btnFixedSet').click();
+      d.querySelector('input[name=fixedSpace][value=cmykog]').click();
+      [['fixC', 0], ['fixM', 60], ['fixY', 100], ['fixK', 0], ['fixO', 40], ['fixG', 0]].forEach(([id, v]) => { $(id).value = String(v); });
+      $('btnFixedSave').click();
+      const before2 = files.length;
+      $('btnLibDownload').click();
+      const ogFile = files.slice(before2).find((f) => f.name === 'House colors - ink values.spot');
+      const ogText = ogFile ? await readFile(ogFile) : '';
+      log(brandRed().fixed?.space === 'cmykog' && /<CMYKExtSpotColor colorSpaceKey="0" name="Brand Red"[^>]*><value>0\.00<\/value><value>60\.00<\/value><value>100\.00<\/value><value>0\.00<\/value><value>40\.00<\/value><value>0\.00<\/value>/.test(ogText) &&
+        /C0\.0 M60\.0 Y100\.0 K0\.0 Or40\.0 Gr0\.0/.test($('mFixedText').textContent), 'CMYK + Orange + Green set by hand: the second VersaWorks file is a CMYK + Orange + Green library');
+      setSel('mRipFormat', 'cxf');
+      log(/stays out of CxF3 libraries/.test($('mLibNote').textContent), `a format that cannot hold ink amounts leaves the color out and says so (${$('mLibNote').textContent.slice(0, 70)})`);
       $('btnLibProof').click();
       const proofFile = files.find((f) => f.name === 'House colors - proof.pdf');
       const proofText = proofFile ? await readFile(proofFile) : '';
@@ -360,7 +381,7 @@
       [['mL', 50], ['mA', 90], ['mB', -100]].forEach(([id, v]) => { $(id).value = String(v); });
       $('mB').dispatchEvent(new Event('change'));
       await until(() => /Outside the printer gamut/.test($('mGamut').textContent));
-      log(/Outside the printer gamut/.test($('mGamut').textContent) && /OUT OF GAMUT/.test($('mColorList').textContent), `printer profile flags an unprintable reference (${$('mGamut').textContent.slice(0, 90)}…)`);
+      log(/Outside the printer gamut/.test($('mGamut').textContent) && /out of gamut/.test($('mColorList').textContent), `printer profile flags an unprintable reference (${$('mGamut').textContent.slice(0, 90)}…)`);
       [['mL', 60], ['mA', 10], ['mB', 20]].forEach(([id, v]) => { $(id).value = String(v); });
       $('mB').dispatchEvent(new Event('change'));
       await until(() => /Inside the printer gamut/.test($('mGamut').textContent));

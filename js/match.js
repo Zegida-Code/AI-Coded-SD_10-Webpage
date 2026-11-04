@@ -180,9 +180,11 @@ export const trustRadius = (mode, step) => step.map((s, k) => Math.max(TRUST_STE
  * - If this sheet's centre – the previous recommendation – printed clearly worse than an earlier patch, the last move
  *   failed (`regressed`): the search goes back to the best patch. After such a round, or one flagged gamut-limited, it
  *   moves at most one patch step and only follows the model for a clear predicted gain (`cautious`).
+ * - With the reference's spectrum (`refSpectrum`), a patch that printed about as well but holds up clearly better under
+ *   other lights (steadierPatch) wins that choice instead (`steadier`).
  * `formula` is a DE_FORMULAS key.
  */
-export function analyseRound(round, target, formula = 'de00', earlier = []) {
+export function analyseRound(round, target, formula = 'de00', earlier = [], { refSpectrum = null } = {}) {
   const { min, max } = MODES[round.mode];
   const { fn: dE, lWeight } = formulaOf(formula);
   const model = fitModel(round.patches, round.centre);
@@ -212,8 +214,11 @@ export function analyseRound(round, target, formula = 'de00', earlier = []) {
   const pool = [...scored, ...history];
   const bestEver = pool.reduce((a, b) => (b.dE < a.dE ? b : a));
   const isLab = round.mode === 'spot' || round.mode === 'lab';
-  const pick = !isLab ? bestEver : pool.filter((p) => p.dE <= bestEver.dE + noise / 2)
+  const alike = pool.filter((p) => p.dE <= bestEver.dE + noise / 2);
+  const nearest = !isLab ? bestEver : alike
     .reduce((a, b) => (Math.hypot(...b.x.map((v, k) => v - target[k])) < Math.hypot(...a.x.map((v, k) => v - target[k])) ? b : a));
+  const steadier = steadierPatch(refSpectrum, alike, nearest, formula);
+  const pick = steadier?.patch ?? nearest;
 
   let rec = { ...sol, source: 'model' };
   if (regressed || bestEver.dE <= sol.predictedDeltaE + (cautious ? noise / 2 : 0)) {
@@ -229,7 +234,9 @@ export function analyseRound(round, target, formula = 'de00', earlier = []) {
   // (the model's own optimum is inside the trusted box, or it predicts nothing better than a patch already measured)
   const gamutLimited = rec.predictedDeltaE > 2 && (rec.source !== 'model' || !trustLimited);
   return { model, ...rec, best, bestEver, centreDE, repeatability: repeat, correction, extrapolated,
-    trustLimited: trustLimited && rec.source === 'model', gamutLimited, regressed };
+    trustLimited: trustLimited && rec.source === 'model', gamutLimited, regressed,
+    pick: { round: pick.round, n: pick.n, dE: pick.dE },
+    steadier: steadier && { mi: steadier.mi, instead: { round: nearest.round, n: nearest.n, mi: steadier.insteadMi } } };
 }
 
 
@@ -256,6 +263,23 @@ export function metamerism(refSpectrum, smpSpectrum, formula = 'de00') {
     return { ...l, dE: dE(r, s), mi: dE(r, s.map((v, i) => v + corr[i])) };
   });
   return { d50: dE(r0, s0), lights, worst: lights.reduce((a, b) => (b.mi > a.mi ? b : a)) };
+}
+
+/** Metamerism indexes closer than this are not a clear difference (spectral measuring noise; ~0.5 is hard to see). */
+export const MI_MARGIN = 0.5;
+
+/**
+ * Of patches that printed about as well under D50 (`alike`, measured spectra), the one that holds up clearly better under
+ * other lights than `chosen` – its worst metamerism index lower by more than MI_MARGIN. Returns { patch, mi, insteadMi }
+ * or null (no reference spectrum, or no clear difference).
+ */
+export function steadierPatch(refSpectrum, alike, chosen, formula = 'de00') {
+  if (!refSpectrum || !chosen?.spectrum) return null;
+  const mi = (p) => metamerism(refSpectrum, p.spectrum, formula).worst.mi;
+  const insteadMi = mi(chosen);
+  const best = alike.filter((p) => p.spectrum && p !== chosen).map((p) => ({ patch: p, mi: mi(p) }))
+    .reduce((a, b) => (!a || b.mi < a.mi ? b : a), null);
+  return best && insteadMi - best.mi > MI_MARGIN ? { ...best, insteadMi } : null;
 }
 
 // ---------------------------------------------------------------- several readings per patch
