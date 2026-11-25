@@ -1133,22 +1133,27 @@ async function initialCentre(c) {
  * off), 4, 8, or 'auto' (as many as fit in the empty slots of the pages the sheet already needs – see emptySlots).
  */
 const fillInSetting = () => (match.learn && usableSpace()?.points.length >= SPACE_MIN_POINTS ? match.fillIn : 0);
-/** Most fill-in patches 'auto' adds (each one is also a patch to scan). */
+/** Most fill-in patches 'auto' adds to a test sheet (each one is also a patch to scan); a chart's last page is filled up. */
 const MAX_AUTO_FILL = 100;
 
 /**
- * How many more patches fit on the pages a color's sheet of `n` patches already takes – its empty slots on the media
- * in use – so fill-in patches cost no extra media.
+ * How many more patches fit on the pages a sheet of `n` patches already takes – its empty slots on the media in use –
+ * so fill-in patches cost no extra media (at most `max`). `c`: the color whose sheet it is, or a chart (laid out with
+ * its title). The pages only grow with the patch count, so the count is found by doubling, then halving.
  */
-function emptySlots(c, n) {
-  const opts = (count) => ({ mode: match.mode, round: 1, media: mediaMm(), patchMm: match.patchMm, groups: [{ label: colorLabel(c), target: c.target, kFixed: 0,
-    patches: Array.from({ length: count }, (_, i) => ({ n: i + 1, offset: [1, 0, 0], x: [0, 0, 0], name: 'SD10-XXXX-R1-01' })) }] });
+function emptySlots(c, n, max = MAX_AUTO_FILL) {
+  const chart = isChart(c);
+  const opts = (count) => ({ mode: match.mode, round: 1, media: mediaMm(), patchMm: match.patchMm, title: sheetTitle(c), groups: [{ label: colorLabel(c), target: c.target, kFixed: 0,
+    patches: Array.from({ length: count }, (_, i) => ({ n: i + 1, offset: chart ? undefined : [1, 0, 0], x: [0, 0, 0], name: chart ? 'SD10-XXXX-C1-001' : 'SD10-XXXX-R1-01' })) }] });
   const pagesFor = (count) => { try { return sheetLayout(opts(count)).pages.length; } catch { return Infinity; } };
   const pages = pagesFor(n);
   if (!Number.isFinite(pages)) return 0;
-  let extra = 0;
-  while (extra < MAX_AUTO_FILL && pagesFor(n + extra + 1) === pages) extra++;
-  return extra;
+  const fits = (extra) => pagesFor(n + extra) === pages;
+  let lo = 0, hi = 1; // fits(lo) always; find a hi that does not fit (or max)
+  while (hi < max && fits(hi)) { lo = hi; hi = Math.min(hi * 2, max); }
+  if (hi >= max && fits(max)) return max;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (fits(mid)) lo = mid; else hi = mid; }
+  return lo;
 }
 /**
  * Inputs already on sheets waiting to be scanned – the other colors' unscanned fill-in patches and the unscanned
@@ -1598,15 +1603,20 @@ function createChart() {
   const no = s.sessions.filter((q) => q.kind === kind).length + 1;
   const code = newCode();
   const seed = crypto.getRandomValues(new Uint32Array(1))[0];
-  const designed = kind === 'gaps' ? designGapChart(s, CHART_SIZES[key].n, seed) : designChart(s.mode, CHART_SIZES[key].n, seed);
-  const patches = designed.map((p) => (s.mode === 'spot' ? { ...p, name: chartSpotName(code, no, p.n) } : p));
   const title = { chart: 'chart', check: 'check chart', gaps: 'fill-gaps chart' }[kind];
-  s.chart = { id: `${kind}:${code}`, code, name: `${s.name} – ${title} ${no}`, target: null, refReads: [], accepted: false, next: 0,
-    rounds: [{ round: no, mode: s.mode, kind, kFixed: 0, patches, result: null, chart: true }] };
+  const chart = { id: `${kind}:${code}`, code, name: `${s.name} – ${title} ${no}`, target: null, refReads: [], accepted: false, next: 0,
+    rounds: [{ round: no, mode: s.mode, kind, kFixed: 0, patches: [], result: null, chart: true }] };
+  // "Fill the free space": the chart's last page is filled up with more patches of the same kind – no extra media
+  // (the setting is greyed out with learning off – then it does nothing here either)
+  const n = CHART_SIZES[key].n, extra = match.learn && match.fillIn === 'auto' ? emptySlots(chart, n, Infinity) : 0;
+  const designed = kind === 'gaps' ? designGapChart(s, n + extra, seed) : designChart(s.mode, n + extra, seed);
+  chart.rounds[0].patches = designed.map((p) => (s.mode === 'spot' ? { ...p, name: chartSpotName(code, no, p.n) } : p));
+  s.chart = chart;
   match.chartActive = true;
   commit({ withSpaces: true });
-  debugLog('space', `${s.chart.name} created`, { kind, patches: patches.length, mode: s.mode, seed });
-  toast(`${s.chart.name} created – ${patches.length} patches. Download, print and scan it.`, 'ok');
+  const count = designed.length;
+  debugLog('space', `${chart.name} created`, { kind, patches: count, extra, mode: s.mode, seed });
+  toast(`${chart.name} created – ${count} patches${extra ? ` (${n} + ${count - n} filling the free space on its last page)` : ''}. Download, print and scan it.`, 'ok');
 }
 
 /** Show the color space's chart in the sheet and scan cards (from the color list or the Color space card). */

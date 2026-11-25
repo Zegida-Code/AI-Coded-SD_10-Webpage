@@ -279,7 +279,7 @@ emptiest.
 |---|---|
 | **None** | Nothing (default) |
 | **4** / **8** | That many – which can take an extra page on tight media |
-| **Fill the free space** | Exactly as many as fit in the empty slots of the pages the sheet needs anyway – no extra media, only a little more scanning (at most 100) |
+| **Fill the free space** | Exactly as many as fit in the empty slots of the pages the sheet needs anyway – no extra media, only a little more scanning (at most 100). A new chart is filled the same way, without the 100 limit: its last page is filled up with more patches of the chart's own kind (e.g. a 200-patch Starter chart becomes 200 + however many fit). |
 
 Sheets made before any is scanned get different fill-ins: those still waiting on another sheet count as measured.
 Fill-in patches are marked *fill-in* on the sheet and in the scan card. The match calculation ignores them, and they
@@ -443,7 +443,7 @@ Open these pages in Chrome – on the live site (e.g. [sd-10.com/test/](https://
 | [`test/ui-smoke.html`](https://sd-10.com/test/ui-smoke.html) | 34 | The Console against the simulated SD-10: calibrate, measure, compare, line scan, history sync, palettes, settings, custom ICC profiles |
 | [`test/mobile-check.html`](https://sd-10.com/test/mobile-check.html) | – | The layout at phone width (no sideways scrolling) and the compare / reference flows |
 | [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 64 | Print match against the simulated device and printer: matching to within tolerance, several colors at once, media sizes and limits, readings per patch, textile ΔE, metamerism and gamut checks, spot color sheets and libraries, colors imported from a swatch file, RGB sheets, backups (download, restore, automatic folder backup) |
-| [`test/space-smoke.html`](https://sd-10.com/test/space-smoke.html) | 40 | The color space workflow against the simulated device and printer (see below) |
+| [`test/space-smoke.html`](https://sd-10.com/test/space-smoke.html) | 41 | The color space workflow against the simulated device and printer (see below) |
 
 **`test/index.html` checks**
 

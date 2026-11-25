@@ -310,6 +310,7 @@
       $('btnSpaceChart').click();
       await until(() => d.querySelectorAll('#mPatchGrid [data-patch]').length === 48);
       log(/fill-gaps chart 1/.test(text('mRoundLabel')), 'a Fill gaps chart: 48 patches where the color space is emptiest');
+      const gapPages = text('mSheetInfo').match(/ · (\d+ pages?) of /)?.[1];
       $('btnMatchRestart').click();
       // "Fill the free space": as many fill-ins as fit on the pages the 16 patches need anyway – no extra page
       setSel('mFillIn', 'auto');
@@ -319,6 +320,15 @@
       const autoCount = d.querySelectorAll('#mPatchGrid [data-patch]').length;
       log(/ · 1 page of /.test(text('mSheetInfo')) && text('mSheetInfo').includes(`(${autoCount - 16} fill-in`),
         `"Fill the free space" fills the page the sheet needs anyway (${autoCount - 16} fill-in patches, still 1 page)`);
+      // … and a new chart: its last page is filled up with more patches of the chart's kind, on as many pages as before
+      $('btnSpaceChart').click();
+      await until(() => /fill-gaps chart 2/.test(text('mRoundLabel')));
+      {
+        const n = d.querySelectorAll('#mPatchGrid [data-patch]').length, pages = text('mSheetInfo').match(/ · (\d+ pages?) of /)?.[1];
+        log(n > 48 && pages && pages === gapPages && text('mSheetInfo').startsWith(`${n} patches`),
+          `"Fill the free space" fills a chart's last page too (fill-gaps chart: 48 + ${n - 48} patches, still ${pages})`);
+      }
+      $('btnMatchRestart').click();
       // a second color's sheet made before the first is scanned: its fill-ins go to other gaps than the first sheet's
       setSel('mFillIn', '8');
       $('btnColorAdd').click();
