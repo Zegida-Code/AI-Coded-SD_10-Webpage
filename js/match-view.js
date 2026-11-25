@@ -17,7 +17,7 @@ import { METHOD } from './protocol.js';
 import { deltaE2000, labD50ToSrgb, meanSpectrum, rgbHex, roundSpectrum, spectrumToLab, srgbToLabD50 } from './color.js';
 import { CUSTOM_PREFIX, PRINTER_PREFIX, loadProfile, printerProfiles } from './icc.js';
 import {
-  DESIGNS, DE_FORMULAS, MEDIA, MI_MARGIN, MODES, MODE_NAME, analyseRound, averageReadings, buildSheetPdf, buildSheetPng,
+  DESIGNS, DE_FORMULAS, MEDIA, MI_MARGIN, MODES, MODE_NAME, analyseRound, averageReadings, buildSheetPdf, buildSheetPdfPages, buildSheetPng,
   designPatches, metamerism, minSheetHeight, nextStep, patchSpotName, sheetLayout,
 } from './match.js';
 import { RIP_EXPORTS, readLibrary } from './rip-export.js';
@@ -672,6 +672,7 @@ function renderSheet(c) {
   $('mSheetActions').classList.toggle('hidden', !r);
   $('btnMatchPdf').textContent = (r?.mode ?? match.mode) === 'rgb' ? 'Download PNG' : 'Download PDF';
   $('btnMatchRipSheet').classList.toggle('hidden', r?.mode !== 'spot');
+  $('mPerPageWrap').classList.add('hidden'); // shown below for a PDF sheet of more than one page
   $('btnMatchRestart').textContent = chart ? 'Close chart' : 'Start over';
   $('btnMatchRestart').title = chart ? 'Back to your colors – the patches scanned so far stay in the color space' : "Discard this color's sheets and measurements (its reference is kept)";
   if (!chart && !c.target) { $('mSheetInfo').textContent = `Set the reference of ${colorLabel(c)} first.`; return; }
@@ -686,6 +687,7 @@ function renderSheet(c) {
     layout = sheetLayout({ mode: r.mode, groups: [sheetGroup(c, r)], round: r.round, media: mediaMm(), patchMm: match.patchMm, title: sheetTitle(c) });
     const n = layout.pages.length;
     pages = ` · ${n} page${n > 1 ? 's' : ''} of ${mediaName()} with ${match.patchMm} mm patches`;
+    $('mPerPageWrap').classList.toggle('hidden', n < 2 || r.mode === 'rgb'); // PNG sheets are one file per page anyway
   } catch (e) { pages = ` · <span class="text-rose-600">${escapeHtml(e.message)}</span>`; }
   const names = r.mode === 'spot'
     ? `<p class="text-xs mt-1">Spot names <span class="font-mono">${escapeHtml(r.patches[0].name ?? '')}</span> … <span class="font-mono">${escapeHtml(r.patches[r.patches.length - 1].name ?? '')}</span>.</p>`
@@ -1232,8 +1234,21 @@ async function downloadSheet() {
       const pages = await buildSheetPng(opts);
       pages.forEach(({ png }, i) => downloadFile(png, 'image/png', `${base}${pages.length > 1 ? ` - page ${i + 1}` : ''}.png`));
       if (pages[0].dpi < 300) toast(`Large media: the PNG is ${pages[0].dpi} dpi (still printed at actual size).`);
-    } else downloadFile(buildSheetPdf(opts), 'application/pdf', `${base}.pdf`);
+    } else downloadPdf(opts, base);
   } catch (e) { toast(e.message, 'error'); }
+}
+
+/** "Each page as its own PDF" (remembered in this browser). */
+const PER_PAGE_KEY = 'sd10.pdfPerPage';
+
+/** Save a sheet as `${base}.pdf` – or, with "Each page as its own PDF" on and more than one page, `${base} - page N.pdf` per page. */
+function downloadPdf(opts, base) {
+  const files = readFlag(PER_PAGE_KEY) ? buildSheetPdfPages(opts) : [];
+  if (files.length > 1) {
+    files.forEach((pdf, i) => downloadFile(pdf, 'application/pdf', `${base} - page ${i + 1}.pdf`));
+    toast(`Saved ${files.length} PDFs, one per page. If only one arrived, allow this site to download multiple files.`);
+  } else downloadFile(buildSheetPdf(opts), 'application/pdf', `${base}.pdf`);
+  debugLog('match', 'sheet PDF downloaded', { base, files: Math.max(files.length, 1) });
 }
 
 /** "Sheet library": the current sheet's named patches as a spot color library, to import into the RIP before printing. */
@@ -1278,8 +1293,8 @@ function downloadProofSheet() {
   const patches = colors.map((c, i) => ({ n: i + 1, x: c.lab ?? [50, 0, 0], cmyk: c.ink ? inkAsCmyk(c.ink) : undefined, name: c.name }));
   const title = `Spot color proof - ${libraryName()}`;
   try {
-    downloadFile(buildSheetPdf({ mode: match.mode, groups: [{ label: `${colors.length} colors`, target: null, patches, kFixed: 0 }], round: 1, media: mediaMm(), patchMm: match.patchMm, title }),
-      'application/pdf', `${safeFileName(libraryName())} - proof.pdf`);
+    downloadPdf({ mode: match.mode, groups: [{ label: `${colors.length} colors`, target: null, patches, kFixed: 0 }], round: 1, media: mediaMm(), patchMm: match.patchMm, title },
+      `${safeFileName(libraryName())} - proof`);
     debugLog('match', 'proof sheet downloaded', { colors: colors.length, byHand: colors.filter((c) => c.fixed).length });
   } catch (e) { toast(e.message, 'error'); }
 }
@@ -1805,6 +1820,8 @@ function wireSheetCards() {
   $('btnMatchSheet').onclick = startFirstSheet;
   $('btnMatchPdf').onclick = downloadSheet;
   $('btnMatchRipSheet').onclick = downloadSheetLibrary;
+  $('mPerPage').checked = readFlag(PER_PAGE_KEY);
+  $('mPerPage').onchange = () => writeFlag(PER_PAGE_KEY, $('mPerPage').checked);
   $('btnMatchRestart').onclick = restartSheet;
   $('btnMatchMeasure').onclick = measurePatch;
   $('btnMatchAnalyse').onclick = analyseMatch;

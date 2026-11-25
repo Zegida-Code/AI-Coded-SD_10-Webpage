@@ -476,10 +476,14 @@ const LAB_CS = '[/Lab << /WhitePoint [0.9642 1 0.8249] /Range [-128 127 -128 127
  * spot color – per patch with that Lab color as its alternate (mode 'spot', patch.name = spot name). A patch with
  * `cmyk` (percent – a color whose output is set by hand) is DeviceCMYK, or in mode 'spot' a Separation with a CMYK
  * alternate. Pure PDF 1.4, standard Helvetica fonts.
+ * With `opts.page` (0-based) only that layout page is written – with only its own spot colors; the layout (patch
+ * numbers, spot names, "page X of Y") is still that of the whole sheet.
  */
 export function buildSheetPdf(opts) {
   const { mode } = opts;
-  const { W, H, pages } = sheetLayout(opts);
+  const { W, H, pages: all } = sheetLayout(opts);
+  if (opts.page != null && !all[opts.page]) throw new Error(`The sheet has no page ${opts.page + 1}.`);
+  const pages = opts.page == null ? all : [all[opts.page]];
   const f = (v) => v.toFixed(2);
   const spaces = [`/CS0 ${LAB_CS}`];
   const streams = pages.map(({ texts, boxes }) => {
@@ -523,6 +527,9 @@ export function buildSheetPdf(opts) {
   pdf += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
   return Uint8Array.from(pdf, (c) => c.charCodeAt(0) & 0xff);
 }
+
+/** The sheet as one single-page PDF per layout page (see buildSheetPdf). */
+export const buildSheetPdfPages = (opts) => sheetLayout(opts).pages.map((_, i) => buildSheetPdf({ ...opts, page: i }));
 
 // ---------------------------------------------------------------- PNG sheet (raster-only workflows)
 const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {

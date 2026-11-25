@@ -108,6 +108,12 @@ Pick the sheet type that matches how color reaches your printer, then **Create s
 Each sheet has **16 patches** around the current estimate, or **8** (*Patches* in Settings) to save media and
 scanning. A to-scale preview shows how the sheet sits on your media before you download it.
 
+When a PDF sheet runs over more than one page, **Each page as its own PDF** (beside the download button, remembered
+in this browser) saves `… - page 1.pdf`, `… - page 2.pdf` and so on instead of one file. Each page holds only its own
+patches and spot colors; patch numbers and spot names are the same as in the single file, so one sheet library still
+covers every page. Chrome asks once to allow this site to download multiple files. The proof sheet follows the same
+setting.
+
 #### Media and patch size
 
 | Setting | How it works |
@@ -433,7 +439,7 @@ Open these pages in Chrome – on the live site (e.g. [sd-10.com/test/](https://
 
 | Page | Checks | What it covers |
 |---|---|---|
-| [`test/index.html`](https://sd-10.com/test/index.html) | 127 | The core code (see below) |
+| [`test/index.html`](https://sd-10.com/test/index.html) | 128 | The core code (see below) |
 | [`test/ui-smoke.html`](https://sd-10.com/test/ui-smoke.html) | 34 | The Console against the simulated SD-10: calibrate, measure, compare, line scan, history sync, palettes, settings, custom ICC profiles |
 | [`test/mobile-check.html`](https://sd-10.com/test/mobile-check.html) | – | The layout at phone width (no sideways scrolling) and the compare / reference flows |
 | [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 64 | Print match against the simulated device and printer: matching to within tolerance, several colors at once, media sizes and limits, readings per patch, textile ΔE, metamerism and gamut checks, spot color sheets and libraries, colors imported from a swatch file, RGB sheets, backups (download, restore, automatic folder backup) |
@@ -445,7 +451,7 @@ Open these pages in Chrome – on the live site (e.g. [sd-10.com/test/](https://
 - L\*a\*b\* and CMYK against its native libraries
 - ΔE2000, CMC and ΔE00 2:1:1 against reference data
 - the ICC engine against LittleCMS
-- Print match convergence, layouts and PDF / PNG sheets
+- Print match convergence, layouts and PDF / PNG sheets (also split into one PDF per page)
 - color space charts, predictions, learning, drift checks and files against simulated printers
 - the library formats against real VersaWorks and Edge Print exports, the CxF3 standard, the Adobe Swatch Exchange layout and a reference Adobe Color
   Book encoder

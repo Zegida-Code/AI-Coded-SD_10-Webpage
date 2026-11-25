@@ -121,7 +121,7 @@ async function iccV4Check() {
 
 // ---- 3d. Print match: model fitting, convergence with a simulated printer, PDF sheet
 async function matchCheck() {
-  const { designPatches, fitModel, analyseRound, nextStep, trustRadius, buildSheetPdf, buildSheetPng, sheetLayout, minSheetHeight, averageReadings, patchSpotName, MODES, DE_FORMULAS, metamerism } = await import('../js/match.js');
+  const { designPatches, fitModel, analyseRound, nextStep, trustRadius, buildSheetPdf, buildSheetPdfPages, buildSheetPng, sheetLayout, minSheetHeight, averageReadings, patchSpotName, MODES, DE_FORMULAS, metamerism } = await import('../js/match.js');
   const { deltaECMC } = await import('../js/color.js');
   const { RIP_EXPORTS, readLibrary } = await import('../js/rip-export.js');
   const { printSpectrum } = await import('../js/printer-sim.js');
@@ -345,6 +345,19 @@ async function matchCheck() {
     const multi = new TextDecoder('latin1').decode(buildSheetPdf({ mode: 'lab', groups, round: 2, media: [150, 120], patchMm: 15 }));
     check('multi-page PDF: one page object per layout page, all patches drawn', multi.includes(`/Count ${lay.pages.length} >>`) &&
       (multi.match(/\/Type \/Page /g) || []).length === lay.pages.length && (multi.match(/ sc\n/g) || []).length === 48);
+    // one PDF per page: each a valid single-page PDF holding only its own patches and spot colors
+    const spotGroups = groups.map((g) => ({ ...g, patches: g.patches.map((p) => ({ ...p, name: patchSpotName('PG01', 2, p.n) })) }));
+    const split = buildSheetPdfPages({ mode: 'spot', groups: spotGroups, round: 2, media: [150, 120], patchMm: 15 }).map((b) => new TextDecoder('latin1').decode(b));
+    const sepNames = (t) => [...t.matchAll(/\[\/Separation \/(\S+) /g)].map((m) => m[1]);
+    const perPageOk = split.length === lay.pages.length && split.every((t, i) => {
+      const xref = +t.match(/startxref\n(\d+)/)[1];
+      const want = lay.pages[i].boxes.map((b) => patchSpotName('PG01', 2, b.patch.n)).sort().join();
+      return t.startsWith('%PDF-1.4') && t.slice(xref, xref + 4) === 'xref' && t.includes('/Count 1 >>') &&
+        (t.match(/ scn\n/g) || []).length === lay.pages[i].boxes.length && sepNames(t).sort().join() === want && t.includes(`page ${i + 1} of ${lay.pages.length}`);
+    });
+    const allNames = split.flatMap(sepNames).sort().join();
+    check(`one PDF per page: ${split.length} single-page PDFs, each with only its own patches and spot colors, together all 48 once`,
+      perPageOk && allNames === spotGroups.flatMap((g) => g.patches.map((p) => p.name)).sort().join());
     let small = '';
     try { sheetLayout({ mode: 'lab', groups, media: [40, 40], patchMm: 30 }); } catch (e) { small = e.message; }
     check('layout: media too small for the patch size is reported', /too small for 30 mm patches/.test(small), small);
