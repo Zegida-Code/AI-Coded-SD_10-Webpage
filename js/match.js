@@ -313,14 +313,16 @@ const SIDE_MM = 80;
 /**
  * Sheet layout in PDF points (origin bottom-left), shared by the PDF and the PNG.
  * opts: { mode, groups: [{ label, target, patches, kFixed }], round (sheet number), media: [w, h] mm | paper: key,
- *         patchMm, created, title }  – or a single color as { patches, target, kFixed }.
+ *         patchMm, created, title, plain, fileName }  – or a single color as { patches, target, kFixed }.
  * Colors follow each other; each starts on a new row under a heading with its target, and the patches flow onto
  * further pages when the media is full. On wide, short media (wider than 1.5 × its height) the title, notes and footer
  * go into a column at the left and the patches use the full height beside it.
+ * plain: no title, notes or headings – only the text under the patches and one small footer line,
+ * "<fileName> - page X of Y", so the patches get (almost) the whole media.
  * Returns { W, H, side (true when the text is in the side column), pages: [{ texts, boxes }] }.
  */
 export function sheetLayout(opts) {
-  const { mode, round = 1, created = new Date(), title = 'SD-10 print match', patchMm = 25 } = opts;
+  const { mode, round = 1, created = new Date(), title = 'SD-10 print match', patchMm = 25, plain = false } = opts;
   const groups = opts.groups ?? [{ label: '', target: opts.target, patches: opts.patches, kFixed: opts.kFixed ?? 0 }];
   const [wMm, hMm] = opts.media ?? MEDIA[opts.paper] ?? MEDIA.a4;
   const W = wMm * PT, H = hMm * PT;
@@ -333,7 +335,7 @@ export function sheetLayout(opts) {
   const labelH = detailed ? (mode === 'spot' ? 30 : 23) : 12;
   const rowH = size + labelH;
   const headH = 14;
-  const footerPt = 6.5, footerH = 12;
+  const footerPt = 6.5, footerH = plain ? 9 : 12;
   const colsIn = (width) => Math.floor((width + gap) / (size + gap) + 1e-9); // tolerance: a row sized to fit exactly must fit
 
   const chars = (pt, width) => Math.max(10, Math.floor(width / (pt * 0.5))); // Helvetica averages ~0.5 em per character
@@ -387,15 +389,23 @@ export function sheetLayout(opts) {
   const sideGap = 6 * PT;
   const longest = Math.max(...groups.map((g) => g.patches.length));
   const sideW = Math.max(SIDE_MM * PT, usableW - sideGap - (longest * (size + gap) - gap));
-  const side = W > 1.5 * H && colsIn(usableW - sideW - sideGap) >= 4 && blockHeight(sideLines(1, sideW)) <= H - 2 * margin;
+  const side = !plain && W > 1.5 * H && colsIn(usableW - sideW - sideGap) >= 4 && blockHeight(sideLines(1, sideW)) <= H - 2 * margin;
   const textW = side ? sideW : usableW;
   const areaX = side ? margin + sideW + sideGap : margin;
   const areaW = side ? usableW - sideW - sideGap : usableW;
   const cols = colsIn(areaW);
-  const bottom = side ? margin : margin + footerH; // the side column carries the page number, else a footer line
-  const headInArea = !(side && single); // a single color's heading is in the side column
+  // plain sheet: its footer goes into the bottom margin when that keeps it at least 3 mm from the edge of the media
+  // (printers often cannot print closer), else beside the first row of patches when the rows leave that much room
+  // (wide, short media), else on a line of its own at the bottom
+  const plainName = opts.fileName || title;
+  const usedW = Math.min(cols, longest) * (size + gap);
+  const footerInMargin = plain && margin - footerPt - 1 >= 3 * PT;
+  const footerBeside = plain && !footerInMargin && areaW - usedW >= (plainName.length + ' - page 999 of 999'.length) * footerPt * 0.5;
+  // the side column carries the page number, else a footer line
+  const bottom = side || footerInMargin || footerBeside ? margin : margin + footerH;
+  const headInArea = !plain && !(side && single); // a single color's heading is in the side column
   const groupHeadH = headInArea ? headH : 0;
-  if (cols < 1 || H - margin - bottom - (side ? 0 : 60) < groupHeadH + rowH) throw new Error(`The media is too small for ${patchMm} mm patches – choose smaller patches or larger media.`);
+  if (cols < 1 || H - margin - bottom - (side || plain ? 0 : 60) < groupHeadH + rowH) throw new Error(`The media is too small for ${patchMm} mm patches – choose smaller patches or larger media.`);
 
   const pages = [];
   let page, y;
@@ -404,11 +414,11 @@ export function sheetLayout(opts) {
     page = { texts: [], boxes: [] };
     pages.push(page);
     let ty = H - margin;
-    (side ? sideLines(pages.length, textW) : headerLines(pages.length === 1, textW)).forEach((l, i) => {
+    (plain ? [] : side ? sideLines(pages.length, textW) : headerLines(pages.length === 1, textW)).forEach((l, i) => {
       t(margin, i === 0 ? ty - l.pt : ty, l.pt, l.str, l.bold); // the first line hangs from the top edge
       ty -= l.lead;
     });
-    y = side ? H - margin : ty - 6;
+    y = side || plain ? H - margin : ty - 6;
   };
   const heading = (g, cont) => {
     if (!headInArea) return;
@@ -440,6 +450,14 @@ export function sheetLayout(opts) {
   }
   for (const [i, pg] of pages.entries()) {
     if (side) { for (const tx of pg.texts) tx.str = tx.str.replace(PAGES, String(pages.length)); continue; }
+    if (plain) {
+      const where = ` - page ${i + 1} of ${pages.length}`, name = plainName;
+      if (footerBeside) { pg.texts.push({ x: areaX + usedW, y: H - margin - footerPt, size: footerPt, bold: false, str: name + where }); continue; }
+      const room = chars(footerPt, textW) - where.length; // a long name is shortened, the page number always stays
+      // in the margin: the text's top just under the patch area (baseline one text size + 1 pt below it)
+      pg.texts.push({ x: margin, y: footerInMargin ? margin - footerPt - 1 : margin + 1, size: footerPt, bold: false, str: (name.length > room ? name.slice(0, Math.max(room - 3, 1)) + '...' : name) + where });
+      continue;
+    }
     const long = `Generated by SD-10 Web Console (sd-10.com) - Print match - page ${i + 1} of ${pages.length}`;
     const short = `SD-10 Web Console (sd-10.com) - page ${i + 1} of ${pages.length}`; // keeps the page count on narrow media
     pg.texts.push({ x: margin, y: margin + 1, size: footerPt, bold: false, str: fit(long.length <= chars(footerPt, textW) ? long : short, footerPt, textW) });
@@ -464,7 +482,7 @@ export function minSheetHeight(opts, { onePage = true } = {}) {
 }
 
 function pdfText(s) {
-  return '(' + String(s).replace(/[^\x20-\x7e]/g, '?').replace(/([()\\])/g, '\\$1') + ')';
+  return '(' + String(s).replace(/[–—]/g, '-').replace(/[^\x20-\x7e]/g, '?').replace(/([()\\])/g, '\\$1') + ')';
 }
 /** PDF name object: regular characters as-is, everything else #xx-escaped. */
 const pdfName = (s) => '/' + String(s).replace(/[^!-~]|[#()<>[\]{}/%]/g, (c) => '#' + c.charCodeAt(0).toString(16).padStart(2, '0'));

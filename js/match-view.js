@@ -62,6 +62,7 @@ function loadSpaces() {
 //   space (id of the color space in use, '' = none), learn (add scanned test-sheet patches to it),
 //   fillIn (fill-in patches added to each test sheet where the color space has measured least – 0, 4, 8 or 'auto':
 //          as many as fit in the free space of the pages the sheet needs anyway),
+//   plainSheets (sheets carry only the text under the patches and a footer with the file name and page – see sheetText)
 //   chartActive (the sheet and scan cards show the color space's chart instead of the selected color)
 //   colors: [{ id, code, name, target, targetSpectrum, refReads, refSpectra, accepted, next,
 //               fixed? ({ space: 'lab' | 'cmyk' | 'cmykog', v } – the output for the RIP set by hand, used instead of the
@@ -96,7 +97,7 @@ const match = (() => {
   }
   for (const k of ['sheet', 'next', 'jobId']) delete m[k];
   const out = { mode: 'spot', media: 'custom', mediaW: 210, mediaH: 297, patchMm: 20, design: 'full', mf: 1, tol: 1, reads: 1,
-    formula: 'de00', printerProfile: '', ripFormat: 'cxf', space: '', learn: true, fillIn: 0, chartActive: false, colors: [], active: 0, scanLog: [], ...m };
+    formula: 'de00', printerProfile: '', ripFormat: 'cxf', space: '', learn: true, fillIn: 0, plainSheets: false, chartActive: false, colors: [], active: 0, scanLog: [], ...m };
   if (!out.colors.length) out.colors = [newColor()];
   return out;
 })();
@@ -176,6 +177,8 @@ const nextPatchIndex = (c, r) => (r.patches[c.next] ? c.next : Math.max(0, r.pat
 const sheetGroup = (c, r) => ({ label: colorLabel(c), target: c.target, patches: r.patches, kFixed: r.kFixed });
 /** Title printed on a sheet (the default for a color's test sheet). */
 const sheetTitle = (c) => (isChart(c) ? 'SD-10 color space chart' : undefined);
+/** Layout options for the text on a sheet: with "Plain sheets" only the patch labels and a footer naming the file and page. */
+const sheetText = (fileName) => ({ plain: !!match.plainSheets, fileName });
 /** The color difference formula chosen for judging matches: { label, name, fn(ref, sample), lWeight }. */
 const DE = () => DE_FORMULAS[match.formula] ?? DE_FORMULAS.de00;
 /** Sheet types whose values are L*a*b* – the ones a spot color library can hold. */
@@ -306,7 +309,7 @@ function heightLimits() {
   const group = cur ? sheetGroup(cur.c, cur.r) : { label: 'Color 1', target: [50, 0, 0], kFixed: 0,
     // 'auto' fill-ins only use free slots, so they never need more height
     patches: Array.from({ length: (DESIGNS[match.design] ?? 16) + (+fillInSetting() || 0) }, (_, i) => ({ n: i + 1, offset: [0, 0, 0], x: [0, 0, 0], name: 'SD10-XXXX-R1-01' })) };
-  const opts = { mode: match.mode, groups: [group], round: cur?.r.round ?? 1, media: [match.mediaW, 0], patchMm: match.patchMm };
+  const opts = { mode: match.mode, groups: [group], round: cur?.r.round ?? 1, media: [match.mediaW, 0], patchMm: match.patchMm, ...sheetText() };
   return { min: minSheetHeight(opts, { onePage: false }), onePage: minSheetHeight(opts) };
 }
 
@@ -639,6 +642,7 @@ function renderSettings() {
   $('btnPrinterIccRemove').classList.toggle('hidden', !match.printerProfile);
   $('mMode').value = match.mode; $('matchMf').value = match.mf; $('mTol').value = match.tol;
   $('mReads').value = match.reads; $('mPatchMm').value = match.patchMm; $('mDesign').value = match.design;
+  $('mPlainSheets').checked = !!match.plainSheets;
   // the height always holds at least one row of patches plus the sheet's text: raise it (and say so) when the width,
   // patch size, patches per color or sheet type ask for more
   const limits = heightLimits();
@@ -684,7 +688,7 @@ function renderSheet(c) {
   }
   let pages, layout = null;
   try {
-    layout = sheetLayout({ mode: r.mode, groups: [sheetGroup(c, r)], round: r.round, media: mediaMm(), patchMm: match.patchMm, title: sheetTitle(c) });
+    layout = sheetLayout({ mode: r.mode, groups: [sheetGroup(c, r)], round: r.round, media: mediaMm(), patchMm: match.patchMm, title: sheetTitle(c), ...sheetText(sheetFileName(c, r)) });
     const n = layout.pages.length;
     pages = ` · ${n} page${n > 1 ? 's' : ''} of ${mediaName()} with ${match.patchMm} mm patches`;
     $('mPerPageWrap').classList.toggle('hidden', n < 2 || r.mode === 'rgb'); // PNG sheets are one file per page anyway
@@ -1143,7 +1147,7 @@ const MAX_AUTO_FILL = 100;
  */
 function emptySlots(c, n, max = MAX_AUTO_FILL) {
   const chart = isChart(c);
-  const opts = (count) => ({ mode: match.mode, round: 1, media: mediaMm(), patchMm: match.patchMm, title: sheetTitle(c), groups: [{ label: colorLabel(c), target: c.target, kFixed: 0,
+  const opts = (count) => ({ mode: match.mode, round: 1, media: mediaMm(), patchMm: match.patchMm, title: sheetTitle(c), ...sheetText(), groups: [{ label: colorLabel(c), target: c.target, kFixed: 0,
     patches: Array.from({ length: count }, (_, i) => ({ n: i + 1, offset: chart ? undefined : [1, 0, 0], x: [0, 0, 0], name: chart ? 'SD10-XXXX-C1-001' : 'SD10-XXXX-R1-01' })) }] });
   const pagesFor = (count) => { try { return sheetLayout(opts(count)).pages.length; } catch { return Infinity; } };
   const pages = pagesFor(n);
@@ -1227,13 +1231,16 @@ function resetMatching() {
   for (const c of match.colors) { c.rounds = []; c.accepted = false; c.next = 0; }
 }
 
+/** File name (without extension) of a color's sheet or a chart – also its footer on a plain sheet. */
+const sheetFileName = (c, r) => safeFileName(isChart(c) ? colorLabel(c) : `${colorLabel(c)} - sheet ${r.round}`);
+
 /** The current sheet as a PDF (or PNG pages for raster workflows), named after the color and sheet (or the chart). */
 async function downloadSheet() {
   const cur = currentSheet();
   if (!cur) return;
   const { c, r } = cur;
-  const opts = { mode: r.mode, groups: [sheetGroup(c, r)], round: r.round, media: mediaMm(), patchMm: match.patchMm, title: sheetTitle(c) };
-  const base = safeFileName(isChart(c) ? colorLabel(c) : `${colorLabel(c)} - sheet ${r.round}`);
+  const base = sheetFileName(c, r);
+  const opts = { mode: r.mode, groups: [sheetGroup(c, r)], round: r.round, media: mediaMm(), patchMm: match.patchMm, title: sheetTitle(c), ...sheetText(base) };
   try {
     if (r.mode === 'rgb') {
       const pages = await buildSheetPng(opts);
@@ -1298,7 +1305,7 @@ function downloadProofSheet() {
   const patches = colors.map((c, i) => ({ n: i + 1, x: c.lab ?? [50, 0, 0], cmyk: c.ink ? inkAsCmyk(c.ink) : undefined, name: c.name }));
   const title = `Spot color proof - ${libraryName()}`;
   try {
-    downloadPdf({ mode: match.mode, groups: [{ label: `${colors.length} colors`, target: null, patches, kFixed: 0 }], round: 1, media: mediaMm(), patchMm: match.patchMm, title },
+    downloadPdf({ mode: match.mode, groups: [{ label: `${colors.length} colors`, target: null, patches, kFixed: 0 }], round: 1, media: mediaMm(), patchMm: match.patchMm, title, ...sheetText(`${safeFileName(libraryName())} - proof`) },
       `${safeFileName(libraryName())} - proof`);
     debugLog('match', 'proof sheet downloaded', { colors: colors.length, byHand: colors.filter((c) => c.fixed).length });
   } catch (e) { toast(e.message, 'error'); }
@@ -1803,6 +1810,7 @@ function wireSettings() {
     };
   }
   $('mPatchMm').onchange = () => { match.patchMm = +$('mPatchMm').value; commit(); };
+  $('mPlainSheets').onchange = () => { match.plainSheets = $('mPlainSheets').checked; commit(); };
   $('mDesign').onchange = () => { match.design = $('mDesign').value; commit(); };
   $('mReads').onchange = () => { match.reads = Math.min(Math.max(+$('mReads').value || 1, 1), 9); for (const c of match.colors) c.refReads = []; commit(); };
   $('matchMf').onchange = () => { match.mf = +$('matchMf').value; commit(); };

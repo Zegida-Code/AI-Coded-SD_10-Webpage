@@ -207,6 +207,21 @@
       const libText = lib ? await readFile(lib) : '';
       const libNames = [...libText.matchAll(/<Lab16SpotColor name="(SD10-[^"]+)"/g)].map((m) => m[1]);
       log(files.filter((f) => f.name.endsWith('.pdf')).pop()?.name === 'Brand Red - sheet 1.pdf' && libNames.length === 16 && libText.startsWith('<?xml version="1.0" encoding="UTF-8"?>\n<SpotColorLibraryList strVersion="4.3.0.0">'), `sheet .spot library has the 16 patch colors (${lib?.name})`);
+      // "Plain sheets": the PDF keeps only the patch labels and a footer with the file name and page number
+      {
+        const pdfStrings = async (file) => [...new TextDecoder('latin1').decode(new Uint8Array(await (await fetch(file.href)).arrayBuffer())).matchAll(/Td \(([^)]*)\) Tj/g)].map((m) => m[1]);
+        const before = await pdfStrings(files.filter((f) => f.name.endsWith('.pdf')).pop());
+        $('mPlainSheets').checked = true; $('mPlainSheets').dispatchEvent(new Event('change'));
+        await until(() => store.loadJson('sd10.match').plainSheets === true);
+        $('btnMatchPdf').click();
+        const after = await pdfStrings(files.filter((f) => f.name.endsWith('.pdf')).pop());
+        const isPatchText = (s) => /^#\d+|^L-?[\d.]+ a|^SD10-/.test(s);
+        const other = after.filter((s) => !isPatchText(s));
+        log(before.some((s) => s === 'SD-10 print match') && other.length === 1 && other[0] === 'Brand Red - sheet 1 - page 1 of 1' &&
+          after.filter(isPatchText).length === before.filter(isPatchText).length,
+          `plain sheet PDF: title and notes gone, patch labels kept, footer "${other.join(' | ')}"`);
+        $('mPlainSheets').checked = false; $('mPlainSheets').dispatchEvent(new Event('change'));
+      }
       for (let i = 0; i < 2; i++) { await until(() => !$('btnMatchMeasure').disabled); $('btnMatchMeasure').click(); await until(() => d.querySelector('[data-patch="0"]').textContent.includes(`${i + 1}/3`)); }
       log($('mProgress').textContent.startsWith('0 /') && /reading 3\/3/.test($('btnMatchMeasure').textContent), 'patch stays open until its 3rd reading');
       for (let n = 0; n < 5 * 3 - 2; n++) { await until(() => !$('btnMatchMeasure').disabled); $('btnMatchMeasure').click(); await until(() => $('btnMatchMeasure').disabled === false && !w.document.querySelector('#btnMatchMeasure').textContent.endsWith('…'), 5000); await sleep(30); }

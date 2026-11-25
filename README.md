@@ -121,6 +121,7 @@ setting.
 | **Media** | A custom width × height in mm by default, or A4, Letter, A3 or Tabloid – a preset simply fills in its size, and editing the size makes it custom again. **Save** keeps the current size under a name (listed under *Your sizes*; **✕** removes it). The size you used last is remembered. |
 | **Height** | Can't go below one row of patches plus the sheet's text. The app shows that minimum and the height that fits a whole sheet on one page, and raises the height for you (and says so) when a change needs more room. |
 | **Patch size** | 10–30 mm. From 20 mm, each patch also carries its values (and spot name); smaller patches only carry their number. |
+| **Plain sheets** | Leaves out the title, date, printing notes and color headings on test sheets, charts and the proof sheet, so more patches fit (on A4, 72 instead of 56 per page with 20 mm patches, 140 instead of 120 with 15 mm) and short sheets need less height. The text under each patch stays, and one small line gives the file name and page number. It sits in the bottom margin when that keeps it at least 3 mm from the edge (most printers can't print closer), else beside the patches on wide media or on a line of its own – a plain sheet never needs more media than a normal one. |
 
 - On wide, short media – such as a 700 mm roll – the sheet's text moves beside the patches, so a sheet with 20 mm
   patches can be as thin as about 40 mm.
@@ -439,10 +440,10 @@ Open these pages in Chrome – on the live site (e.g. [sd-10.com/test/](https://
 
 | Page | Checks | What it covers |
 |---|---|---|
-| [`test/index.html`](https://sd-10.com/test/index.html) | 128 | The core code (see below) |
+| [`test/index.html`](https://sd-10.com/test/index.html) | 130 | The core code (see below) |
 | [`test/ui-smoke.html`](https://sd-10.com/test/ui-smoke.html) | 34 | The Console against the simulated SD-10: calibrate, measure, compare, line scan, history sync, palettes, settings, custom ICC profiles |
 | [`test/mobile-check.html`](https://sd-10.com/test/mobile-check.html) | – | The layout at phone width (no sideways scrolling) and the compare / reference flows |
-| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 64 | Print match against the simulated device and printer: matching to within tolerance, several colors at once, media sizes and limits, readings per patch, textile ΔE, metamerism and gamut checks, spot color sheets and libraries, colors imported from a swatch file, RGB sheets, backups (download, restore, automatic folder backup) |
+| [`test/match-smoke.html`](https://sd-10.com/test/match-smoke.html) | 65 | Print match against the simulated device and printer: matching to within tolerance, several colors at once, media sizes and limits, readings per patch, textile ΔE, metamerism and gamut checks, spot color sheets and libraries, colors imported from a swatch file, RGB sheets, backups (download, restore, automatic folder backup) |
 | [`test/space-smoke.html`](https://sd-10.com/test/space-smoke.html) | 41 | The color space workflow against the simulated device and printer (see below) |
 
 **`test/index.html` checks**

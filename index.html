@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SD-10 Web Console</title>
-  <link rel="stylesheet" href="css/app.css?v=2026-11-24.f21c586-222834">
+  <link rel="stylesheet" href="css/app.css?v=2026-11-24.cdfedac-225337">
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased">
   <header class="sticky top-0 z-10 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800">
@@ -331,6 +331,7 @@
             <select id="mPatchMm" class="input"><option value="10">10 mm</option><option value="12">12 mm</option><option value="15">15 mm</option><option value="20">20 mm</option><option value="25">25 mm</option><option value="30">30 mm</option></select></div>
           <div><label class="label" for="mDesign">Patches</label>
             <select id="mDesign" class="input"><option value="full">16 (most robust)</option><option value="compact">8 (saves media)</option></select></div>
+          <label class="col-span-2 flex items-center gap-2 text-sm" title="Leaves out the title, date, printing notes and color headings on test sheets, charts and the proof sheet – only the values under each patch and a small footer with the file name and page number stay, so more patches fit on the media"><input id="mPlainSheets" type="checkbox" class="h-4 w-4"> Plain sheets – only file name and page number</label>
         </div>
         <!-- the settings changed less often: a summary line with their current values; they open in a dialog, so the
              column keeps its height -->
@@ -653,27 +654,27 @@
   <script type="importmap">
   {
     "imports": {
-      "./js/app.js": "./js/app.js?v=2026-11-24.f21c586-222834",
-      "./js/transport.js": "./js/transport.js?v=2026-11-24.f21c586-222834",
-      "./js/mock.js": "./js/mock.js?v=2026-11-24.f21c586-222834",
-      "./js/session.js": "./js/session.js?v=2026-11-24.f21c586-222834",
-      "./js/protocol.js": "./js/protocol.js?v=2026-11-24.f21c586-222834",
-      "./js/color.js": "./js/color.js?v=2026-11-24.f21c586-222834",
-      "./js/weights.js": "./js/weights.js?v=2026-11-24.f21c586-222834",
-      "./js/storage.js": "./js/storage.js?v=2026-11-24.f21c586-222834",
-      "./js/icc.js": "./js/icc.js?v=2026-11-24.f21c586-222834",
-      "./js/match.js": "./js/match.js?v=2026-11-24.f21c586-222834",
-      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-11-24.f21c586-222834",
-      "./js/ui.js": "./js/ui.js?v=2026-11-24.f21c586-222834",
-      "./js/match-view.js": "./js/match-view.js?v=2026-11-24.f21c586-222834",
-      "./js/rip-export.js": "./js/rip-export.js?v=2026-11-24.f21c586-222834",
-      "./js/colorspace.js": "./js/colorspace.js?v=2026-11-24.f21c586-222834",
-      "./js/backup.js": "./js/backup.js?v=2026-11-24.f21c586-222834",
-      "./js/debug.js": "./js/debug.js?v=2026-11-24.f21c586-222834",
-      "./js/space-view.js": "./js/space-view.js?v=2026-11-24.f21c586-222834"
+      "./js/app.js": "./js/app.js?v=2026-11-24.cdfedac-225337",
+      "./js/transport.js": "./js/transport.js?v=2026-11-24.cdfedac-225337",
+      "./js/mock.js": "./js/mock.js?v=2026-11-24.cdfedac-225337",
+      "./js/session.js": "./js/session.js?v=2026-11-24.cdfedac-225337",
+      "./js/protocol.js": "./js/protocol.js?v=2026-11-24.cdfedac-225337",
+      "./js/color.js": "./js/color.js?v=2026-11-24.cdfedac-225337",
+      "./js/weights.js": "./js/weights.js?v=2026-11-24.cdfedac-225337",
+      "./js/storage.js": "./js/storage.js?v=2026-11-24.cdfedac-225337",
+      "./js/icc.js": "./js/icc.js?v=2026-11-24.cdfedac-225337",
+      "./js/match.js": "./js/match.js?v=2026-11-24.cdfedac-225337",
+      "./js/printer-sim.js": "./js/printer-sim.js?v=2026-11-24.cdfedac-225337",
+      "./js/ui.js": "./js/ui.js?v=2026-11-24.cdfedac-225337",
+      "./js/match-view.js": "./js/match-view.js?v=2026-11-24.cdfedac-225337",
+      "./js/rip-export.js": "./js/rip-export.js?v=2026-11-24.cdfedac-225337",
+      "./js/colorspace.js": "./js/colorspace.js?v=2026-11-24.cdfedac-225337",
+      "./js/backup.js": "./js/backup.js?v=2026-11-24.cdfedac-225337",
+      "./js/debug.js": "./js/debug.js?v=2026-11-24.cdfedac-225337",
+      "./js/space-view.js": "./js/space-view.js?v=2026-11-24.cdfedac-225337"
     }
   }
   </script>
-  <script type="module" src="js/app.js?v=2026-11-24.f21c586-222834"></script>
+  <script type="module" src="js/app.js?v=2026-11-24.cdfedac-225337"></script>
 </body>
 </html>

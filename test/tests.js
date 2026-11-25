@@ -358,6 +358,22 @@ async function matchCheck() {
     const allNames = split.flatMap(sepNames).sort().join();
     check(`one PDF per page: ${split.length} single-page PDFs, each with only its own patches and spot colors, together all 48 once`,
       perPageOk && allNames === spotGroups.flatMap((g) => g.patches.map((p) => p.name)).sort().join());
+    // plain sheets: only the patch labels and one footer line "<file name> - page X of Y"; never more media than normal
+    {
+      const chartG = [{ label: 'Demo - chart 1', target: [50, 0, 0], kFixed: 0, patches: Array.from({ length: 200 }, (_, i) => ({ n: i + 1, x: [50, 10, 20], name: patchSpotName('PL01', 1, i + 1) })) }];
+      const base = { mode: 'spot', groups: chartG, media: [210, 297], patchMm: 15, title: 'SD-10 color space chart' };
+      const normal = sheetLayout(base), plain = sheetLayout({ ...base, plain: true, fileName: 'Demo printer - chart 1' });
+      const extras = plain.pages.map((pg) => pg.texts.filter((tx) => !/^\d+$/.test(tx.str)).map((tx) => tx.str));
+      check(`plain sheet: only patch numbers and a footer with the file name and page (${plain.pages[0].boxes.length} patches on page 1 instead of ${normal.pages[0].boxes.length})`,
+        extras.every((e, i) => e.length === 1 && e[0] === `Demo printer - chart 1 - page ${i + 1} of ${plain.pages.length}`) && plain.pages[0].boxes.length > normal.pages[0].boxes.length);
+      const worse = [];
+      for (const [w, mm, n] of [[210, 15, 200], [210, 20, 16], [700, 20, 16], [700, 10, 48], [300, 25, 8], [1000, 30, 400]]) {
+        const o = { mode: 'spot', groups: [{ ...chartG[0], patches: chartG[0].patches.slice(0, n) }], media: [w, 0], patchMm: mm };
+        const a = minSheetHeight(o, { onePage: false }), b = minSheetHeight({ ...o, plain: true, fileName: 'Brand Red - sheet 12' }, { onePage: false });
+        if (!(b <= a)) worse.push(`${w} mm @${mm} mm: ${b} > ${a}`);
+      }
+      check(`plain sheet never needs taller media than a normal one (wide rolls: footer beside the patches)`, !worse.length, worse.join('; '));
+    }
     let small = '';
     try { sheetLayout({ mode: 'lab', groups, media: [40, 40], patchMm: 30 }); } catch (e) { small = e.message; }
     check('layout: media too small for the patch size is reported', /too small for 30 mm patches/.test(small), small);
